@@ -4,9 +4,9 @@ import type { NavigationItem } from '../models/navigation'
 
 const navigationItems: readonly NavigationItem[] = [
   { label: 'Tổng quan', icon: 'dashboard', to: '/dashboard', available: true },
-  { label: 'Lịch trình', icon: 'calendar', to: '/calendar', available: false },
-  { label: 'Ghi chú', icon: 'notes', to: '/notes', available: false },
-  { label: 'Trò chuyện', icon: 'chat', to: '/chat', available: false },
+  { label: 'Lịch trình', icon: 'calendar', to: '/calendar', available: true },
+  { label: 'Ghi chú', icon: 'notes', to: '/notes', available: true },
+  { label: 'Trò chuyện', icon: 'chat', to: '/chat', available: true },
   { label: 'Tài khoản', icon: 'account', to: '/account', available: true },
 ]
 

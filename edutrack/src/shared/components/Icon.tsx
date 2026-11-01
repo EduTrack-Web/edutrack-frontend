@@ -2,7 +2,30 @@ import type { ReactNode } from 'react'
 
 import type { NavigationIcon } from '../models/navigation'
 
-export type IconName = NavigationIcon | 'menu' | 'close' | 'collapse' | 'expand' | 'globe' | 'sun' | 'moon' | 'login' | 'eye' | 'eyeOff' | 'arrowRight' | 'check' | 'error' | 'warning' | 'info'
+export type IconName =
+  | NavigationIcon
+  | 'menu'
+  | 'close'
+  | 'collapse'
+  | 'expand'
+  | 'globe'
+  | 'sun'
+  | 'moon'
+  | 'login'
+  | 'eye'
+  | 'eyeOff'
+  | 'arrowRight'
+  | 'check'
+  | 'checkCircle'
+  | 'error'
+  | 'warning'
+  | 'info'
+  | 'lock'
+  | 'bell'
+  | 'plus'
+  | 'clock'
+  | 'trendUp'
+  | 'sparkles'
 
 interface IconProps { name: IconName; className?: string }
 
@@ -20,13 +43,20 @@ const paths: Record<IconName, ReactNode> = {
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></>,
   moon: <path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5a8.5 8.5 0 1 0 12 12Z" />,
   login: <><path d="M10 17l5-5-5-5m5 5H3" /><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5" /></>,
+  lock: <><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>,
   eye: <><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></>,
   eyeOff: <><path d="m3 3 18 18M10.6 6.2A10.4 10.4 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.8M6.2 6.2C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6a9.8 9.8 0 0 0 3-.5" /></>,
   arrowRight: <path d="M5 12h14m-5-5 5 5-5 5" />,
   check: <path d="m5 12 4 4L19 6" />,
+  checkCircle: <><circle cx="12" cy="12" r="9" /><path d="m9 12 2 2 4-4" /></>,
   error: <><circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 4h.01" /></>,
   warning: <><path d="M10.3 3.9 2.6 18a2 2 0 0 0 1.8 3h15.2a2 2 0 0 0 1.8-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4m0 4h.01" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10h.01" /></>,
+  bell: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>,
+  plus: <path d="M12 5v14M5 12h14" />,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>,
+  trendUp: <><path d="m22 7-8.5 8.5-5-5L2 17" /><path d="M16 7h6v6" /></>,
+  sparkles: <path d="m12 3 1.9 4.8a2 2 0 0 0 1.3 1.3L20 11l-4.8 1.9a2 2 0 0 0-1.3 1.3L12 19l-1.9-4.8a2 2 0 0 0-1.3-1.3L4 11l4.8-1.9a2 2 0 0 0 1.3-1.3L12 3Z" />,
 }
 
 export function Icon({ name, className = 'size-5' }: IconProps) {

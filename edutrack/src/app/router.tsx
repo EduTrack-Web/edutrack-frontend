@@ -5,6 +5,9 @@ import { LoginPage } from '../modules/auth/views/LoginPage'
 import { RegisterPage } from '../modules/auth/views/RegisterPage'
 import { AccountPage } from '../modules/account/views/AccountPage'
 import { DashboardPage } from '../modules/dashboard/views/DashboardPage'
+import { CalendarPage } from '../modules/calendar/views/CalendarPage'
+import { NotesPage } from '../modules/notes/views/NotesPage'
+import { ChatPage } from '../modules/chat/views/ChatPage'
 import { LandingPage } from '../modules/landing/views/LandingPage'
 import { PublicLayout } from '../shared/components/layout/PublicLayout'
 import { App } from './App'
@@ -24,6 +27,9 @@ export const router = createBrowserRouter([
     element: <RequireAuth><App /></RequireAuth>,
     children: [
       { path: '/dashboard', element: <DashboardPage /> },
+      { path: '/calendar', element: <CalendarPage /> },
+      { path: '/notes', element: <NotesPage /> },
+      { path: '/chat', element: <ChatPage /> },
       { path: '/account', element: <AccountPage /> },
     ],
   },
