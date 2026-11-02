@@ -1,8 +1,14 @@
 import { useBlocker } from 'react-router-dom'
 
 import { Icon } from '../../../shared/components/Icon'
-import { NOTE_TITLE_MAX_LENGTH } from '../config/notes.config'
+import {
+  getNoteBackgroundOption,
+  NOTE_BACKGROUND_OPTIONS,
+  NOTE_DEFAULT_TITLE,
+  NOTE_TITLE_MAX_LENGTH,
+} from '../config/notes.config'
 import { NoteEditor } from '../components/NoteEditor'
+import { EditorToolbarIcon } from '../components/EditorToolbarIcon'
 import { useNoteEditorViewModel, type NoteSaveStatus } from '../viewmodels/useNoteEditorViewModel'
 
 const statusText: Record<NoteSaveStatus, string> = {
@@ -16,6 +22,7 @@ const statusText: Record<NoteSaveStatus, string> = {
 export function NoteEditorPage() {
   const vm = useNoteEditorViewModel()
   const blocker = useBlocker(vm.hasUnsavedChanges)
+  const backgroundOption = getNoteBackgroundOption(vm.background)
 
   if (vm.isLoading) {
     return <div className="mx-auto max-w-5xl"><div className="content-card h-96 animate-pulse" aria-label="Đang tải ghi chú" /></div>
@@ -37,20 +44,44 @@ export function NoteEditorPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 sm:space-y-6">
-      <section className="content-card p-4 sm:p-6">
+      <section className={`rounded-3xl border border-palette-200/80 p-4 shadow-lg transition-colors sm:p-6 dark:border-white/10 ${backgroundOption.editorClass}`}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button className="secondary-button w-full sm:w-auto" onClick={vm.goToNotes} type="button">← Danh sách ghi chú</button>
-          <span className={`text-sm font-bold ${vm.saveStatus === 'error' ? 'text-red-600' : 'text-slate-600 dark:text-slate-300'}`} aria-live="polite">
-            {statusText[vm.saveStatus]}
-          </span>
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className={`text-sm font-bold ${vm.saveStatus === 'error' ? 'text-red-600 dark:text-red-300' : 'text-slate-600 dark:text-slate-200'}`} aria-live="polite">{statusText[vm.saveStatus]}</span>
+            <button
+              className="primary-button min-h-11 px-4 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!vm.hasUnsavedChanges || vm.saveStatus === 'saving'}
+              onClick={() => void vm.saveNow()}
+              type="button"
+            >
+              <EditorToolbarIcon name="save" />
+              Lưu
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="Màu nền ghi chú" role="group">
+          <span className="mr-1 text-xs font-bold text-slate-600 dark:text-slate-200">Màu nền</span>
+          {NOTE_BACKGROUND_OPTIONS.map((option) => (
+            <button
+              aria-label={option.label}
+              aria-pressed={vm.background === option.value}
+              className={`size-8 rounded-full border-2 shadow-xs transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-palette-700 ${option.swatchClass} ${vm.background === option.value ? 'border-palette-700 ring-2 ring-white dark:border-palette-200' : 'border-white/80 dark:border-white/20'}`}
+              key={option.value}
+              onClick={() => vm.updateBackground(option.value)}
+              title={option.label}
+              type="button"
+            />
+          ))}
         </div>
         <label className="mt-5 block" htmlFor="note-title">
           <span className="sr-only">Tiêu đề ghi chú</span>
           <input
-            className="w-full border-0 border-b border-palette-200/80 bg-transparent px-1 pb-3 text-2xl font-black text-palette-900 outline-none focus:border-palette-700 sm:text-3xl dark:border-white/10 dark:text-white dark:focus:border-palette-200"
+            className={`w-full border-0 border-b border-palette-900/15 bg-transparent px-1 pb-3 text-2xl font-black text-palette-900 outline-none transition-opacity focus:border-palette-700 sm:text-3xl dark:border-white/15 dark:text-white dark:focus:border-palette-200 ${vm.title === NOTE_DEFAULT_TITLE ? 'opacity-70' : 'opacity-100'}`}
             id="note-title"
             maxLength={NOTE_TITLE_MAX_LENGTH}
             onChange={(event) => vm.updateTitle(event.target.value)}
+            onFocus={(event) => { if (vm.title === NOTE_DEFAULT_TITLE) event.currentTarget.select() }}
             placeholder="Ghi chú không tiêu đề"
             value={vm.title}
           />

@@ -3,7 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { ApiError } from '../../../shared/api/httpClient'
 import { useToast } from '../../../shared/viewmodels/useToast'
-import { NOTE_AUTOSAVE_INTERVAL_MS, validateNoteImageFile } from '../config/notes.config'
+import {
+  NOTE_AUTOSAVE_INTERVAL_MS,
+  validateNoteImageFile,
+  type NoteBackground,
+} from '../config/notes.config'
 import { NoteAutosaveTracker, type NoteDraft } from '../models/noteAutosave'
 import type { NoteContentNode, NoteDetail, NoteImageUploadResult } from '../models/notes.types'
 import { notesApi } from '../services/notesApi'
@@ -17,6 +21,7 @@ export function useNoteEditorViewModel() {
   const [note, setNote] = useState<NoteDetail | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState<NoteContentNode | null>(null)
+  const [background, setBackground] = useState<NoteBackground>('default')
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<NoteSaveStatus>('idle')
@@ -35,10 +40,11 @@ export function useNoteEditorViewModel() {
     try {
       const result = await notesApi.getNote(noteId)
       const loaded = result.data.note
-      const draft = { title: loaded.title, content: loaded.content }
+      const draft = { title: loaded.title, content: loaded.content, background: loaded.background }
       setNote(loaded)
       setTitle(loaded.title)
       setContent(loaded.content)
+      setBackground(loaded.background)
       autosaveRef.current.initialize(draft)
       setSaveStatus('saved')
     } catch (error) {
@@ -63,10 +69,11 @@ export function useNoteEditorViewModel() {
       .then((result) => {
         if (!active) return
         const loaded = result.data.note
-        const draft = { title: loaded.title, content: loaded.content }
+        const draft = { title: loaded.title, content: loaded.content, background: loaded.background }
         setNote(loaded)
         setTitle(loaded.title)
         setContent(loaded.content)
+        setBackground(loaded.background)
         autosaveRef.current.initialize(draft)
         setSaveStatus('saved')
       })
@@ -86,12 +93,22 @@ export function useNoteEditorViewModel() {
   const updateTitle = (value: string) => {
     setTitle(value)
     const currentContent = autosaveRef.current.currentDraft?.content ?? content
-    if (currentContent) markChanged({ title: value, content: currentContent })
+    if (currentContent) markChanged({ title: value, content: currentContent, background: autosaveRef.current.currentDraft?.background ?? background })
   }
 
   const updateContent = (value: NoteContentNode) => {
     setContent(value)
-    markChanged({ title: autosaveRef.current.currentDraft?.title ?? title, content: value })
+    markChanged({
+      title: autosaveRef.current.currentDraft?.title ?? title,
+      content: value,
+      background: autosaveRef.current.currentDraft?.background ?? background,
+    })
+  }
+
+  const updateBackground = (value: NoteBackground) => {
+    setBackground(value)
+    const currentDraft = autosaveRef.current.currentDraft
+    if (currentDraft) markChanged({ ...currentDraft, background: value })
   }
 
   const save = useCallback(async () => {
@@ -101,10 +118,15 @@ export function useNoteEditorViewModel() {
     setSaveStatus('saving')
     try {
       const result = await notesApi.updateNote(noteId, attempt.draft)
-      const savedDraft = { title: result.data.note.title, content: result.data.note.content }
+      const savedDraft = {
+        title: result.data.note.title,
+        content: result.data.note.content,
+        background: result.data.note.background,
+      }
       if (autosaveRef.current.completeSave(attempt, savedDraft)) {
         setTitle(savedDraft.title)
         setContent(savedDraft.content)
+        setBackground(savedDraft.background)
         setSaveStatus('saved')
       } else {
         setSaveStatus('unsaved')
@@ -158,6 +180,7 @@ export function useNoteEditorViewModel() {
     note,
     title,
     content,
+    background,
     isLoading,
     loadError,
     saveStatus,
@@ -165,6 +188,8 @@ export function useNoteEditorViewModel() {
     hasUnsavedChanges: saveStatus === 'unsaved' || saveStatus === 'saving' || saveStatus === 'error',
     updateTitle,
     updateContent,
+    updateBackground,
+    saveNow: save,
     uploadImage,
     retry: loadNote,
     goToNotes: () => navigate('/notes'),

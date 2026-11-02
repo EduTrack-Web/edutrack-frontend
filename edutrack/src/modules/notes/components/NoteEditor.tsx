@@ -1,11 +1,13 @@
 import { Image } from '@tiptap/extension-image'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
+import { Color, TextStyle } from '@tiptap/extension-text-style'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useRef, useState } from 'react'
 
 import { NOTE_IMAGE_FILE_ACCEPT } from '../config/notes.config'
 import type { NoteContentNode, NoteImageUploadResult } from '../models/notes.types'
+import { EditorToolbarIcon } from './EditorToolbarIcon'
 
 interface NoteEditorProps {
   initialContent: NoteContentNode
@@ -38,12 +40,13 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
       StarterKit.configure({
         blockquote: false,
         codeBlock: false,
-        heading: false,
+        heading: { levels: [1, 2, 3] },
         horizontalRule: false,
         link: false,
         strike: false,
-        underline: false,
       }),
+      TextStyle,
+      Color,
       TaskList,
       TaskItem.configure({ nested: true }),
       NoteImage.configure({ allowBase64: false, inline: false }),
@@ -82,15 +85,41 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
   if (!editor) return <div className="h-72 animate-pulse rounded-2xl bg-palette-100 dark:bg-white/5" />
 
   return (
-    <div className="note-editor overflow-hidden rounded-2xl border border-palette-200/80 bg-white/70 dark:border-white/10 dark:bg-white/5">
+    <div className="note-editor overflow-hidden rounded-2xl border border-palette-200/80 bg-white/20 dark:border-white/10 dark:bg-black/5">
       <div className="flex flex-wrap gap-2 border-b border-palette-200/70 p-2 dark:border-white/10" role="toolbar" aria-label="Định dạng ghi chú">
-        <button aria-label="In đậm" className={toolbarButtonClass(editor.isActive('bold'))} onClick={() => editor.chain().focus().toggleBold().run()} type="button">B</button>
-        <button aria-label="In nghiêng" className={`${toolbarButtonClass(editor.isActive('italic'))} italic`} onClick={() => editor.chain().focus().toggleItalic().run()} type="button">I</button>
-        <button aria-label="Danh sách không thứ tự" className={toolbarButtonClass(editor.isActive('bulletList'))} onClick={() => editor.chain().focus().toggleBulletList().run()} type="button">• DS</button>
-        <button aria-label="Danh sách có thứ tự" className={toolbarButtonClass(editor.isActive('orderedList'))} onClick={() => editor.chain().focus().toggleOrderedList().run()} type="button">1. DS</button>
-        <button aria-label="Danh sách việc cần làm" className={toolbarButtonClass(editor.isActive('taskList'))} onClick={() => editor.chain().focus().toggleTaskList().run()} type="button">☑</button>
+        <select
+          aria-label="Kiểu văn bản"
+          className="min-h-11 rounded-xl border border-palette-200/80 bg-white/70 px-3 text-sm font-bold text-palette-900 outline-none focus-visible:ring-2 focus-visible:ring-palette-700 dark:border-white/10 dark:bg-palette-900/60 dark:text-white"
+          onChange={(event) => {
+            const value = event.target.value
+            if (value === 'paragraph') editor.chain().focus().setParagraph().run()
+            else editor.chain().focus().setHeading({ level: Number(value.slice(1)) as 1 | 2 | 3 }).run()
+          }}
+          value={editor.isActive('heading', { level: 1 }) ? 'h1' : editor.isActive('heading', { level: 2 }) ? 'h2' : editor.isActive('heading', { level: 3 }) ? 'h3' : 'paragraph'}
+        >
+          <option value="paragraph">Văn bản thường</option>
+          <option value="h1">Tiêu đề H1</option>
+          <option value="h2">Tiêu đề H2</option>
+          <option value="h3">Tiêu đề H3</option>
+        </select>
+        <button aria-label="In đậm" aria-pressed={editor.isActive('bold')} className={toolbarButtonClass(editor.isActive('bold'))} onClick={() => editor.chain().focus().toggleBold().run()} title="In đậm" type="button"><EditorToolbarIcon name="bold" /></button>
+        <button aria-label="In nghiêng" aria-pressed={editor.isActive('italic')} className={toolbarButtonClass(editor.isActive('italic'))} onClick={() => editor.chain().focus().toggleItalic().run()} title="In nghiêng" type="button"><EditorToolbarIcon name="italic" /></button>
+        <button aria-label="Gạch chân" aria-pressed={editor.isActive('underline')} className={toolbarButtonClass(editor.isActive('underline'))} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Gạch chân" type="button"><EditorToolbarIcon name="underline" /></button>
+        <button aria-label="Danh sách không thứ tự" aria-pressed={editor.isActive('bulletList')} className={toolbarButtonClass(editor.isActive('bulletList'))} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Danh sách dấu chấm" type="button"><EditorToolbarIcon name="bulletList" /></button>
+        <button aria-label="Danh sách có thứ tự" aria-pressed={editor.isActive('orderedList')} className={toolbarButtonClass(editor.isActive('orderedList'))} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Danh sách đánh số" type="button"><EditorToolbarIcon name="orderedList" /></button>
+        <button aria-label="Danh sách việc cần làm" aria-pressed={editor.isActive('taskList')} className={toolbarButtonClass(editor.isActive('taskList'))} onClick={() => editor.chain().focus().toggleTaskList().run()} title="Danh sách việc cần làm" type="button"><EditorToolbarIcon name="taskList" /></button>
+        <label aria-label="Màu chữ" className={`${toolbarButtonClass(false)} relative cursor-pointer`} title="Màu chữ">
+          <EditorToolbarIcon name="palette" />
+          <span className="absolute inset-x-3 bottom-1 h-1 rounded-full" style={{ backgroundColor: typeof editor.getAttributes('textStyle').color === 'string' ? editor.getAttributes('textStyle').color : '#052659' }} />
+          <input
+            className="absolute inset-0 cursor-pointer opacity-0"
+            onChange={(event) => editor.chain().focus().setColor(event.target.value).run()}
+            type="color"
+            value={typeof editor.getAttributes('textStyle').color === 'string' ? editor.getAttributes('textStyle').color : '#052659'}
+          />
+        </label>
         <button aria-label="Chèn hình ảnh" className={toolbarButtonClass(false)} disabled={isUploadingImage} onClick={() => fileInputRef.current?.click()} type="button">
-          {isUploadingImage ? '…' : 'Ảnh'}
+          {isUploadingImage ? '…' : <EditorToolbarIcon name="image" />}
         </button>
         <input
           accept={NOTE_IMAGE_FILE_ACCEPT}

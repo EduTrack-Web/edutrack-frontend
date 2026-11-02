@@ -60,9 +60,6 @@ export function useNotesViewModel() {
   }
 
   return {
-    title: 'Ghi chú học tập',
-    description: 'Soạn thảo, phân loại và kết nối kiến thức theo môn học và dự án.',
-    assignedMember: 'Thành viên B',
     notes,
     isLoading,
     isCreating,

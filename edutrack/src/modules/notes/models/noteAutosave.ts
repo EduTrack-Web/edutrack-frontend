@@ -1,8 +1,10 @@
 import type { NoteContentNode } from './notes.types'
+import type { NoteBackground } from '../config/notes.config'
 
 export interface NoteDraft {
   title: string
   content: NoteContentNode
+  background: NoteBackground
 }
 
 export interface NoteSaveAttempt {

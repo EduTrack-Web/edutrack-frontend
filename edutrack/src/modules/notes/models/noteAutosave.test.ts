@@ -9,6 +9,7 @@ import { NoteAutosaveTracker, type NoteDraft } from './noteAutosave'
 
 const draft = (text: string): NoteDraft => ({
   title: 'Ghi chú',
+  background: 'default',
   content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
 })
 
