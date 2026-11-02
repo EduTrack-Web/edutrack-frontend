@@ -4,6 +4,11 @@ import { useNotesViewModel } from '../viewmodels/useNotesViewModel'
 export function NotesPage() {
   const vm = useNotesViewModel()
 
+  const formatUpdatedAt = (value: string): string => new Intl.DateTimeFormat('vi-VN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Banner không gian học tập */}
@@ -29,30 +34,52 @@ export function NotesPage() {
         </div>
       </section>
 
-      {/* Vùng nội dung cấu trúc sẵn sàng */}
-      <section className="content-card p-6 sm:p-8">
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <span className="grid size-16 place-items-center rounded-2xl border border-palette-200/80 bg-palette-100 text-palette-700 shadow-xs dark:border-white/10 dark:bg-white/10 dark:text-palette-200">
-            <Icon className="size-8" name="notes" />
-          </span>
-          <h2 className="mt-5 text-xl font-extrabold text-palette-900 dark:text-white">
-            Khu vực làm việc của Thành viên B
-          </h2>
-          <p className="mt-2 max-w-md text-sm leading-6 text-slate-600 dark:text-slate-300">
-            Cấu trúc MVVM, Router và API Service đã được kết nối hoàn chỉnh. Thành viên B có thể bắt đầu tích hợp trình soạn thảo văn bản và hệ thống thẻ tag ngay tại đây.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <span className="rounded-xl border border-palette-200/80 bg-white/70 px-4 py-2 text-xs font-bold text-palette-900 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-palette-100">
-              ✓ Soạn thảo Markdown / Rich-Text
-            </span>
-            <span className="rounded-xl border border-palette-200/80 bg-white/70 px-4 py-2 text-xs font-bold text-palette-900 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-palette-100">
-              ✓ Phân loại môn học & Thẻ tag
-            </span>
-            <span className="rounded-xl border border-palette-200/80 bg-white/70 px-4 py-2 text-xs font-bold text-palette-900 shadow-xs dark:border-white/10 dark:bg-white/5 dark:text-palette-100">
-              ✓ Tìm kiếm nhanh nội dung
-            </span>
+      <section className="content-card p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-extrabold text-palette-900 dark:text-white">Ghi chú của bạn</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Ghi chú mới nhất được hiển thị trước.</p>
           </div>
+          <button className="primary-button w-full sm:w-auto" disabled={vm.isCreating} onClick={() => void vm.createNote()} type="button">
+            <Icon className="size-5" name="plus" />
+            {vm.isCreating ? 'Đang tạo…' : 'Tạo ghi chú'}
+          </button>
         </div>
+
+        {vm.isLoading ? (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Đang tải ghi chú">
+            {[0, 1, 2].map((item) => <div className="h-36 animate-pulse rounded-2xl bg-palette-100/80 dark:bg-white/5" key={item} />)}
+          </div>
+        ) : vm.loadFailed ? (
+          <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-red-200 bg-red-50/70 px-4 py-10 text-center dark:border-red-400/20 dark:bg-red-950/20">
+            <Icon className="size-9 text-red-600 dark:text-red-300" name="error" />
+            <h3 className="mt-3 text-lg font-extrabold text-palette-900 dark:text-white">Không thể tải danh sách ghi chú</h3>
+            <button className="secondary-button mt-5" onClick={() => void vm.retry()} type="button">Thử lại</button>
+          </div>
+        ) : vm.notes.length === 0 ? (
+          <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-dashed border-palette-300/80 px-4 py-12 text-center dark:border-white/15">
+            <span className="grid size-14 place-items-center rounded-2xl bg-palette-100 text-palette-700 dark:bg-white/10 dark:text-palette-200">
+              <Icon className="size-7" name="notes" />
+            </span>
+            <h3 className="mt-4 text-lg font-extrabold text-palette-900 dark:text-white">Bạn chưa có ghi chú nào</h3>
+            <p className="mt-2 max-w-md text-sm leading-6 text-slate-600 dark:text-slate-300">Chọn “Tạo ghi chú” để bắt đầu. Bản ghi mặc định vẫn được giữ nếu bạn rời đi mà chưa nhập nội dung.</p>
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {vm.notes.map((note) => (
+              <button
+                className="min-h-36 rounded-2xl border border-palette-200/80 bg-white/65 p-4 text-left transition hover:-translate-y-0.5 hover:border-palette-500/50 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-palette-700 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+                key={note.id}
+                onClick={() => vm.openNote(note.id)}
+                type="button"
+              >
+                <span className="line-clamp-2 text-base font-extrabold text-palette-900 dark:text-white">{note.title}</span>
+                <span className="mt-2 line-clamp-2 min-h-10 text-sm leading-5 text-slate-600 dark:text-slate-300">{note.preview || 'Chưa có nội dung'}</span>
+                <span className="mt-4 block text-xs font-semibold text-slate-500 dark:text-slate-400">Cập nhật {formatUpdatedAt(note.updatedAt)}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   )
