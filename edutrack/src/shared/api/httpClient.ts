@@ -65,11 +65,12 @@ export const request = async <T>(path: string, init?: RequestInit): Promise<T> =
   const method = init?.method?.toUpperCase() ?? 'GET'
   const needsCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method)
   const token = needsCsrf ? await ensureCsrfToken() : undefined
+  const isFormData = init?.body instanceof FormData
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { 'x-csrf-token': token } : {}),
       ...init?.headers,
     },
