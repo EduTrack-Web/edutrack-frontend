@@ -44,11 +44,13 @@ export function NotesPage() {
             <p className="mt-2 max-w-md text-sm leading-6 text-slate-600 dark:text-slate-300">Chọn “Tạo ghi chú” để bắt đầu. Bản ghi mặc định vẫn được giữ nếu bạn rời đi mà chưa nhập nội dung.</p>
           </div>
         ) : (
-          <div className="mt-6 columns-2 gap-3 md:columns-3">
-            {vm.notes.map((note) => (
+          <div className="mt-6 grid grid-cols-2 items-start gap-3 md:grid-cols-3">
+            {vm.noteColumns.map((column, columnIndex) => (
+              <div className="flex min-w-0 flex-col gap-3" key={`note-column-${columnIndex}`}>
+                {column.map((note) => (
               <article
                 aria-label={`Mở ghi chú ${note.title}`}
-                className={`mb-3 w-full break-inside-avoid rounded-2xl border border-palette-200/80 p-3 text-left align-top shadow-xs transition hover:-translate-y-0.5 hover:border-palette-500/50 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-palette-700 dark:border-white/10 ${getNoteBackgroundOption(note.background).cardClass}`}
+                className={`w-full rounded-2xl border border-palette-200/80 p-3 text-left shadow-xs transition hover:-translate-y-0.5 hover:border-palette-500/50 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-palette-700 dark:border-white/10 ${getNoteBackgroundOption(note.background).cardClass}`}
                 key={note.id}
                 onClick={() => vm.openNote(note.id)}
                 onKeyDown={(event) => {
@@ -66,6 +68,8 @@ export function NotesPage() {
                 </div>
                 <span className="mt-3 block text-[11px] font-semibold text-slate-500 dark:text-slate-300">Cập nhật {formatUpdatedAt(note.updatedAt)}</span>
               </article>
+                ))}
+              </div>
             ))}
           </div>
         )}

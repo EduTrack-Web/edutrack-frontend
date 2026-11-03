@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../../../shared/api/httpClient'
 import { useToast } from '../../../shared/viewmodels/useToast'
 import type { NoteSummary } from '../models/notes.types'
+import { distributeNotesIntoColumns, sortNotesNewestFirst } from '../models/noteLayout'
 import { notesApi } from '../services/notesApi'
+
+const TABLET_BREAKPOINT_QUERY = '(min-width: 768px)'
+
+const getNotesColumnCount = (): number =>
+  typeof window !== 'undefined' && window.matchMedia(TABLET_BREAKPOINT_QUERY).matches ? 3 : 2
 
 export function useNotesViewModel() {
   const navigate = useNavigate()
@@ -13,13 +19,23 @@ export function useNotesViewModel() {
   const [isLoading, setIsLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [columnCount, setColumnCount] = useState(getNotesColumnCount)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(TABLET_BREAKPOINT_QUERY)
+    const updateColumnCount = () => setColumnCount(mediaQuery.matches ? 3 : 2)
+
+    updateColumnCount()
+    mediaQuery.addEventListener('change', updateColumnCount)
+    return () => mediaQuery.removeEventListener('change', updateColumnCount)
+  }, [])
 
   const loadNotes = useCallback(async () => {
     setIsLoading(true)
     setLoadFailed(false)
     try {
       const result = await notesApi.getNotes()
-      setNotes(result.data.notes)
+      setNotes(sortNotesNewestFirst(result.data.notes))
     } catch (error) {
       setLoadFailed(true)
       showToast(error instanceof ApiError ? error.message : 'Không thể tải danh sách ghi chú.', 'error')
@@ -33,7 +49,7 @@ export function useNotesViewModel() {
     void notesApi.getNotes()
       .then((result) => {
         if (active) {
-          setNotes(result.data.notes)
+          setNotes(sortNotesNewestFirst(result.data.notes))
           setLoadFailed(false)
         }
       })
@@ -59,8 +75,14 @@ export function useNotesViewModel() {
     }
   }
 
+  const noteColumns = useMemo(
+    () => distributeNotesIntoColumns(notes, columnCount),
+    [columnCount, notes],
+  )
+
   return {
     notes,
+    noteColumns,
     isLoading,
     isCreating,
     loadFailed,

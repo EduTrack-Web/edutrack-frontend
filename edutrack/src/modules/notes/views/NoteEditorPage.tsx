@@ -45,12 +45,15 @@ export function NoteEditorPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 sm:space-y-6">
       <section className={`rounded-3xl border border-palette-200/80 p-4 shadow-lg transition-colors sm:p-6 dark:border-white/10 ${backgroundOption.editorClass}`}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <button className="secondary-button w-full sm:w-auto" onClick={vm.goToNotes} type="button">← Danh sách ghi chú</button>
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
-            <span className={`text-sm font-bold ${vm.saveStatus === 'error' ? 'text-red-600 dark:text-red-300' : 'text-slate-600 dark:text-slate-200'}`} aria-live="polite">{statusText[vm.saveStatus]}</span>
+        <div className="flex items-center justify-between gap-2 sm:gap-4">
+          <button aria-label="Trở lại danh sách ghi chú" className="note-back-button" onClick={vm.goToNotes} type="button">
+            <Icon className="size-5 rotate-180" name="arrowRight" />
+            <span className="hidden sm:inline">Danh sách ghi chú</span>
+          </button>
+          <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+            <span className={`truncate text-xs font-bold sm:text-sm ${vm.saveStatus === 'error' ? 'text-red-600 dark:text-red-300' : 'text-slate-600 dark:text-slate-200'}`} aria-live="polite">{statusText[vm.saveStatus]}</span>
             <button
-              className="primary-button min-h-11 px-4 disabled:cursor-not-allowed disabled:opacity-50"
+              className="primary-button min-h-11 shrink-0 !p-3 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!vm.hasUnsavedChanges || vm.saveStatus === 'saving'}
               onClick={() => void vm.saveNow()}
               type="button"

@@ -1,9 +1,9 @@
 import { Image } from '@tiptap/extension-image'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
-import { EditorContent, useEditor } from '@tiptap/react'
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { NOTE_IMAGE_FILE_ACCEPT } from '../config/notes.config'
 import type { NoteContentNode, NoteImageUploadResult } from '../models/notes.types'
@@ -25,16 +25,23 @@ const NoteImage = Image.extend({
   },
 })
 
+type TextStyleValue = 'paragraph' | 'h1' | 'h2' | 'h3'
+
+const TEXT_STYLE_OPTIONS: ReadonlyArray<{ value: TextStyleValue; label: string }> = [
+  { value: 'paragraph', label: 'Văn bản thường' },
+  { value: 'h1', label: 'Tiêu đề H1' },
+  { value: 'h2', label: 'Tiêu đề H2' },
+  { value: 'h3', label: 'Tiêu đề H3' },
+]
+
 const toolbarButtonClass = (active: boolean): string =>
-  `grid min-h-11 min-w-11 place-items-center rounded-xl border px-3 text-sm font-extrabold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-palette-700 ${
-    active
-      ? 'border-palette-700 bg-palette-700 text-white dark:border-palette-200 dark:bg-palette-200 dark:text-palette-900'
-      : 'border-palette-200/80 bg-white/70 text-palette-900 hover:bg-palette-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10'
-  }`
+  `note-toolbar-control${active ? ' is-active' : ''}`
 
 export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploadImage }: NoteEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textStyleMenuRef = useRef<HTMLDivElement>(null)
   const [contentError, setContentError] = useState<string | null>(null)
+  const [isTextStyleMenuOpen, setIsTextStyleMenuOpen] = useState(false)
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -62,6 +69,52 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
     onContentError: () => setContentError('Nội dung ghi chú không tương thích với editor.'),
     onUpdate: ({ editor: currentEditor }) => onChange(currentEditor.getJSON() as NoteContentNode),
   })
+  const toolbarState = useEditorState({
+    editor,
+    selector: ({ editor: currentEditor }) => ({
+      heading: currentEditor.isActive('heading', { level: 1 })
+        ? 'h1'
+        : currentEditor.isActive('heading', { level: 2 })
+          ? 'h2'
+          : currentEditor.isActive('heading', { level: 3 })
+            ? 'h3'
+            : 'paragraph',
+      bold: currentEditor.isActive('bold'),
+      italic: currentEditor.isActive('italic'),
+      underline: currentEditor.isActive('underline'),
+      bulletList: currentEditor.isActive('bulletList'),
+      orderedList: currentEditor.isActive('orderedList'),
+      taskList: currentEditor.isActive('taskList'),
+      textColor: currentEditor.getAttributes('textStyle').color,
+    }),
+  })
+
+  useEffect(() => {
+    if (!isTextStyleMenuOpen) return undefined
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!textStyleMenuRef.current?.contains(event.target as Node)) {
+        setIsTextStyleMenuOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsTextStyleMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [isTextStyleMenuOpen])
+
+  const applyTextStyle = (value: TextStyleValue) => {
+    if (!editor) return
+    if (value === 'paragraph') editor.chain().focus().setParagraph().run()
+    else editor.chain().focus().setHeading({ level: Number(value.slice(1)) as 1 | 2 | 3 }).run()
+    setIsTextStyleMenuOpen(false)
+  }
 
   const selectImage = async (file: File | undefined) => {
     if (!file || !editor) return
@@ -85,39 +138,56 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
   if (!editor) return <div className="h-72 animate-pulse rounded-2xl bg-palette-100 dark:bg-white/5" />
 
   return (
-    <div className="note-editor overflow-hidden rounded-2xl border border-palette-200/80 bg-white/20 dark:border-white/10 dark:bg-black/5">
+    <div className="note-editor rounded-2xl border border-palette-200/80 bg-white/20 dark:border-white/10 dark:bg-black/5">
       <div className="flex flex-wrap gap-2 border-b border-palette-200/70 p-2 dark:border-white/10" role="toolbar" aria-label="Định dạng ghi chú">
-        <select
-          aria-label="Kiểu văn bản"
-          className="min-h-11 rounded-xl border border-palette-200/80 bg-white/70 px-3 text-sm font-bold text-palette-900 outline-none focus-visible:ring-2 focus-visible:ring-palette-700 dark:border-white/10 dark:bg-palette-900/60 dark:text-white"
-          onChange={(event) => {
-            const value = event.target.value
-            if (value === 'paragraph') editor.chain().focus().setParagraph().run()
-            else editor.chain().focus().setHeading({ level: Number(value.slice(1)) as 1 | 2 | 3 }).run()
-          }}
-          value={editor.isActive('heading', { level: 1 }) ? 'h1' : editor.isActive('heading', { level: 2 }) ? 'h2' : editor.isActive('heading', { level: 3 }) ? 'h3' : 'paragraph'}
-        >
-          <option value="paragraph">Văn bản thường</option>
-          <option value="h1">Tiêu đề H1</option>
-          <option value="h2">Tiêu đề H2</option>
-          <option value="h3">Tiêu đề H3</option>
-        </select>
-        <button aria-label="In đậm" aria-pressed={editor.isActive('bold')} className={toolbarButtonClass(editor.isActive('bold'))} onClick={() => editor.chain().focus().toggleBold().run()} title="In đậm" type="button"><EditorToolbarIcon name="bold" /></button>
-        <button aria-label="In nghiêng" aria-pressed={editor.isActive('italic')} className={toolbarButtonClass(editor.isActive('italic'))} onClick={() => editor.chain().focus().toggleItalic().run()} title="In nghiêng" type="button"><EditorToolbarIcon name="italic" /></button>
-        <button aria-label="Gạch chân" aria-pressed={editor.isActive('underline')} className={toolbarButtonClass(editor.isActive('underline'))} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Gạch chân" type="button"><EditorToolbarIcon name="underline" /></button>
-        <button aria-label="Danh sách không thứ tự" aria-pressed={editor.isActive('bulletList')} className={toolbarButtonClass(editor.isActive('bulletList'))} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Danh sách dấu chấm" type="button"><EditorToolbarIcon name="bulletList" /></button>
-        <button aria-label="Danh sách có thứ tự" aria-pressed={editor.isActive('orderedList')} className={toolbarButtonClass(editor.isActive('orderedList'))} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Danh sách đánh số" type="button"><EditorToolbarIcon name="orderedList" /></button>
-        <button aria-label="Danh sách việc cần làm" aria-pressed={editor.isActive('taskList')} className={toolbarButtonClass(editor.isActive('taskList'))} onClick={() => editor.chain().focus().toggleTaskList().run()} title="Danh sách việc cần làm" type="button"><EditorToolbarIcon name="taskList" /></button>
+        <div className="relative" ref={textStyleMenuRef}>
+          <button
+            aria-controls="note-text-style-options"
+            aria-expanded={isTextStyleMenuOpen}
+            aria-haspopup="listbox"
+            className="note-text-style-trigger"
+            onClick={() => setIsTextStyleMenuOpen((isOpen) => !isOpen)}
+            type="button"
+          >
+            <span>{TEXT_STYLE_OPTIONS.find((option) => option.value === (toolbarState?.heading ?? 'paragraph'))?.label}</span>
+            <EditorToolbarIcon className="size-4" name="chevronDown" />
+          </button>
+          {isTextStyleMenuOpen && (
+            <div aria-label="Kiểu văn bản" className="note-text-style-menu" id="note-text-style-options" role="listbox">
+              {TEXT_STYLE_OPTIONS.map((option) => {
+                const isSelected = option.value === (toolbarState?.heading ?? 'paragraph')
+                return (
+                  <button
+                    aria-selected={isSelected}
+                    className={`note-text-style-option${isSelected ? ' is-selected' : ''}`}
+                    key={option.value}
+                    onClick={() => applyTextStyle(option.value)}
+                    role="option"
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
         <label aria-label="Màu chữ" className={`${toolbarButtonClass(false)} relative cursor-pointer`} title="Màu chữ">
-          <EditorToolbarIcon name="palette" />
-          <span className="absolute inset-x-3 bottom-1 h-1 rounded-full" style={{ backgroundColor: typeof editor.getAttributes('textStyle').color === 'string' ? editor.getAttributes('textStyle').color : '#052659' }} />
+          <EditorToolbarIcon name="textColor" />
+          <span className="absolute inset-x-3 bottom-1.5 h-1 rounded-full" style={{ backgroundColor: typeof toolbarState?.textColor === 'string' ? toolbarState.textColor : '#052659' }} />
           <input
             className="absolute inset-0 cursor-pointer opacity-0"
             onChange={(event) => editor.chain().focus().setColor(event.target.value).run()}
             type="color"
-            value={typeof editor.getAttributes('textStyle').color === 'string' ? editor.getAttributes('textStyle').color : '#052659'}
+            value={typeof toolbarState?.textColor === 'string' ? toolbarState.textColor : '#052659'}
           />
         </label>
+        <button aria-label="In đậm" aria-pressed={toolbarState?.bold ?? false} className={toolbarButtonClass(toolbarState?.bold ?? false)} onClick={() => editor.chain().focus().toggleBold().run()} title="In đậm" type="button"><EditorToolbarIcon name="bold" /></button>
+        <button aria-label="In nghiêng" aria-pressed={toolbarState?.italic ?? false} className={toolbarButtonClass(toolbarState?.italic ?? false)} onClick={() => editor.chain().focus().toggleItalic().run()} title="In nghiêng" type="button"><EditorToolbarIcon name="italic" /></button>
+        <button aria-label="Gạch chân" aria-pressed={toolbarState?.underline ?? false} className={toolbarButtonClass(toolbarState?.underline ?? false)} onClick={() => editor.chain().focus().toggleUnderline().run()} title="Gạch chân" type="button"><EditorToolbarIcon name="underline" /></button>
+        <button aria-label="Danh sách không thứ tự" aria-pressed={toolbarState?.bulletList ?? false} className={toolbarButtonClass(toolbarState?.bulletList ?? false)} onClick={() => editor.chain().focus().toggleBulletList().run()} title="Danh sách dấu chấm" type="button"><EditorToolbarIcon name="bulletList" /></button>
+        <button aria-label="Danh sách có thứ tự" aria-pressed={toolbarState?.orderedList ?? false} className={toolbarButtonClass(toolbarState?.orderedList ?? false)} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Danh sách đánh số" type="button"><EditorToolbarIcon name="orderedList" /></button>
+        <button aria-label="Danh sách việc cần làm" aria-pressed={toolbarState?.taskList ?? false} className={toolbarButtonClass(toolbarState?.taskList ?? false)} onClick={() => editor.chain().focus().toggleTaskList().run()} title="Danh sách việc cần làm" type="button"><EditorToolbarIcon name="taskList" /></button>
         <button aria-label="Chèn hình ảnh" className={toolbarButtonClass(false)} disabled={isUploadingImage} onClick={() => fileInputRef.current?.click()} type="button">
           {isUploadingImage ? '…' : <EditorToolbarIcon name="image" />}
         </button>
