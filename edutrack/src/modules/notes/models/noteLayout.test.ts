@@ -12,6 +12,7 @@ const createNote = (id: string, updatedAt: string): NoteSummary => ({
   version: 1,
   createdAt: updatedAt,
   updatedAt,
+  access: { role: 'owner', canEdit: true, canManageAccess: true, isSharedWithMe: false },
 })
 
 describe('note masonry layout', () => {

@@ -272,8 +272,50 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .dark .note-back-button { color: #c1e8ff; }
 .dark .note-back-button:hover { color: #7da0ca; }
 
-.note-toolbar-control,
-.note-text-style-trigger {
+.note-more-button {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border: 0;
+  padding: 0.75rem;
+  color: #052659;
+  background: transparent;
+  transition: color 160ms ease, transform 160ms ease;
+}
+.note-more-button:hover { color: #548383; transform: translateY(-1px); }
+.note-more-button:focus-visible { border-radius: 0.75rem; outline: 2px solid #548383; outline-offset: 2px; }
+.dark .note-more-button { color: #c1e8ff; }
+.dark .note-more-button:hover { color: #7da0ca; }
+
+.note-save-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  border: 1px solid rgb(84 131 131 / 0.28);
+  border-radius: 999px;
+  padding: 0.75rem;
+  color: #021024;
+  background: linear-gradient(135deg, rgb(193 232 255 / 0.96), rgb(125 160 202 / 0.9) 58%, rgb(84 131 131 / 0.72));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.72), 0 9px 24px rgb(84 131 131 / 0.16);
+  font-size: 0.875rem;
+  font-weight: 800;
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  backdrop-filter: blur(16px) saturate(135%);
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.note-save-button:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.82), 0 12px 28px rgb(84 131 131 / 0.22); }
+.note-save-button:focus-visible { outline: 2px solid #548383; outline-offset: 2px; }
+.dark .note-save-button {
+  border-color: rgb(193 232 255 / 0.28);
+  color: #021024;
+  background: linear-gradient(135deg, #c1e8ff, #7da0ca 62%, #548383);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.34), 0 10px 28px rgb(0 0 0 / 0.2);
+}
+
+.note-toolbar-control {
   min-height: 2.75rem;
   border: 1px solid rgb(125 160 202 / 0.34);
   border-radius: 0.75rem;
@@ -285,6 +327,74 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   backdrop-filter: blur(16px) saturate(135%);
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
+.glass-select-trigger {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid rgb(125 160 202 / 0.34);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  color: #052659;
+  background: rgb(255 255 255 / 0.58);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.78), 0 6px 18px rgb(5 38 89 / 0.08);
+  font-size: 0.875rem;
+  font-weight: 800;
+  -webkit-backdrop-filter: blur(16px) saturate(125%);
+  backdrop-filter: blur(16px) saturate(125%);
+}
+.glass-select-trigger:hover { border-color: rgb(84 131 131 / 0.58); }
+.glass-select-trigger:focus-visible { outline: 2px solid #548383; outline-offset: 2px; }
+.glass-select-trigger:disabled { cursor: not-allowed; opacity: 0.5; }
+.glass-select-menu {
+  position: fixed;
+  z-index: 70;
+  max-height: 17.5rem;
+  overflow-y: auto;
+  border: 1px solid rgb(125 160 202 / 0.3);
+  border-radius: 1rem;
+  padding: 0.375rem;
+  color: #052659;
+  background: rgb(255 255 255 / 0.82);
+  box-shadow: 0 18px 42px rgb(2 16 36 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.92);
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+  backdrop-filter: blur(24px) saturate(125%);
+}
+.glass-select-option {
+  display: flex;
+  min-height: 2.75rem;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 750;
+  text-align: left;
+}
+.glass-select-option:hover { background: rgb(193 232 255 / 0.34); }
+.glass-select-option.is-selected {
+  border-color: rgb(84 131 131 / 0.3);
+  color: #052659;
+  background: rgb(193 232 255 / 0.24);
+}
+.dark .glass-select-trigger {
+  border-color: rgb(193 232 255 / 0.18);
+  color: #e3f5ff;
+  background: rgb(193 232 255 / 0.08);
+  box-shadow: inset 0 1px 0 rgb(193 232 255 / 0.1), 0 8px 20px rgb(0 0 0 / 0.16);
+}
+.dark .glass-select-menu {
+  border-color: rgb(193 232 255 / 0.16);
+  color: #e3f5ff;
+  background: rgb(2 16 36 / 0.88);
+  box-shadow: 0 18px 42px rgb(0 0 0 / 0.34), inset 0 1px 0 rgb(193 232 255 / 0.1);
+}
+.dark .glass-select-option:hover { background: rgb(193 232 255 / 0.08); }
+.dark .glass-select-option.is-selected { border-color: rgb(193 232 255 / 0.22); color: #c1e8ff; background: rgb(193 232 255 / 0.1); }
 .note-toolbar-control {
   display: grid;
   min-width: 2.75rem;
@@ -309,35 +419,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   background: linear-gradient(145deg, #052659, #548383 62%, #7da0ca);
   box-shadow: inset 0 1px 0 rgb(193 232 255 / 0.28), 0 8px 20px rgb(5 38 89 / 0.2);
 }
-.note-text-style-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 0.5rem);
-  left: 0;
-  min-width: 100%;
-  overflow: hidden;
-  border: 1px solid rgb(125 160 202 / 0.42);
-  border-radius: 0.875rem;
-  padding: 0.375rem;
-  color: #052659;
-  background: linear-gradient(145deg, rgb(255 255 255 / 0.97), rgb(225 245 255 / 0.94), rgb(193 232 255 / 0.88));
-  box-shadow: 0 16px 36px rgb(2 16 36 / 0.16), inset 0 1px 0 white;
-  -webkit-backdrop-filter: blur(22px) saturate(145%);
-  backdrop-filter: blur(22px) saturate(145%);
-}
-.note-text-style-option {
-  display: block;
-  width: 100%;
-  border-radius: 0.625rem;
-  padding: 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 700;
-  text-align: left;
-}
-.note-text-style-option:hover { background: rgb(193 232 255 / 0.72); }
-.note-text-style-option.is-selected { color: white; background: linear-gradient(135deg, #052659, #548383); }
-.dark .note-toolbar-control,
-.dark .note-text-style-trigger {
+.dark .note-toolbar-control {
   border-color: rgb(193 232 255 / 0.18);
   color: #e3f5ff;
   background: linear-gradient(145deg, rgb(193 232 255 / 0.13), rgb(84 131 131 / 0.13) 55%, rgb(5 38 89 / 0.3));
@@ -348,15 +430,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   color: #021024;
   background: linear-gradient(145deg, #c1e8ff, #7da0ca 58%, #548383);
 }
-.dark .note-text-style-menu {
-  border-color: rgb(193 232 255 / 0.2);
-  color: #e3f5ff;
-  background: linear-gradient(145deg, rgb(5 38 89 / 0.98), rgb(2 16 36 / 0.96), rgb(84 131 131 / 0.82));
-  box-shadow: 0 18px 42px rgb(0 0 0 / 0.34), inset 0 1px 0 rgb(193 232 255 / 0.12);
-}
-.dark .note-text-style-option:hover { background: rgb(193 232 255 / 0.1); }
-.dark .note-text-style-option.is-selected { color: #021024; background: linear-gradient(135deg, #c1e8ff, #7da0ca); }
-
 .glass-badge { display: inline-flex; border: 1px solid rgb(84 131 131 / 0.26); border-radius: 999px; padding: 0.5rem 0.85rem; color: #052659; background: rgb(255 255 255 / 0.52); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
 .dark .glass-badge { color: #c1e8ff; border-color: rgb(193 232 255 / 0.16); background: rgb(193 232 255 / 0.08); }
 
