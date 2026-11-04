@@ -1,7 +1,15 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   ?? import.meta.env.VITE_API_URL
   ?? 'http://localhost:8888/v1/api'
 export const API_ORIGIN = API_BASE_URL.replace(/\/v1\/api\/?$/, '')
+
+export const formatAvatarUrl = (url?: string | null): string | undefined => {
+  if (!url) return undefined
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
+    return url
+  }
+  return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`
+}
 
 let csrfToken: string | undefined
 
@@ -65,12 +73,13 @@ export const request = async <T>(path: string, init?: RequestInit): Promise<T> =
   const method = init?.method?.toUpperCase() ?? 'GET'
   const needsCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method)
   const token = needsCsrf ? await ensureCsrfToken() : undefined
-  const isFormData = init?.body instanceof FormData
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
-      ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { 'x-csrf-token': token } : {}),
       ...init?.headers,
     },
