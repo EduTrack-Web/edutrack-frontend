@@ -38,6 +38,20 @@ export const router = createBrowserRouter([
       { path: '/dashboard', element: <DashboardPage /> },
       { path: '/calendar', element: <CalendarPage /> },
       { path: '/notes', element: <NotesPage /> },
+      {
+        path: '/notes/trash',
+        lazy: async () => {
+          const { NoteTrashPage } = await import('../modules/notes/views/NoteTrashPage')
+          return { Component: NoteTrashPage }
+        },
+      },
+      {
+        path: '/notes/:noteId',
+        lazy: async () => {
+          const { NoteEditorPage } = await import('../modules/notes/views/NoteEditorPage')
+          return { Component: NoteEditorPage }
+        },
+      },
       { path: '/chat', element: <ChatPage /> },
       { path: '/account', element: <AccountPage /> },
     ],
