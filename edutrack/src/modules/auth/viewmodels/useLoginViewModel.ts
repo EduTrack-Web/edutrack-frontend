@@ -32,14 +32,20 @@ export function useLoginViewModel() {
           setOtpMode(undefined); setOtpId(undefined); setOtp(''); showToast('Xác minh thành công. Vui lòng đăng nhập lại.', 'success')
         } else {
           const result = await authApi.verifyTwoFactor(otpId, otp)
-          setAuthenticatedUser(result.data.user); showToast('Đăng nhập thành công.', 'success'); navigate('/dashboard')
+          setAuthenticatedUser(result.data.user)
+          showToast('Đăng nhập thành công.', 'success')
+          navigate(result.data.user.profileCompleted ? '/dashboard' : '/onboarding')
         }
         return
       }
       const result = await authApi.login(identifier, password)
       if (result.data.requiresVerification && result.data.otpId) { setOtpId(result.data.otpId); setOtpMode('registration'); showToast(result.message ?? 'Vui lòng xác minh email.', 'info'); return }
       if (result.data.requiresTwoFactor && result.data.otpId) { setOtpId(result.data.otpId); setOtpMode('two-factor'); showToast(result.message ?? 'Vui lòng nhập OTP.', 'info'); return }
-      if (result.data.user) { setAuthenticatedUser(result.data.user); showToast('Đăng nhập thành công.', 'success'); navigate('/dashboard') }
+      if (result.data.user) {
+        setAuthenticatedUser(result.data.user)
+        showToast('Đăng nhập thành công.', 'success')
+        navigate(result.data.user.profileCompleted ? '/dashboard' : '/onboarding')
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         const errors = error.fieldErrors ?? {}

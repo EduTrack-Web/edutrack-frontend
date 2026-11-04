@@ -9,6 +9,7 @@ import { CalendarPage } from '../modules/calendar/views/CalendarPage'
 import { NotesPage } from '../modules/notes/views/NotesPage'
 import { ChatPage } from '../modules/chat/views/ChatPage'
 import { LandingPage } from '../modules/landing/views/LandingPage'
+import { ProfileSetupPage } from '../modules/onboarding/views/ProfileSetupPage'
 import { PublicLayout } from '../shared/components/layout/PublicLayout'
 import { App } from './App'
 import { GuestOnly, RequireAuth } from './RouteGuards'
@@ -22,6 +23,14 @@ export const router = createBrowserRouter([
       { path: '/register', element: <GuestOnly><RegisterPage /></GuestOnly> },
       { path: '/forgot-password', element: <GuestOnly><ForgotPasswordPage /></GuestOnly> },
     ],
+  },
+  {
+    path: '/onboarding',
+    element: (
+      <RequireAuth>
+        <ProfileSetupPage />
+      </RequireAuth>
+    ),
   },
   {
     element: <RequireAuth><App /></RequireAuth>,
