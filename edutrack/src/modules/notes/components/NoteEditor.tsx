@@ -5,6 +5,7 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef, useState } from 'react'
 
+import { GlassSelect } from '../../../shared/components/GlassSelect'
 import { NOTE_IMAGE_FILE_ACCEPT } from '../config/notes.config'
 import type { NoteContentNode, NoteImageUploadResult } from '../models/notes.types'
 import { EditorToolbarIcon } from './EditorToolbarIcon'
@@ -14,6 +15,7 @@ interface NoteEditorProps {
   isUploadingImage: boolean
   onChange: (content: NoteContentNode) => void
   onUploadImage: (file: File) => Promise<NoteImageUploadResult | undefined>
+  editable?: boolean
 }
 
 const NoteImage = Image.extend({
@@ -37,11 +39,9 @@ const TEXT_STYLE_OPTIONS: ReadonlyArray<{ value: TextStyleValue; label: string }
 const toolbarButtonClass = (active: boolean): string =>
   `note-toolbar-control${active ? ' is-active' : ''}`
 
-export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploadImage }: NoteEditorProps) {
+export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploadImage, editable = true }: NoteEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const textStyleMenuRef = useRef<HTMLDivElement>(null)
   const [contentError, setContentError] = useState<string | null>(null)
-  const [isTextStyleMenuOpen, setIsTextStyleMenuOpen] = useState(false)
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -60,6 +60,7 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
     ],
     content: initialContent,
     enableContentCheck: true,
+    editable,
     editorProps: {
       attributes: {
         class: 'note-editor-content',
@@ -90,30 +91,13 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
   })
 
   useEffect(() => {
-    if (!isTextStyleMenuOpen) return undefined
-
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!textStyleMenuRef.current?.contains(event.target as Node)) {
-        setIsTextStyleMenuOpen(false)
-      }
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsTextStyleMenuOpen(false)
-    }
-
-    document.addEventListener('pointerdown', closeOnOutsideClick)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsideClick)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [isTextStyleMenuOpen])
+    editor?.setEditable(editable)
+  }, [editable, editor])
 
   const applyTextStyle = (value: TextStyleValue) => {
     if (!editor) return
     if (value === 'paragraph') editor.chain().focus().setParagraph().run()
     else editor.chain().focus().setHeading({ level: Number(value.slice(1)) as 1 | 2 | 3 }).run()
-    setIsTextStyleMenuOpen(false)
   }
 
   const selectImage = async (file: File | undefined) => {
@@ -139,39 +123,8 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
 
   return (
     <div className="note-editor rounded-2xl border border-palette-200/80 bg-white/20 dark:border-white/10 dark:bg-black/5">
-      <div className="flex flex-wrap gap-2 border-b border-palette-200/70 p-2 dark:border-white/10" role="toolbar" aria-label="Định dạng ghi chú">
-        <div className="relative" ref={textStyleMenuRef}>
-          <button
-            aria-controls="note-text-style-options"
-            aria-expanded={isTextStyleMenuOpen}
-            aria-haspopup="listbox"
-            className="note-text-style-trigger"
-            onClick={() => setIsTextStyleMenuOpen((isOpen) => !isOpen)}
-            type="button"
-          >
-            <span>{TEXT_STYLE_OPTIONS.find((option) => option.value === (toolbarState?.heading ?? 'paragraph'))?.label}</span>
-            <EditorToolbarIcon className="size-4" name="chevronDown" />
-          </button>
-          {isTextStyleMenuOpen && (
-            <div aria-label="Kiểu văn bản" className="note-text-style-menu" id="note-text-style-options" role="listbox">
-              {TEXT_STYLE_OPTIONS.map((option) => {
-                const isSelected = option.value === (toolbarState?.heading ?? 'paragraph')
-                return (
-                  <button
-                    aria-selected={isSelected}
-                    className={`note-text-style-option${isSelected ? ' is-selected' : ''}`}
-                    key={option.value}
-                    onClick={() => applyTextStyle(option.value)}
-                    role="option"
-                    type="button"
-                  >
-                    {option.label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+      {editable && <div className="flex flex-wrap gap-2 border-b border-palette-200/70 p-2 dark:border-white/10" role="toolbar" aria-label="Định dạng ghi chú">
+        <GlassSelect ariaLabel="Kiểu văn bản" className="note-text-style-trigger" onChange={applyTextStyle} options={TEXT_STYLE_OPTIONS} value={(toolbarState?.heading ?? 'paragraph') as TextStyleValue} />
         <label aria-label="Màu chữ" className={`${toolbarButtonClass(false)} relative cursor-pointer`} title="Màu chữ">
           <EditorToolbarIcon name="textColor" />
           <span className="absolute inset-x-3 bottom-1.5 h-1 rounded-full" style={{ backgroundColor: typeof toolbarState?.textColor === 'string' ? toolbarState.textColor : '#052659' }} />
@@ -198,7 +151,7 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
           ref={fileInputRef}
           type="file"
         />
-      </div>
+      </div>}
       {contentError && <p className="m-3 text-sm font-semibold text-red-600" role="alert">{contentError}</p>}
       <EditorContent editor={editor} />
     </div>

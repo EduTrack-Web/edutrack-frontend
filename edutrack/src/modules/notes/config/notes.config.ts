@@ -1,6 +1,34 @@
 export const NOTE_DEFAULT_TITLE = 'Ghi chú không tiêu đề'
 export const NOTE_TITLE_MAX_LENGTH = 200
 export const NOTE_AUTOSAVE_INTERVAL_MS = 5_000
+export const NOTE_TAG_NAME_MAX_LENGTH = 50
+export const NOTE_TAG_MAX_PER_NOTE = 10
+
+export const NOTE_TAG_COLOR_OPTIONS = [
+  '#d81b60',
+  '#e67c73',
+  '#d50000',
+  '#f4511e',
+  '#ef6c00',
+  '#f09300',
+  '#f6bf26',
+  '#e4c441',
+  '#c0ca33',
+  '#7cb342',
+  '#33b679',
+  '#0b8043',
+  '#009688',
+  '#039be5',
+  '#4285f4',
+  '#3f51b5',
+  '#7986cb',
+  '#7e57c2',
+  '#8e24aa',
+  '#b39ddb',
+  '#795548',
+  '#616161',
+  '#9e9e9e',
+] as const
 
 export const NOTE_IMAGE_MAX_SIZE_MB = 5
 export const NOTE_IMAGE_MAX_SIZE_BYTES = NOTE_IMAGE_MAX_SIZE_MB * 1024 * 1024
