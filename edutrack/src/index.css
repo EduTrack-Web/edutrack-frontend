@@ -405,9 +405,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   min-width: 10.75rem;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.5rem;
+  padding-inline: 0.625rem;
   font-size: 0.875rem;
   font-weight: 800;
+  white-space: nowrap;
+}
+.note-text-style-menu .glass-select-option {
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
 }
 .note-toolbar-control:hover,
 .note-text-style-trigger:hover { border-color: rgb(84 131 131 / 0.62); transform: translateY(-1px); }

@@ -124,7 +124,7 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
   return (
     <div className="note-editor rounded-2xl border border-palette-200/80 bg-white/20 dark:border-white/10 dark:bg-black/5">
       {editable && <div className="flex flex-wrap gap-2 border-b border-palette-200/70 p-2 dark:border-white/10" role="toolbar" aria-label="Định dạng ghi chú">
-        <GlassSelect ariaLabel="Kiểu văn bản" className="note-text-style-trigger" onChange={applyTextStyle} options={TEXT_STYLE_OPTIONS} value={(toolbarState?.heading ?? 'paragraph') as TextStyleValue} />
+        <GlassSelect ariaLabel="Kiểu văn bản" className="note-text-style-trigger" menuClassName="note-text-style-menu" onChange={applyTextStyle} options={TEXT_STYLE_OPTIONS} value={(toolbarState?.heading ?? 'paragraph') as TextStyleValue} />
         <label aria-label="Màu chữ" className={`${toolbarButtonClass(false)} relative cursor-pointer`} title="Màu chữ">
           <EditorToolbarIcon name="textColor" />
           <span className="absolute inset-x-3 bottom-1.5 h-1 rounded-full" style={{ backgroundColor: typeof toolbarState?.textColor === 'string' ? toolbarState.textColor : '#052659' }} />
