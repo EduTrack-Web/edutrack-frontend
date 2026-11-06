@@ -1,10 +1,10 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 
 import { ApiError } from '../../../shared/api/httpClient'
 import { useToast } from '../../../shared/viewmodels/useToast'
+import { validateChangePasswordForm } from '../models/accountValidation'
 import { accountApi } from '../services/accountApi'
 
-const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])\S{8,64}$/
 
 interface UseChangePasswordViewModelOptions {
   hasPassword?: boolean
@@ -59,31 +59,10 @@ export function useChangePasswordViewModel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const errors: Record<string, string> = {}
-
-    // 1. Kiểm tra mật khẩu hiện tại
-    if (hasPassword) {
-      if (!currentPassword) {
-        errors.currentPassword = 'Vui lòng nhập mật khẩu hiện tại.'
-      }
-    }
-
-    // 2. Kiểm tra mật khẩu mới
-    if (!newPassword) {
-      errors.newPassword = 'Vui lòng nhập mật khẩu mới.'
-    } else if (!PASSWORD_PATTERN.test(newPassword)) {
-      errors.newPassword =
-        'Mật khẩu phải dài 8–64 ký tự, có chữ hoa, chữ thường, số, ký tự đặc biệt và không có khoảng trắng.'
-    } else if (hasPassword && currentPassword && newPassword === currentPassword) {
-      errors.newPassword = 'Mật khẩu mới không được trùng với mật khẩu hiện tại.'
-    }
-
-    // 3. Kiểm tra xác nhận mật khẩu
-    if (!confirmPassword) {
-      errors.confirmPassword = 'Vui lòng nhập xác nhận mật khẩu mới.'
-    } else if (confirmPassword !== newPassword) {
-      errors.confirmPassword = 'Mật khẩu xác nhận không khớp.'
-    }
+    const errors = validateChangePasswordForm(
+      { currentPassword, newPassword, confirmPassword },
+      hasPassword,
+    )
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
