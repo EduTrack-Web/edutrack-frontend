@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '../../../shared/api/httpClient'
@@ -6,9 +6,9 @@ import { useToast } from '../../../shared/viewmodels/useToast'
 import type { UserType } from '../../auth/models/AuthUser'
 import { useAuth } from '../../auth/viewmodels/useAuth'
 import type { ProfileSetupPayload } from '../../account/models/account.types'
+import { validateUsernameFormat } from '../../account/models/accountValidation'
 import { accountApi } from '../../account/services/accountApi'
 
-const USERNAME_REGEX = /^[a-z0-9_-]{3,30}$/
 
 export type SetupStep = 1 | 2 | 3 | 4
 
@@ -78,19 +78,17 @@ export function useProfileSetupViewModel() {
 
   // Kiểm tra tính hợp lệ và khả dụng của username khi người dùng chỉnh sửa
   const handleCheckUsername = async (candidate: string) => {
-    const clean = candidate.trim().toLowerCase()
+    const raw = candidate.trim()
     setUsernameError(null)
     setUsernameAvailable(null)
 
-    if (!clean) {
-      setUsernameError('Tên đăng nhập không được để trống.')
+    const formatError = validateUsernameFormat(candidate)
+    if (formatError) {
+      setUsernameError(formatError)
       return false
     }
 
-    if (!USERNAME_REGEX.test(clean)) {
-      setUsernameError('Tên đăng nhập phải từ 3 đến 30 ký tự, chỉ gồm chữ thường, chữ số, gạch ngang (-) hoặc gạch dưới (_).')
-      return false
-    }
+    const clean = raw.toLowerCase()
 
     // Nếu trùng với username hiện tại của chính user
     if (user && clean === user.username.toLowerCase()) {
@@ -128,15 +126,10 @@ export function useProfileSetupViewModel() {
     }
 
     if (step === 2) {
-      const clean = username.trim().toLowerCase()
-      // Nếu có sửa đổi so với username gốc, kiểm tra trùng lặp
-      if (user && clean !== user.username.toLowerCase()) {
-        const isOk = await handleCheckUsername(clean)
-        if (!isOk) return
-      } else if (!clean) {
-        setUsernameError('Vui lòng nhập tên đăng nhập.')
-        return
-      }
+      const raw = username.trim()
+      const isOk = await handleCheckUsername(raw)
+      if (!isOk) return
+      setUsername(raw.toLowerCase())
       setStep(3)
       return
     }

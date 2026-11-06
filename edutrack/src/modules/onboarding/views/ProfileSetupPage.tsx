@@ -1,4 +1,4 @@
-import { Icon } from '../../../shared/components/Icon'
+﻿import { Icon } from '../../../shared/components/Icon'
 import {
   USER_ROLES,
   useProfileSetupViewModel,
@@ -11,14 +11,39 @@ const STEP_LABELS = [
   'Xác nhận',
 ]
 
-const QUICK_ORGS = [
-  'ĐH Sư phạm Kỹ thuật TP.HCM (HCMUTE)',
-  'ĐH Bách Khoa - ĐHQG-HCM',
-  'ĐH Kinh tế TP.HCM (UEH)',
-  'ĐH Khoa học Tự nhiên - ĐHQG-HCM',
-  'THPT Chuyên Lê Hồng Phong',
-  'THPT Gia Định',
-]
+const QUICK_ORGS_BY_ROLE: Record<string, string[]> = {
+  pupil: [
+    'THPT Chuyên Lê Hồng Phong (TP.HCM)',
+    'THPT Chuyên Lê Hồng Phong (Nam Định)',
+    'THPT Lê Hồng Phong (Đà Nẵng)',
+    'THPT Gia Định (TP.HCM)',
+    'THPT Chuyên Hà Nội - Amsterdam',
+  ],
+  student: [
+    'Trường ĐH Công nghệ Kỹ thuật TP.HCM (HCMUTE)',
+    'ĐH Bách Khoa - ĐHQG-HCM',
+    'ĐH Kinh tế TP.HCM (UEH)',
+    'ĐH Bách Khoa Hà Nội (HUST)',
+    'ĐH Khoa học Tự nhiên - ĐHQG-HCM',
+  ],
+  teacher: [
+    'Trường ĐH Công nghệ Kỹ thuật TP.HCM (HCMUTE)',
+    'ĐH Bách Khoa - ĐHQG-HCM',
+    'ĐH Sư phạm TP.HCM',
+    'ĐH Quốc gia Hà Nội (VNU)',
+  ],
+  worker: [
+    'FPT Software',
+    'Tập đoàn Viettel',
+    'VNG Corporation',
+    'VNPT',
+  ],
+  other: [
+    'Học viên tự do / Tự học',
+    'Trung tâm đào tạo / Ngoại ngữ',
+    'Đang tìm kiếm cơ hội mới',
+  ],
+}
 
 export function ProfileSetupPage() {
   const {
@@ -45,6 +70,7 @@ export function ProfileSetupPage() {
 
   const defaultRole = USER_ROLES[0] as (typeof USER_ROLES)[number]
   const selectedRole = USER_ROLES.find((r) => r.type === userType) ?? defaultRole
+  const quickOrgs = QUICK_ORGS_BY_ROLE[userType] ?? (QUICK_ORGS_BY_ROLE.student as string[])
 
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-slate-50 via-slate-100 to-sky-50/40 p-4 transition-colors duration-300 dark:from-[#021024] dark:via-[#052659]/70 dark:to-[#021024] sm:p-6 md:p-8">
@@ -234,8 +260,8 @@ export function ProfileSetupPage() {
                         void handleCheckUsername(username)
                       }
                     }}
-                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                    placeholder="ví dụ: hoangnam, namdev"
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="ví dụ: yeucode, danit, hocsinh2k7"
                     type="text"
                     value={username}
                   />
@@ -307,12 +333,12 @@ export function ProfileSetupPage() {
                   onChange={(e) => setOrganization(e.target.value)}
                   placeholder={
                     userType === 'pupil'
-                      ? 'Ví dụ: THPT Chuyên Lê Hồng Phong, THPT Gia Định...'
+                      ? 'Ví dụ: THPT Chuyên Lê Hồng Phong (TP.HCM), THPT Lê Hồng Phong (Đà Nẵng)...'
                       : userType === 'worker'
                         ? 'Ví dụ: Công ty Công nghệ FPT, Tập đoàn ABC...'
                         : userType === 'other'
                           ? 'Ví dụ: Tự học tại nhà, Trung tâm tiếng Anh...'
-                          : 'Ví dụ: ĐH Sư phạm Kỹ thuật TP.HCM (HCMUTE)...'
+                          : 'Ví dụ: Trường ĐH Công nghệ Kỹ thuật TP.HCM (HCMUTE)...'
                   }
                   type="text"
                   value={organization}
@@ -325,7 +351,7 @@ export function ProfileSetupPage() {
                   Gợi ý chọn nhanh:
                 </span>
                 <div className="mt-2.5 flex flex-wrap gap-2">
-                  {QUICK_ORGS.map((org) => (
+                  {quickOrgs.map((org) => (
                     <button
                       key={org}
                       className="rounded-xl border border-slate-200 bg-white/70 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-palette-700 hover:bg-palette-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
