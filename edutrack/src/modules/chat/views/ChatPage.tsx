@@ -1,6 +1,8 @@
 import { BlockUserDialog } from '../components/BlockUserDialog'
 import { ChatActionIcon } from '../components/ChatActionIcon'
+import { ChatGroupCard } from '../components/ChatGroupCard'
 import { ChatUserCard } from '../components/ChatUserCard'
+import { CreateChatGroupDialog } from '../components/CreateChatGroupDialog'
 import type { ChatFriendsTab, FriendSearchResult } from '../models/chat.types'
 import { useChatViewModel } from '../viewmodels/useChatViewModel'
 
@@ -25,11 +27,15 @@ export function ChatPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 sm:space-y-6">
-      <header>
-        <p className="text-sm font-bold text-palette-700 dark:text-palette-200">Trao đổi nhóm</p>
-        <h1 className="mt-1 text-2xl font-black tracking-tight text-palette-900 sm:text-3xl dark:text-white">Bạn bè và kết nối</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">Tìm đúng tài khoản bằng username hoặc email. Email không được hiển thị trong kết quả tìm kiếm.</p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="text-sm font-bold text-palette-700 dark:text-palette-200">Trao đổi nhóm</p><h1 className="mt-1 text-2xl font-black tracking-tight text-palette-900 sm:text-3xl dark:text-white">Bạn bè và kết nối</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">Tìm đúng tài khoản bằng username hoặc email. Email không được hiển thị trong kết quả tìm kiếm.</p></div>
+        <button className={primaryButtonClass} onClick={vm.openCreateGroup} type="button"><ChatActionIcon className="size-4" name="plus" />Tạo nhóm</button>
       </header>
+
+      <section className="content-card p-4 sm:p-5" aria-labelledby="chat-groups-title">
+        <div className="flex items-center gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-palette-100 text-palette-700 dark:bg-white/10 dark:text-palette-200"><ChatActionIcon name="group" /></span><div><h2 className="font-extrabold text-palette-900 dark:text-white" id="chat-groups-title">Nhóm của bạn</h2><p className="text-xs text-slate-500 dark:text-slate-300">Nhóm hoạt động ngay cả khi vẫn còn người được mời chưa tham gia.</p></div></div>
+        {vm.groups.length > 0 ? <div className="mt-4 grid gap-3 md:grid-cols-2">{vm.groups.map((group) => <ChatGroupCard group={group} key={group.id} />)}</div> : <p className="mt-4 rounded-xl bg-palette-100/60 p-4 text-sm text-slate-600 dark:bg-white/5 dark:text-slate-300">Bạn chưa tham gia nhóm trò chuyện nào.</p>}
+      </section>
 
       <section className="content-card p-4 sm:p-5" aria-labelledby="friend-search-title">
         <div className="flex items-center gap-3">
@@ -90,6 +96,7 @@ export function ChatPage() {
       </section>
 
       {vm.blockTarget && <BlockUserDialog isSaving={vm.busyId === vm.blockTarget.id} onCancel={vm.cancelBlock} onConfirm={() => void vm.confirmBlock()} user={vm.blockTarget} />}
+      {vm.isCreateGroupOpen && <CreateChatGroupDialog onClose={vm.closeCreateGroup} />}
     </div>
   )
 }

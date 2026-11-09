@@ -5,6 +5,7 @@ import { useToast } from '../../../shared/viewmodels/useToast'
 import type {
   BlockedUserItem,
   ChatFriendsTab,
+  ChatGroupSummary,
   ChatUserSummary,
   FriendRequestItem,
   FriendSearchResult,
@@ -17,6 +18,8 @@ const sortUsers = <T extends ChatUserSummary>(users: T[]): T[] =>
 export function useChatViewModel() {
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<ChatFriendsTab>('friends')
+  const [groups, setGroups] = useState<ChatGroupSummary[]>([])
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false)
   const [friends, setFriends] = useState<ChatUserSummary[]>([])
   const [requests, setRequests] = useState<FriendRequestItem[]>([])
   const [blockedUsers, setBlockedUsers] = useState<BlockedUserItem[]>([])
@@ -32,11 +35,13 @@ export function useChatViewModel() {
   const load = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [friendsResult, requestsResult, blockedResult] = await Promise.all([
+      const [groupsResult, friendsResult, requestsResult, blockedResult] = await Promise.all([
+        chatApi.getGroups(),
         chatApi.getFriends(),
         chatApi.getFriendRequests(),
         chatApi.getBlockedUsers(),
       ])
+      setGroups(groupsResult.data.groups)
       setFriends(sortUsers(friendsResult.data.friends))
       setRequests(requestsResult.data.requests)
       setBlockedUsers(sortUsers(blockedResult.data.users))
@@ -157,6 +162,8 @@ export function useChatViewModel() {
 
   return {
     activeTab,
+    groups,
+    isCreateGroupOpen,
     friends,
     requests,
     blockedUsers,
@@ -170,6 +177,8 @@ export function useChatViewModel() {
     blockTarget,
     incomingRequestCount: requests.filter((item) => item.direction === 'incoming').length,
     setActiveTab,
+    openCreateGroup: () => setIsCreateGroupOpen(true),
+    closeCreateGroup: () => setIsCreateGroupOpen(false),
     setQuery: (value: string) => {
       setQuery(value)
       setQueryError(null)
