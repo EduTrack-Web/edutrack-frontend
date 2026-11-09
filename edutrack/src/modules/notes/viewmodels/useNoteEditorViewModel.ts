@@ -107,10 +107,20 @@ export function useNoteEditorViewModel() {
 
   const markChanged = useCallback((nextDraft: NoteDraft) => {
     if (note && !note.access.canEdit) return
-    autosaveRef.current.change(nextDraft)
+    const hasPendingChanges = autosaveRef.current.change(nextDraft)
     lastErrorSnapshotRef.current = null
-    setSaveStatus('unsaved')
+    setSaveStatus(hasPendingChanges ? 'unsaved' : 'saved')
   }, [note])
+
+  const initializeEditorContent = useCallback((value: NoteContentNode) => {
+    const currentDraft = autosaveRef.current.currentDraft
+    if (!currentDraft) return
+    const editorDraft = { ...currentDraft, content: value }
+    autosaveRef.current.initialize(editorDraft)
+    setContent(value)
+    lastErrorSnapshotRef.current = null
+    setSaveStatus('saved')
+  }, [])
 
   const updateTitle = (value: string) => {
     setTitle(value)
@@ -160,12 +170,13 @@ export function useNoteEditorViewModel() {
       return isFullySaved
     } catch (error) {
       autosaveRef.current.failSave()
-      setSaveStatus('error')
-      if (lastErrorSnapshotRef.current !== attempt.snapshot) {
+      const hasPendingChanges = autosaveRef.current.hasPendingChanges
+      setSaveStatus(hasPendingChanges ? 'error' : 'saved')
+      if (hasPendingChanges && lastErrorSnapshotRef.current !== attempt.snapshot) {
         showToast(error instanceof ApiError ? error.message : 'Không thể lưu ghi chú. Hệ thống sẽ thử lại.', 'error')
         lastErrorSnapshotRef.current = attempt.snapshot
       }
-      return false
+      return !hasPendingChanges
     }
   }, [note, noteId, showToast])
 
@@ -393,6 +404,7 @@ export function useNoteEditorViewModel() {
     hasUnsavedChanges: saveStatus === 'unsaved' || saveStatus === 'saving' || saveStatus === 'error',
     updateTitle,
     updateContent,
+    initializeEditorContent,
     updateBackground,
     saveNow: save,
     openDeleteDialog: () => setIsDeleteDialogOpen(true),

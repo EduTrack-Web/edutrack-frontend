@@ -33,6 +33,25 @@ describe('NoteAutosaveTracker', () => {
     expect(tracker.beginSave()).toBeUndefined()
   })
 
+  it('ignores an editor update when the loaded content is unchanged', () => {
+    const tracker = new NoteAutosaveTracker()
+    tracker.initialize(draft('Ban đầu'))
+
+    expect(tracker.change(draft('Ban đầu'))).toBe(false)
+    expect(tracker.hasPendingChanges).toBe(false)
+    expect(tracker.beginSave()).toBeUndefined()
+  })
+
+  it('becomes clean when the user reverts to the last saved content', () => {
+    const tracker = new NoteAutosaveTracker()
+    tracker.initialize(draft('Ban đầu'))
+
+    expect(tracker.change(draft('Đã thay đổi'))).toBe(true)
+    expect(tracker.change(draft('Ban đầu'))).toBe(false)
+    expect(tracker.hasPendingChanges).toBe(false)
+    expect(tracker.beginSave()).toBeUndefined()
+  })
+
   it('saves a changed draft once and becomes clean after success', () => {
     const tracker = new NoteAutosaveTracker()
     tracker.initialize(draft('Ban đầu'))
