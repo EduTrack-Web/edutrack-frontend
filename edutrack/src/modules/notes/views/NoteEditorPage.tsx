@@ -112,10 +112,12 @@ export function NoteEditorPage() {
         </label>
         <div className="mt-4">
           <NoteEditor
+            key={vm.note?.id}
             initialContent={vm.content}
             editable={vm.note?.access.canEdit}
             isUploadingImage={vm.isUploadingImage}
             onChange={vm.updateContent}
+            onReady={vm.initializeEditorContent}
             onUploadImage={vm.uploadImage}
           />
         </div>
