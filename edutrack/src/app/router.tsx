@@ -53,6 +53,20 @@ export const router = createBrowserRouter([
         },
       },
       { path: '/chat', element: <ChatPage /> },
+      {
+        path: '/chat/groups/:groupId',
+        lazy: async () => {
+          const { ChatGroupPage } = await import('../modules/chat/views/ChatGroupPage')
+          return { Component: ChatGroupPage }
+        },
+      },
+      {
+        path: '/chat/join/:token',
+        lazy: async () => {
+          const { ChatGroupInvitePage } = await import('../modules/chat/views/ChatGroupInvitePage')
+          return { Component: ChatGroupInvitePage }
+        },
+      },
       { path: '/account', element: <AccountPage /> },
     ],
   },
