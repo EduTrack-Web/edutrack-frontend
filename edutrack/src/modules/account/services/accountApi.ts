@@ -1,4 +1,4 @@
-import { API_BASE_URL, request } from '../../../shared/api/httpClient'
+import { API_BASE_URL, request } from '@/shared/api/httpClient'
 import type {
   ChangePasswordApiResponse,
   ChangePasswordPayload,
@@ -16,7 +16,7 @@ import type {
   UpdateProfilePayload,
   UploadAvatarApiResponse,
   UserProfile,
-} from '../models/account.types'
+} from '@/modules/account/models/account.types'
 
 export const accountApi = {
   getProfile: async (): Promise<{ success: true; data: { user: UserProfile } }> => {

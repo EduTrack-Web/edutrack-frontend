@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import { NoteActionIcon } from './NoteActionIcon'
+import { NoteActionIcon } from '@/modules/notes/components/NoteActionIcon'
 
 interface NoteActionsMenuProps {
   isDuplicating: boolean

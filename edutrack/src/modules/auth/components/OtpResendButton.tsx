@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import { authApi } from '../services/authApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { authApi } from '@/modules/auth/services/authApi'
 
 interface OtpResendButtonProps {
   otpId: string

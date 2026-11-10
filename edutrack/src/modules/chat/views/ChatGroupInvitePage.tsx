@@ -1,5 +1,5 @@
-import { ChatActionIcon } from '../components/ChatActionIcon'
-import { useChatGroupInviteViewModel } from '../viewmodels/useChatGroupInviteViewModel'
+import { ChatActionIcon } from '@/modules/chat/components/ChatActionIcon'
+import { useChatGroupInviteViewModel } from '@/modules/chat/viewmodels/useChatGroupInviteViewModel'
 
 export function ChatGroupInvitePage() {
   const vm = useChatGroupInviteViewModel()

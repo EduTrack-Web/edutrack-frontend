@@ -1,5 +1,5 @@
-import { API_ORIGIN, request } from '../../../shared/api/httpClient'
-import type { ApiSuccess, AuthUser } from '../models/AuthUser'
+import { API_ORIGIN, request } from '@/shared/api/httpClient'
+import type { ApiSuccess, AuthUser } from '@/modules/auth/models/AuthUser'
 
 export interface LoginResult {
   user?: AuthUser

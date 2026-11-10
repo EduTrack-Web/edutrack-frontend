@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import type { NavigationIcon } from '../models/navigation'
+import type { NavigationIcon } from '@/shared/models/navigation'
 
 export type IconName =
   | NavigationIcon

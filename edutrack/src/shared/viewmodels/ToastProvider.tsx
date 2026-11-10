@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, useState, type PropsWithChildren } from 'react'
 
-import type { ToastLevel, ToastMessage } from '../models/toast'
-import { Icon, type IconName } from '../components/Icon'
-import { ToastContext } from './toastContext'
+import type { ToastLevel, ToastMessage } from '@/shared/models/toast'
+import { Icon, type IconName } from '@/shared/components/Icon'
+import { ToastContext } from '@/shared/viewmodels/toastContext'
 
 const iconByLevel: Record<ToastLevel, IconName> = { error: 'error', warning: 'warning', info: 'info', success: 'check' }
 const labelByLevel: Record<ToastLevel, string> = { error: 'Lỗi', warning: 'Cảnh báo', info: 'Thông tin', success: 'Thành công' }

@@ -1,4 +1,4 @@
-import type { ChatUserSummary } from '../models/chat.types'
+import type { ChatUserSummary } from '@/modules/chat/models/chat.types'
 
 interface BlockUserDialogProps {
   user: ChatUserSummary

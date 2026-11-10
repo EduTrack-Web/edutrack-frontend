@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router-dom'
 
-import type { NavigationItem } from '../../models/navigation'
-import { Icon } from '../Icon'
-import { Logo } from './Logo'
+import type { NavigationItem } from '@/shared/models/navigation'
+import { Icon } from '@/shared/components/Icon'
+import { Logo } from '@/shared/components/layout/Logo'
 
 interface SidebarProps {
   collapsed: boolean

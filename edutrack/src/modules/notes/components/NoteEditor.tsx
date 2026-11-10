@@ -5,10 +5,10 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef, useState } from 'react'
 
-import { GlassSelect } from '../../../shared/components/GlassSelect'
-import { NOTE_IMAGE_FILE_ACCEPT } from '../config/notes.config'
-import type { NoteContentNode, NoteImageUploadResult } from '../models/notes.types'
-import { EditorToolbarIcon } from './EditorToolbarIcon'
+import { GlassSelect } from '@/shared/components/GlassSelect'
+import { NOTE_IMAGE_FILE_ACCEPT } from '@/modules/notes/config/notes.config'
+import type { NoteContentNode, NoteImageUploadResult } from '@/modules/notes/models/notes.types'
+import { EditorToolbarIcon } from '@/modules/notes/components/EditorToolbarIcon'
 
 interface NoteEditorProps {
   initialContent: NoteContentNode

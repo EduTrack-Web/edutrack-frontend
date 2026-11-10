@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { Icon } from '../../../shared/components/Icon'
+import { Icon } from '@/shared/components/Icon'
 
 interface ConfirmUnlinkGoogleModalProps {
   isOpen: boolean

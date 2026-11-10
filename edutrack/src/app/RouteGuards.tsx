@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
-import { useAuth } from '../modules/auth/viewmodels/useAuth'
+import { useAuth } from '@/modules/auth/viewmodels/useAuth'
 
 function LoadingScreen() {
   return (

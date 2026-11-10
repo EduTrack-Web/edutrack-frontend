@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
 import {
   NOTE_AUTOSAVE_INTERVAL_MS,
   NOTE_TAG_COLOR_OPTIONS,
@@ -10,10 +10,10 @@ import {
   NOTE_TAG_NAME_MAX_LENGTH,
   validateNoteImageFile,
   type NoteBackground,
-} from '../config/notes.config'
-import { NoteAutosaveTracker, type NoteDraft } from '../models/noteAutosave'
-import type { NoteContentNode, NoteDetail, NoteImageUploadResult, NoteTag } from '../models/notes.types'
-import { notesApi } from '../services/notesApi'
+} from '@/modules/notes/config/notes.config'
+import { NoteAutosaveTracker, type NoteDraft } from '@/modules/notes/models/noteAutosave'
+import type { NoteContentNode, NoteDetail, NoteImageUploadResult, NoteTag } from '@/modules/notes/models/notes.types'
+import { notesApi } from '@/modules/notes/services/notesApi'
 
 export type NoteSaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 

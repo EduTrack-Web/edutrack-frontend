@@ -1,5 +1,5 @@
-import { Icon } from '../../../shared/components/Icon'
-import { useCalendarViewModel } from '../viewmodels/useCalendarViewModel'
+import { Icon } from '@/shared/components/Icon'
+import { useCalendarViewModel } from '@/modules/calendar/viewmodels/useCalendarViewModel'
 
 export function CalendarPage() {
   const vm = useCalendarViewModel()

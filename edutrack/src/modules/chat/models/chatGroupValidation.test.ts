@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { validateChatGroupForm } from './chatGroupValidation'
+import { validateChatGroupForm } from '@/modules/chat/models/chatGroupValidation'
 
 describe('validateChatGroupForm', () => {
   it('returns every field error in one validation pass', () => {

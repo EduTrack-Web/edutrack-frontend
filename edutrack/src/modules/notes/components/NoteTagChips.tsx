@@ -1,5 +1,5 @@
-import type { NoteTag } from '../models/notes.types'
-import { getTagTextColor } from '../models/tagColor'
+import type { NoteTag } from '@/modules/notes/models/notes.types'
+import { getTagTextColor } from '@/modules/notes/models/tagColor'
 
 interface NoteTagChipsProps {
   tags: NoteTag[]

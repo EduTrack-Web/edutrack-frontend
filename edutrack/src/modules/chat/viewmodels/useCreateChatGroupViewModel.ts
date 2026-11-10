@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import { validateChatGroupForm } from '../models/chatGroupValidation'
-import type { ChatGroupHistoryVisibility, ChatUserSummary, FriendSearchResult } from '../models/chat.types'
-import { chatApi } from '../services/chatApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { validateChatGroupForm } from '@/modules/chat/models/chatGroupValidation'
+import type { ChatGroupHistoryVisibility, ChatUserSummary, FriendSearchResult } from '@/modules/chat/models/chat.types'
+import { chatApi } from '@/modules/chat/services/chatApi'
 
 const withoutField = (
   errors: Readonly<Record<string, string>>,

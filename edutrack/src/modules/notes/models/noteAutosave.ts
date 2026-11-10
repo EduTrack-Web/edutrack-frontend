@@ -1,5 +1,5 @@
-import type { NoteContentNode } from './notes.types'
-import type { NoteBackground } from '../config/notes.config'
+import type { NoteContentNode } from '@/modules/notes/models/notes.types'
+import type { NoteBackground } from '@/modules/notes/config/notes.config'
 
 export interface NoteDraft {
   title: string

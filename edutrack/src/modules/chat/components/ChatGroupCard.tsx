@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 
-import type { ChatGroupSummary } from '../models/chat.types'
-import { ChatActionIcon } from './ChatActionIcon'
+import type { ChatGroupSummary } from '@/modules/chat/models/chat.types'
+import { ChatActionIcon } from '@/modules/chat/components/ChatActionIcon'
 
 const roleLabel = { owner: 'Trưởng nhóm', manager: 'Phó nhóm', member: 'Thành viên' } as const
 

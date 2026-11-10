@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 
-import { Icon } from '../../../shared/components/Icon'
-import { AuthCard } from '../components/AuthCard'
-import { FormField } from '../components/FormField'
-import { OtpResendButton } from '../components/OtpResendButton'
-import { useForgotPasswordViewModel } from '../viewmodels/useForgotPasswordViewModel'
+import { Icon } from '@/shared/components/Icon'
+import { AuthCard } from '@/modules/auth/components/AuthCard'
+import { FormField } from '@/modules/auth/components/FormField'
+import { OtpResendButton } from '@/modules/auth/components/OtpResendButton'
+import { useForgotPasswordViewModel } from '@/modules/auth/viewmodels/useForgotPasswordViewModel'
 
 export function ForgotPasswordPage() {
   const vm = useForgotPasswordViewModel()
