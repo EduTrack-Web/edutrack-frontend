@@ -17,17 +17,6 @@ const relationLabel = (user: FriendSearchResult): string => {
   return user.exactMatch ? 'Có thể gửi lời mời' : ''
 }
 
-const primaryButtonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-palette-900 to-palette-700 px-4 text-sm font-extrabold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50'
-const secondaryButtonClass = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-palette-200/80 bg-white/75 px-3 text-sm font-bold text-palette-900 transition hover:bg-palette-100/80 disabled:opacity-50 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15'
-const dangerButtonClass = 'inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30'
-
-const relationLabel = (user: FriendSearchResult): string => {
-  if (user.relation === 'friend') return 'Đã là bạn bè'
-  if (user.relation === 'incoming') return 'Đang chờ bạn phản hồi'
-  if (user.relation === 'outgoing') return 'Đã gửi lời mời'
-  return user.exactMatch ? 'Có thể gửi lời mời' : ''
-}
-
 export function ChatPage() {
   const vm = useChatViewModel()
   const tabs: Array<{ value: ChatFriendsTab; label: string; count: number }> = [
