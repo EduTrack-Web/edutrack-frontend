@@ -1,15 +1,38 @@
-import { request } from '../../../shared/api/httpClient'
-import type { ApiSuccess } from '../../auth/models/AuthUser'
+import { request } from '@/shared/api/httpClient'
+import type { ApiSuccess } from '@/modules/auth/models/AuthUser'
 import type {
   BlockedUserItem,
   ChatChannel,
+  ChatGroupDetail,
+  ChatGroupInvitePreview,
+  ChatGroupInviteResult,
+  ChatGroupSummary,
   ChatMessage,
   ChatUserSummary,
+  CreateChatGroupInput,
   FriendRequestItem,
   FriendSearchResult,
-} from '../models/chat.types'
+} from '@/modules/chat/models/chat.types'
 
 export const chatApi = {
+  getGroups: () => request<ApiSuccess<{ groups: ChatGroupSummary[] }>>('/chat/groups'),
+  createGroup: (input: CreateChatGroupInput) =>
+    request<ApiSuccess<{ group: ChatGroupDetail; invite: ChatGroupInviteResult }>>('/chat/groups', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  getGroup: (groupId: string) =>
+    request<ApiSuccess<{ group: ChatGroupDetail }>>(`/chat/groups/${groupId}`),
+  createGroupInviteLink: (groupId: string) =>
+    request<ApiSuccess<{ invite: ChatGroupInviteResult }>>(`/chat/groups/${groupId}/invite-link`, {
+      method: 'POST',
+    }),
+  previewGroupInvite: (token: string) =>
+    request<ApiSuccess<{ invite: ChatGroupInvitePreview }>>(`/chat/group-invites/${encodeURIComponent(token)}`),
+  joinGroupByInvite: (token: string) =>
+    request<ApiSuccess<{ group: ChatGroupSummary }>>(`/chat/group-invites/${encodeURIComponent(token)}/join`, {
+      method: 'POST',
+    }),
   getChannels: () => request<ApiSuccess<{ channels: ChatChannel[] }>>('/chat/channels'),
   getMessages: (channelId: string) =>
     request<ApiSuccess<{ messages: ChatMessage[] }>>(`/chat/channels/${channelId}/messages`),

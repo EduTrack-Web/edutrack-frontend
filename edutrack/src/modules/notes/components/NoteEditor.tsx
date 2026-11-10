@@ -5,15 +5,16 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef, useState } from 'react'
 
-import { GlassSelect } from '../../../shared/components/GlassSelect'
-import { NOTE_IMAGE_FILE_ACCEPT } from '../config/notes.config'
-import type { NoteContentNode, NoteImageUploadResult } from '../models/notes.types'
-import { EditorToolbarIcon } from './EditorToolbarIcon'
+import { GlassSelect } from '@/shared/components/GlassSelect'
+import { NOTE_IMAGE_FILE_ACCEPT } from '@/modules/notes/config/notes.config'
+import type { NoteContentNode, NoteImageUploadResult } from '@/modules/notes/models/notes.types'
+import { EditorToolbarIcon } from '@/modules/notes/components/EditorToolbarIcon'
 
 interface NoteEditorProps {
   initialContent: NoteContentNode
   isUploadingImage: boolean
   onChange: (content: NoteContentNode) => void
+  onReady: (content: NoteContentNode) => void
   onUploadImage: (file: File) => Promise<NoteImageUploadResult | undefined>
   editable?: boolean
 }
@@ -39,7 +40,7 @@ const TEXT_STYLE_OPTIONS: ReadonlyArray<{ value: TextStyleValue; label: string }
 const toolbarButtonClass = (active: boolean): string =>
   `note-toolbar-control${active ? ' is-active' : ''}`
 
-export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploadImage, editable = true }: NoteEditorProps) {
+export function NoteEditor({ initialContent, isUploadingImage, onChange, onReady, onUploadImage, editable = true }: NoteEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [contentError, setContentError] = useState<string | null>(null)
   const editor = useEditor({
@@ -67,6 +68,7 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
         'aria-label': 'Nội dung ghi chú',
       },
     },
+    onCreate: ({ editor: currentEditor }) => onReady(currentEditor.getJSON() as NoteContentNode),
     onContentError: () => setContentError('Nội dung ghi chú không tương thích với editor.'),
     onUpdate: ({ editor: currentEditor }) => onChange(currentEditor.getJSON() as NoteContentNode),
   })

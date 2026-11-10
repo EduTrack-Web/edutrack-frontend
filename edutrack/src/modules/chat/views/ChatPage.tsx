@@ -1,8 +1,21 @@
-import { BlockUserDialog } from '../components/BlockUserDialog'
-import { ChatActionIcon } from '../components/ChatActionIcon'
-import { ChatUserCard } from '../components/ChatUserCard'
-import type { ChatFriendsTab, FriendSearchResult } from '../models/chat.types'
-import { useChatViewModel } from '../viewmodels/useChatViewModel'
+import { BlockUserDialog } from '@/modules/chat/components/BlockUserDialog'
+import { ChatActionIcon } from '@/modules/chat/components/ChatActionIcon'
+import { ChatGroupCard } from '@/modules/chat/components/ChatGroupCard'
+import { ChatUserCard } from '@/modules/chat/components/ChatUserCard'
+import { CreateChatGroupDialog } from '@/modules/chat/components/CreateChatGroupDialog'
+import type { ChatFriendsTab, FriendSearchResult } from '@/modules/chat/models/chat.types'
+import { useChatViewModel } from '@/modules/chat/viewmodels/useChatViewModel'
+
+const primaryButtonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-palette-900 to-palette-700 px-4 text-sm font-extrabold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50'
+const secondaryButtonClass = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-palette-200/80 bg-white/75 px-3 text-sm font-bold text-palette-900 transition hover:bg-palette-100/80 disabled:opacity-50 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15'
+const dangerButtonClass = 'inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30'
+
+const relationLabel = (user: FriendSearchResult): string => {
+  if (user.relation === 'friend') return 'Đã là bạn bè'
+  if (user.relation === 'incoming') return 'Đang chờ bạn phản hồi'
+  if (user.relation === 'outgoing') return 'Đã gửi lời mời'
+  return user.exactMatch ? 'Có thể gửi lời mời' : ''
+}
 
 const primaryButtonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-palette-900 to-palette-700 px-4 text-sm font-extrabold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50'
 const secondaryButtonClass = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-palette-200/80 bg-white/75 px-3 text-sm font-bold text-palette-900 transition hover:bg-palette-100/80 disabled:opacity-50 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/15'
@@ -25,11 +38,15 @@ export function ChatPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 sm:space-y-6">
-      <header>
-        <p className="text-sm font-bold text-palette-700 dark:text-palette-200">Trao đổi nhóm</p>
-        <h1 className="mt-1 text-2xl font-black tracking-tight text-palette-900 sm:text-3xl dark:text-white">Bạn bè và kết nối</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">Tìm đúng tài khoản bằng username hoặc email. Email không được hiển thị trong kết quả tìm kiếm.</p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="text-sm font-bold text-palette-700 dark:text-palette-200">Trao đổi nhóm</p><h1 className="mt-1 text-2xl font-black tracking-tight text-palette-900 sm:text-3xl dark:text-white">Bạn bè và kết nối</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">Tìm đúng tài khoản bằng username hoặc email. Email không được hiển thị trong kết quả tìm kiếm.</p></div>
+        <button className={primaryButtonClass} onClick={vm.openCreateGroup} type="button"><ChatActionIcon className="size-4" name="plus" />Tạo nhóm</button>
       </header>
+
+      <section className="content-card p-4 sm:p-5" aria-labelledby="chat-groups-title">
+        <div className="flex items-center gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-palette-100 text-palette-700 dark:bg-white/10 dark:text-palette-200"><ChatActionIcon name="group" /></span><div><h2 className="font-extrabold text-palette-900 dark:text-white" id="chat-groups-title">Nhóm của bạn</h2><p className="text-xs text-slate-500 dark:text-slate-300">Nhóm hoạt động ngay cả khi vẫn còn người được mời chưa tham gia.</p></div></div>
+        {vm.groups.length > 0 ? <div className="mt-4 grid gap-3 md:grid-cols-2">{vm.groups.map((group) => <ChatGroupCard group={group} key={group.id} />)}</div> : <p className="mt-4 rounded-xl bg-palette-100/60 p-4 text-sm text-slate-600 dark:bg-white/5 dark:text-slate-300">Bạn chưa tham gia nhóm trò chuyện nào.</p>}
+      </section>
 
       <section className="content-card p-4 sm:p-5" aria-labelledby="friend-search-title">
         <div className="flex items-center gap-3">
@@ -90,6 +107,7 @@ export function ChatPage() {
       </section>
 
       {vm.blockTarget && <BlockUserDialog isSaving={vm.busyId === vm.blockTarget.id} onCancel={vm.cancelBlock} onConfirm={() => void vm.confirmBlock()} user={vm.blockTarget} />}
+      {vm.isCreateGroupOpen && <CreateChatGroupDialog onClose={vm.closeCreateGroup} />}
     </div>
   )
 }

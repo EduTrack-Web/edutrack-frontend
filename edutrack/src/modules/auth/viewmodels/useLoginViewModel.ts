@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import { validateLogin, validateOtp } from '../models/authValidation'
-import { authApi } from '../services/authApi'
-import { useAuth } from './useAuth'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { validateLogin, validateOtp } from '@/modules/auth/models/authValidation'
+import { authApi } from '@/modules/auth/services/authApi'
+import { useAuth } from '@/modules/auth/viewmodels/useAuth'
 
 export function useLoginViewModel() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { setAuthenticatedUser } = useAuth()
   const { showToast } = useToast()
   const [identifier, setIdentifier] = useState('')
@@ -18,6 +19,18 @@ export function useLoginViewModel() {
   const [otpMode, setOtpMode] = useState<'registration' | 'two-factor'>()
   const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const returnPath = (() => {
+    if (typeof location.state !== 'object' || location.state === null || !('from' in location.state)) return undefined
+    const from = (location.state as { from?: unknown }).from
+    if (typeof from !== 'object' || from === null) return undefined
+    const candidate = from as { pathname?: unknown; search?: unknown; hash?: unknown }
+    if (typeof candidate.pathname !== 'string' || !candidate.pathname.startsWith('/')) return undefined
+    return `${candidate.pathname}${typeof candidate.search === 'string' ? candidate.search : ''}${typeof candidate.hash === 'string' ? candidate.hash : ''}`
+  })()
+
+  const authenticatedPath = (profileCompleted: boolean | undefined): string =>
+    profileCompleted === true ? (returnPath ?? '/dashboard') : '/onboarding'
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -34,7 +47,7 @@ export function useLoginViewModel() {
           const result = await authApi.verifyTwoFactor(otpId, otp)
           setAuthenticatedUser(result.data.user)
           showToast('Đăng nhập thành công.', 'success')
-          navigate(result.data.user.profileCompleted ? '/dashboard' : '/onboarding')
+          navigate(authenticatedPath(result.data.user.profileCompleted))
         }
         return
       }
@@ -44,7 +57,7 @@ export function useLoginViewModel() {
       if (result.data.user) {
         setAuthenticatedUser(result.data.user)
         showToast('Đăng nhập thành công.', 'success')
-        navigate(result.data.user.profileCompleted ? '/dashboard' : '/onboarding')
+        navigate(authenticatedPath(result.data.user.profileCompleted))
       }
     } catch (error) {
       if (error instanceof ApiError) {

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
 import {
   NOTE_AUTOSAVE_INTERVAL_MS,
   NOTE_TAG_COLOR_OPTIONS,
@@ -10,10 +10,10 @@ import {
   NOTE_TAG_NAME_MAX_LENGTH,
   validateNoteImageFile,
   type NoteBackground,
-} from '../config/notes.config'
-import { NoteAutosaveTracker, type NoteDraft } from '../models/noteAutosave'
-import type { NoteContentNode, NoteDetail, NoteImageUploadResult, NoteTag } from '../models/notes.types'
-import { notesApi } from '../services/notesApi'
+} from '@/modules/notes/config/notes.config'
+import { NoteAutosaveTracker, type NoteDraft } from '@/modules/notes/models/noteAutosave'
+import type { NoteContentNode, NoteDetail, NoteImageUploadResult, NoteTag } from '@/modules/notes/models/notes.types'
+import { notesApi } from '@/modules/notes/services/notesApi'
 
 export type NoteSaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 
@@ -107,10 +107,20 @@ export function useNoteEditorViewModel() {
 
   const markChanged = useCallback((nextDraft: NoteDraft) => {
     if (note && !note.access.canEdit) return
-    autosaveRef.current.change(nextDraft)
+    const hasPendingChanges = autosaveRef.current.change(nextDraft)
     lastErrorSnapshotRef.current = null
-    setSaveStatus('unsaved')
+    setSaveStatus(hasPendingChanges ? 'unsaved' : 'saved')
   }, [note])
+
+  const initializeEditorContent = useCallback((value: NoteContentNode) => {
+    const currentDraft = autosaveRef.current.currentDraft
+    if (!currentDraft) return
+    const editorDraft = { ...currentDraft, content: value }
+    autosaveRef.current.initialize(editorDraft)
+    setContent(value)
+    lastErrorSnapshotRef.current = null
+    setSaveStatus('saved')
+  }, [])
 
   const updateTitle = (value: string) => {
     setTitle(value)
@@ -160,12 +170,13 @@ export function useNoteEditorViewModel() {
       return isFullySaved
     } catch (error) {
       autosaveRef.current.failSave()
-      setSaveStatus('error')
-      if (lastErrorSnapshotRef.current !== attempt.snapshot) {
+      const hasPendingChanges = autosaveRef.current.hasPendingChanges
+      setSaveStatus(hasPendingChanges ? 'error' : 'saved')
+      if (hasPendingChanges && lastErrorSnapshotRef.current !== attempt.snapshot) {
         showToast(error instanceof ApiError ? error.message : 'Không thể lưu ghi chú. Hệ thống sẽ thử lại.', 'error')
         lastErrorSnapshotRef.current = attempt.snapshot
       }
-      return false
+      return !hasPendingChanges
     }
   }, [note, noteId, showToast])
 
@@ -393,6 +404,7 @@ export function useNoteEditorViewModel() {
     hasUnsavedChanges: saveStatus === 'unsaved' || saveStatus === 'saving' || saveStatus === 'error',
     updateTitle,
     updateContent,
+    initializeEditorContent,
     updateBackground,
     saveNow: save,
     openDeleteDialog: () => setIsDeleteDialogOpen(true),

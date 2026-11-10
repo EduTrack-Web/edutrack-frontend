@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 
-import type { AuthUser } from '../models/AuthUser'
-import { authApi } from '../services/authApi'
-import { AuthContext, type AuthContextValue } from './authContext'
+import { clearCsrfToken } from '@/shared/api/httpClient'
+import type { AuthUser } from '@/modules/auth/models/AuthUser'
+import { authApi } from '@/modules/auth/services/authApi'
+import { AuthContext, type AuthContextValue } from '@/modules/auth/viewmodels/authContext'
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+
   useEffect(() => {
     let active = true
     const restore = async () => {
@@ -20,15 +22,39 @@ export function AuthProvider({ children }: PropsWithChildren) {
         } catch {
           if (active) setUser(null)
         }
-      } finally { if (active) setIsLoading(false) }
+      } finally {
+        if (active) setIsLoading(false)
+      }
     }
+
     void restore()
-    return () => { active = false }
+
+    const handleSessionExpired = () => {
+      setUser(null)
+      clearCsrfToken()
+    }
+
+    window.addEventListener('edutrack:session-expired', handleSessionExpired)
+
+    return () => {
+      active = false
+      window.removeEventListener('edutrack:session-expired', handleSessionExpired)
+    }
   }, [])
 
   const logout = useCallback(async () => {
-    try { await authApi.logout() } finally { setUser(null) }
+    try {
+      await authApi.logout()
+    } finally {
+      clearCsrfToken()
+      setUser(null)
+    }
   }, [])
-  const value = useMemo<AuthContextValue>(() => ({ user, isLoading, setAuthenticatedUser: setUser, logout }), [isLoading, logout, user])
+
+  const value = useMemo<AuthContextValue>(
+    () => ({ user, isLoading, setAuthenticatedUser: setUser, logout }),
+    [isLoading, logout, user],
+  )
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

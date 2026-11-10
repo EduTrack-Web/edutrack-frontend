@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { UserType } from '../../auth/models/AuthUser'
-import { useAuth } from '../../auth/viewmodels/useAuth'
-import type { SessionItem, UserProfile } from '../models/account.types'
-import { accountApi } from '../services/accountApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { UserType } from '@/modules/auth/models/AuthUser'
+import { useAuth } from '@/modules/auth/viewmodels/useAuth'
+import type { SessionItem, UserProfile } from '@/modules/account/models/account.types'
+import { validateProfileForm } from '@/modules/account/models/accountValidation'
+import { accountApi } from '@/modules/account/services/accountApi'
 
-const USERNAME_REGEX = /^[a-z0-9_-]{3,30}$/
-const VIETNAM_PHONE_REGEX = /^(0[3|5|7|8|9])[0-9]{8}$/
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024 // 5MB
 
 export interface AccountFeedback {
@@ -253,7 +252,7 @@ export function useAccountViewModel() {
     value: string,
   ) => {
     if (field === 'fullName') setFullName(value)
-    if (field === 'username') setUsername(value.toLowerCase().replace(/\s+/g, ''))
+    if (field === 'username') setUsername(value)
     if (field === 'phone') setPhone(value)
     if (field === 'userType') setUserType(value as UserType)
     if (field === 'organization') setOrganization(value)
@@ -295,35 +294,23 @@ export function useAccountViewModel() {
       return
     }
 
-    const errors: Record<string, string> = {}
-
-    // 1. Kiểm tra họ và tên
-    const trimmedName = fullName.trim()
-    if (!trimmedName) {
-      errors.fullName = 'Vui lòng nhập họ và tên.'
-    } else if (trimmedName.length < 2 || trimmedName.length > 50) {
-      errors.fullName = 'Họ và tên phải từ 2 đến 50 ký tự.'
-    }
-
-    // 2. Kiểm tra tên đăng nhập (nếu có thay đổi)
-    const trimmedUsername = username.trim().toLowerCase()
-    if (!trimmedUsername) {
-      errors.username = 'Tên đăng nhập không được để trống.'
-    } else if (!USERNAME_REGEX.test(trimmedUsername)) {
-      errors.username = 'Tên đăng nhập phải từ 3 đến 30 ký tự, gồm chữ thường, số, dấu gạch ngang (-) hoặc gạch dưới (_).'
-    }
-
-    // 3. Kiểm tra số điện thoại (nếu có nhập)
-    const trimmedPhone = phone.trim()
-    if (trimmedPhone && !VIETNAM_PHONE_REGEX.test(trimmedPhone)) {
-      errors.phone = 'Số điện thoại không hợp lệ. Vui lòng nhập 10 chữ số (ví dụ: 0912345678).'
-    }
+    const errors = validateProfileForm({
+      fullName,
+      username,
+      phone,
+      organization,
+      fieldOfStudy,
+    })
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
       showToast('Vui lòng kiểm tra lại các trường thông tin chưa hợp lệ.', 'warning')
       return
     }
+
+    const trimmedName = fullName.trim()
+    const trimmedUsername = username.trim().toLowerCase()
+    const trimmedPhone = phone.trim()
 
     setIsSaving(true)
     try {

@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import { Icon } from '../../../shared/components/Icon'
-import { AuthCard } from '../components/AuthCard'
-import { FormField } from '../components/FormField'
-import { GoogleAuthButton } from '../components/GoogleAuthButton'
-import { OtpResendButton } from '../components/OtpResendButton'
-import { useLoginViewModel } from '../viewmodels/useLoginViewModel'
-import { useToast } from '../../../shared/viewmodels/useToast'
+import { Icon } from '@/shared/components/Icon'
+import { AuthCard } from '@/modules/auth/components/AuthCard'
+import { FormField } from '@/modules/auth/components/FormField'
+import { GoogleAuthButton } from '@/modules/auth/components/GoogleAuthButton'
+import { OtpResendButton } from '@/modules/auth/components/OtpResendButton'
+import { useLoginViewModel } from '@/modules/auth/viewmodels/useLoginViewModel'
+import { useToast } from '@/shared/viewmodels/useToast'
 
 export function LoginPage() {
   const vm = useLoginViewModel()

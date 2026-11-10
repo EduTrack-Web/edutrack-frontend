@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { Icon } from '../../../shared/components/Icon'
+import { Icon } from '@/shared/components/Icon'
 
 const features = [
   ['Lịch trình rõ ràng', 'Tập trung sự kiện, deadline và lời nhắc trong một lịch học tập.'],

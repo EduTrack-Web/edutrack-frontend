@@ -4,8 +4,8 @@ import {
   NOTE_AUTOSAVE_INTERVAL_MS,
   NOTE_IMAGE_MAX_SIZE_BYTES,
   validateNoteImageFile,
-} from '../config/notes.config'
-import { NoteAutosaveTracker, type NoteDraft } from './noteAutosave'
+} from '@/modules/notes/config/notes.config'
+import { NoteAutosaveTracker, type NoteDraft } from '@/modules/notes/models/noteAutosave'
 
 const draft = (text: string): NoteDraft => ({
   title: 'Ghi chú',
@@ -30,6 +30,25 @@ describe('NoteAutosaveTracker', () => {
     const tracker = new NoteAutosaveTracker()
     tracker.initialize(draft('Ban đầu'))
 
+    expect(tracker.beginSave()).toBeUndefined()
+  })
+
+  it('ignores an editor update when the loaded content is unchanged', () => {
+    const tracker = new NoteAutosaveTracker()
+    tracker.initialize(draft('Ban đầu'))
+
+    expect(tracker.change(draft('Ban đầu'))).toBe(false)
+    expect(tracker.hasPendingChanges).toBe(false)
+    expect(tracker.beginSave()).toBeUndefined()
+  })
+
+  it('becomes clean when the user reverts to the last saved content', () => {
+    const tracker = new NoteAutosaveTracker()
+    tracker.initialize(draft('Ban đầu'))
+
+    expect(tracker.change(draft('Đã thay đổi'))).toBe(true)
+    expect(tracker.change(draft('Ban đầu'))).toBe(false)
+    expect(tracker.hasPendingChanges).toBe(false)
     expect(tracker.beginSave()).toBeUndefined()
   })
 

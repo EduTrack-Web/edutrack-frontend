@@ -1,5 +1,5 @@
-import { request } from '../../../shared/api/httpClient'
-import type { ApiSuccess } from '../../auth/models/AuthUser'
+import { request } from '@/shared/api/httpClient'
+import type { ApiSuccess } from '@/modules/auth/models/AuthUser'
 import type {
   NoteDetail,
   NoteImageUploadResult,
@@ -10,7 +10,7 @@ import type {
   NoteTag,
   TrashedNoteSummary,
   UpdateNoteInput,
-} from '../models/notes.types'
+} from '@/modules/notes/models/notes.types'
 
 export const notesApi = {
   getNotes: (query = '', tagIds: string[] = []) => {

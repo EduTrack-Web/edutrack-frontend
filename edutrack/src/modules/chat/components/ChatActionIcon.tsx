@@ -1,4 +1,4 @@
-type ChatActionIconName = 'search' | 'friends' | 'requests' | 'block' | 'send' | 'refresh'
+type ChatActionIconName = 'search' | 'friends' | 'requests' | 'block' | 'send' | 'refresh' | 'group' | 'plus' | 'copy' | 'back'
 
 interface ChatActionIconProps {
   name: ChatActionIconName
@@ -12,6 +12,10 @@ const paths: Record<ChatActionIconName, React.ReactNode> = {
   block: <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>,
   send: <><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></>,
   refresh: <><path d="M20 6v5h-5M4 18v-5h5" /><path d="M18.5 9a7 7 0 0 0-12-2L4 11m16 2-2.5 4a7 7 0 0 1-12-2" /></>,
+  group: <><circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2" /><circle cx="18" cy="9" r="2.5" /><path d="M16 15.5a5 5 0 0 1 5 5" /></>,
+  plus: <><path d="M12 5v14M5 12h14" /></>,
+  copy: <><rect height="12" rx="2" width="12" x="8" y="8" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
+  back: <><path d="m15 18-6-6 6-6" /></>,
 }
 
 export function ChatActionIcon({ name, className = 'size-5' }: ChatActionIconProps) {

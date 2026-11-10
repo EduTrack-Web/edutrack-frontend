@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
-import { Icon } from '../Icon'
-import { useTheme } from '../../viewmodels/useTheme'
+import { Icon } from '@/shared/components/Icon'
+import { useTheme } from '@/shared/viewmodels/useTheme'
 
 export function HeaderControls() {
   const { theme, toggleTheme } = useTheme()

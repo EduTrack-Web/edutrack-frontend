@@ -1,8 +1,8 @@
-import { NOTE_TAG_COLOR_OPTIONS, NOTE_TAG_MAX_PER_NOTE, NOTE_TAG_NAME_MAX_LENGTH } from '../config/notes.config'
-import type { NoteTag } from '../models/notes.types'
-import { getTagTextColor } from '../models/tagColor'
-import { NoteActionIcon } from './NoteActionIcon'
-import { NoteConfirmDialog } from './NoteConfirmDialog'
+import { NOTE_TAG_COLOR_OPTIONS, NOTE_TAG_MAX_PER_NOTE, NOTE_TAG_NAME_MAX_LENGTH } from '@/modules/notes/config/notes.config'
+import type { NoteTag } from '@/modules/notes/models/notes.types'
+import { getTagTextColor } from '@/modules/notes/models/tagColor'
+import { NoteActionIcon } from '@/modules/notes/components/NoteActionIcon'
+import { NoteConfirmDialog } from '@/modules/notes/components/NoteConfirmDialog'
 
 interface NoteTagDialogProps {
   availableTags: NoteTag[]

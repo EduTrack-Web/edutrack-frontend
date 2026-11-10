@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import { validateOtp, validateRegistration } from '../models/authValidation'
-import { authApi } from '../services/authApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { validateOtp, validateRegistration } from '@/modules/auth/models/authValidation'
+import { authApi } from '@/modules/auth/services/authApi'
 
 export function useRegisterViewModel() {
   const navigate = useNavigate()
