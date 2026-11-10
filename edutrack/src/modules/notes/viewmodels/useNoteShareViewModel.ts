@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { NoteCollaborator, NotePermission, NoteShareUser } from '../models/notes.types'
-import { notesApi } from '../services/notesApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { NoteCollaborator, NotePermission, NoteShareUser } from '@/modules/notes/models/notes.types'
+import { notesApi } from '@/modules/notes/services/notesApi'
 
 type PendingShareAction =
   | { type: 'set'; user: NoteShareUser; permission: NotePermission }

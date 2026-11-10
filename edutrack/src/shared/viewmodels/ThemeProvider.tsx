@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 
-import { ThemeContext, type Theme } from './themeContext'
+import { ThemeContext, type Theme } from '@/shared/viewmodels/themeContext'
 
 const getInitialTheme = (): Theme => {
   const stored = localStorage.getItem('edutrack-theme')

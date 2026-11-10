@@ -1,4 +1,4 @@
-import { authApi } from '../services/authApi'
+import { authApi } from '@/modules/auth/services/authApi'
 
 interface GoogleAuthButtonProps { mode: 'login' | 'register' }
 

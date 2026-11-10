@@ -1,8 +1,8 @@
-﻿import { Icon } from '../../../shared/components/Icon'
+﻿import { Icon } from '@/shared/components/Icon'
 import {
   USER_ROLES,
   useProfileSetupViewModel,
-} from '../viewmodels/useProfileSetupViewModel'
+} from '@/modules/onboarding/viewmodels/useProfileSetupViewModel'
 
 const STEP_LABELS = [
   'Vai trò',

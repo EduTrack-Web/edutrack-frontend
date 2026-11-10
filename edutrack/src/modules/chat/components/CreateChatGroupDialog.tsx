@@ -1,8 +1,8 @@
-import { GlassSelect } from '../../../shared/components/GlassSelect'
-import type { ChatGroupHistoryVisibility, FriendSearchResult } from '../models/chat.types'
-import { CHAT_GROUP_DESCRIPTION_MAX_LENGTH, CHAT_GROUP_NAME_MAX_LENGTH } from '../models/chatGroupValidation'
-import { useCreateChatGroupViewModel } from '../viewmodels/useCreateChatGroupViewModel'
-import { ChatActionIcon } from './ChatActionIcon'
+import { GlassSelect } from '@/shared/components/GlassSelect'
+import type { ChatGroupHistoryVisibility, FriendSearchResult } from '@/modules/chat/models/chat.types'
+import { CHAT_GROUP_DESCRIPTION_MAX_LENGTH, CHAT_GROUP_NAME_MAX_LENGTH } from '@/modules/chat/models/chatGroupValidation'
+import { useCreateChatGroupViewModel } from '@/modules/chat/viewmodels/useCreateChatGroupViewModel'
+import { ChatActionIcon } from '@/modules/chat/components/ChatActionIcon'
 
 const historyOptions: ReadonlyArray<{ value: ChatGroupHistoryVisibility; label: string }> = [
   { value: 'from_join', label: 'Chỉ từ lúc tham gia' },

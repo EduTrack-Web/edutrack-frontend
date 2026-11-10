@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CalendarEvent } from '../models/calendar.types'
+import type { CalendarEvent } from '@/modules/calendar/models/calendar.types'
 
 export function useCalendarViewModel() {
   const [events] = useState<CalendarEvent[]>([])

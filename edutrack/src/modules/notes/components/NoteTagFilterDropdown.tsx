@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import type { NoteTag } from '../models/notes.types'
-import { getTagTextColor } from '../models/tagColor'
-import { NoteActionIcon } from './NoteActionIcon'
+import type { NoteTag } from '@/modules/notes/models/notes.types'
+import { getTagTextColor } from '@/modules/notes/models/tagColor'
+import { NoteActionIcon } from '@/modules/notes/components/NoteActionIcon'
 
 interface NoteTagFilterDropdownProps {
   tags: NoteTag[]

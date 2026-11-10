@@ -1,9 +1,9 @@
 import type { PropsWithChildren } from 'react'
 
-import { useAppShellViewModel } from '../../viewmodels/useAppShellViewModel'
-import { Footer } from './Footer'
-import { Header } from './Header'
-import { Sidebar } from './Sidebar'
+import { useAppShellViewModel } from '@/shared/viewmodels/useAppShellViewModel'
+import { Footer } from '@/shared/components/layout/Footer'
+import { Header } from '@/shared/components/layout/Header'
+import { Sidebar } from '@/shared/components/layout/Sidebar'
 
 export function AppShell({ children }: PropsWithChildren) {
   const viewModel = useAppShellViewModel()

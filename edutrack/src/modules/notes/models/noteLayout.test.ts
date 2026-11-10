@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { NoteSummary } from './notes.types'
-import { distributeNotesIntoColumns, sortNotesNewestFirst } from './noteLayout'
+import type { NoteSummary } from '@/modules/notes/models/notes.types'
+import { distributeNotesIntoColumns, sortNotesNewestFirst } from '@/modules/notes/models/noteLayout'
 
 const createNote = (id: string, updatedAt: string): NoteSummary => ({
   id,

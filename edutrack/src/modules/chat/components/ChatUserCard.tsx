@@ -1,5 +1,5 @@
-import { formatAvatarUrl } from '../../../shared/api/httpClient'
-import type { ChatUserSummary } from '../models/chat.types'
+import { formatAvatarUrl } from '@/shared/api/httpClient'
+import type { ChatUserSummary } from '@/modules/chat/models/chat.types'
 
 interface ChatUserCardProps {
   user: ChatUserSummary

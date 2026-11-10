@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { Icon } from '../../../shared/components/Icon'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { DeleteAccountPayload } from '../models/account.types'
-import { accountApi } from '../services/accountApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { Icon } from '@/shared/components/Icon'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { DeleteAccountPayload } from '@/modules/account/models/account.types'
+import { accountApi } from '@/modules/account/services/accountApi'
 
 interface DeleteAccountModalProps {
   isOpen: boolean

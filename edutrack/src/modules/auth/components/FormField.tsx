@@ -1,6 +1,6 @@
 import { useState, type InputHTMLAttributes } from 'react'
 
-import { Icon } from '../../../shared/components/Icon'
+import { Icon } from '@/shared/components/Icon'
 
 interface FormFieldProps extends InputHTMLAttributes<HTMLInputElement> { label: string; error?: string }
 

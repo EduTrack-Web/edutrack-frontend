@@ -1,5 +1,5 @@
-import { request } from '../../../shared/api/httpClient'
-import type { ApiSuccess } from '../../auth/models/AuthUser'
+import { request } from '@/shared/api/httpClient'
+import type { ApiSuccess } from '@/modules/auth/models/AuthUser'
 import type {
   BlockedUserItem,
   ChatChannel,
@@ -12,7 +12,7 @@ import type {
   CreateChatGroupInput,
   FriendRequestItem,
   FriendSearchResult,
-} from '../models/chat.types'
+} from '@/modules/chat/models/chat.types'
 
 export const chatApi = {
   getGroups: () => request<ApiSuccess<{ groups: ChatGroupSummary[] }>>('/chat/groups'),

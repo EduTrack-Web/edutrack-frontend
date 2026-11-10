@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
 import type {
   BlockedUserItem,
   ChatFriendsTab,
@@ -9,8 +9,8 @@ import type {
   ChatUserSummary,
   FriendRequestItem,
   FriendSearchResult,
-} from '../models/chat.types'
-import { chatApi } from '../services/chatApi'
+} from '@/modules/chat/models/chat.types'
+import { chatApi } from '@/modules/chat/services/chatApi'
 
 const sortUsers = <T extends ChatUserSummary>(users: T[]): T[] =>
   [...users].sort((left, right) => left.username.localeCompare(right.username, 'vi'))

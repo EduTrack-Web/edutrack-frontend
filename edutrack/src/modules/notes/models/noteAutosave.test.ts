@@ -4,8 +4,8 @@ import {
   NOTE_AUTOSAVE_INTERVAL_MS,
   NOTE_IMAGE_MAX_SIZE_BYTES,
   validateNoteImageFile,
-} from '../config/notes.config'
-import { NoteAutosaveTracker, type NoteDraft } from './noteAutosave'
+} from '@/modules/notes/config/notes.config'
+import { NoteAutosaveTracker, type NoteDraft } from '@/modules/notes/models/noteAutosave'
 
 const draft = (text: string): NoteDraft => ({
   title: 'Ghi chú',

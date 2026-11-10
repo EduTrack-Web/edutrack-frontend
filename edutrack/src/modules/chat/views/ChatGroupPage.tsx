@@ -1,7 +1,7 @@
-import { formatAvatarUrl } from '../../../shared/api/httpClient'
-import { ChatActionIcon } from '../components/ChatActionIcon'
-import type { ChatGroupMemberItem } from '../models/chat.types'
-import { useChatGroupViewModel } from '../viewmodels/useChatGroupViewModel'
+import { formatAvatarUrl } from '@/shared/api/httpClient'
+import { ChatActionIcon } from '@/modules/chat/components/ChatActionIcon'
+import type { ChatGroupMemberItem } from '@/modules/chat/models/chat.types'
+import { useChatGroupViewModel } from '@/modules/chat/viewmodels/useChatGroupViewModel'
 
 const roleLabel = { owner: 'Trưởng nhóm', manager: 'Phó nhóm', member: 'Thành viên' } as const
 

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 
-import { clearCsrfToken } from '../../../shared/api/httpClient'
-import type { AuthUser } from '../models/AuthUser'
-import { authApi } from '../services/authApi'
-import { AuthContext, type AuthContextValue } from './authContext'
+import { clearCsrfToken } from '@/shared/api/httpClient'
+import type { AuthUser } from '@/modules/auth/models/AuthUser'
+import { authApi } from '@/modules/auth/services/authApi'
+import { AuthContext, type AuthContextValue } from '@/modules/auth/viewmodels/authContext'
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null)

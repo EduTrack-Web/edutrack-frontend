@@ -1,9 +1,9 @@
 ﻿import { useState } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import { validateChangePasswordForm } from '../models/accountValidation'
-import { accountApi } from '../services/accountApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { validateChangePasswordForm } from '@/modules/account/models/accountValidation'
+import { accountApi } from '@/modules/account/services/accountApi'
 
 
 interface UseChangePasswordViewModelOptions {

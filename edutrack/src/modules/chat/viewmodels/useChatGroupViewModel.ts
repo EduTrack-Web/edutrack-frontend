@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { ChatGroupDetail, ChatGroupInviteResult } from '../models/chat.types'
-import { chatApi } from '../services/chatApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { ChatGroupDetail, ChatGroupInviteResult } from '@/modules/chat/models/chat.types'
+import { chatApi } from '@/modules/chat/services/chatApi'
 
 interface GroupLocationState {
   invite?: ChatGroupInviteResult
