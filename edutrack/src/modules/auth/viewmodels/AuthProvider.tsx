@@ -5,32 +5,61 @@ import type { AuthUser } from '@/modules/auth/models/AuthUser'
 import { authApi } from '@/modules/auth/services/authApi'
 import { AuthContext, type AuthContextValue } from '@/modules/auth/viewmodels/authContext'
 
+const SESSION_HINT_KEY = 'edutrack:has-session'
+const PUBLIC_ENTRY_PATHS = new Set(['/', '/login', '/register', '/forgot-password'])
+
+const hasSessionHint = (): boolean => {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(SESSION_HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+const setSessionHint = (hasSession: boolean): void => {
+  if (typeof window === 'undefined') return
+  try {
+    if (hasSession) window.localStorage.setItem(SESSION_HINT_KEY, '1')
+    else window.localStorage.removeItem(SESSION_HINT_KEY)
+  } catch {
+    // Storage may be unavailable in a restricted browser context.
+  }
+}
+
+const shouldRestoreSession = (): boolean => {
+  if (typeof window === 'undefined') return true
+  return hasSessionHint() || !PUBLIC_ENTRY_PATHS.has(window.location.pathname)
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(shouldRestoreSession)
 
   useEffect(() => {
     let active = true
     const restore = async () => {
       try {
         const result = await authApi.me()
-        if (active) setUser(result.data.user)
+        if (active) {
+          setUser(result.data.user)
+          setSessionHint(true)
+        }
       } catch {
-        try {
-          const result = await authApi.refresh()
-          if (active) setUser(result.data.user)
-        } catch {
-          if (active) setUser(null)
+        if (active) {
+          setUser(null)
+          setSessionHint(false)
         }
       } finally {
         if (active) setIsLoading(false)
       }
     }
 
-    void restore()
+    if (shouldRestoreSession()) void restore()
 
     const handleSessionExpired = () => {
       setUser(null)
+      setSessionHint(false)
       clearCsrfToken()
     }
 
@@ -47,13 +76,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
       await authApi.logout()
     } finally {
       clearCsrfToken()
+      setSessionHint(false)
       setUser(null)
     }
   }, [])
 
+  const setAuthenticatedUser = useCallback((authenticatedUser: AuthUser) => {
+    setSessionHint(true)
+    setUser(authenticatedUser)
+  }, [])
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, setAuthenticatedUser: setUser, logout }),
-    [isLoading, logout, user],
+    () => ({ user, isLoading, setAuthenticatedUser, logout }),
+    [isLoading, logout, setAuthenticatedUser, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
