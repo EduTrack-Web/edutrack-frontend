@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { Icon } from '../../../shared/components/Icon'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import { accountApi } from '../services/accountApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { Icon } from '@/shared/components/Icon'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { accountApi } from '@/modules/account/services/accountApi'
 
 interface TwoFactorModalProps {
   isOpen: boolean

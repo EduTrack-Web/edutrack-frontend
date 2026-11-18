@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { TrashedNoteSummary } from '../models/notes.types'
-import { notesApi } from '../services/notesApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { TrashedNoteSummary } from '@/modules/notes/models/notes.types'
+import { notesApi } from '@/modules/notes/services/notesApi'
 
 export function useNoteTrashViewModel() {
   const navigate = useNavigate()

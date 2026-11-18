@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
-import { Icon } from '../../../shared/components/Icon'
-import { useChangePasswordViewModel } from '../viewmodels/useChangePasswordViewModel'
+import { Icon } from '@/shared/components/Icon'
+import { useChangePasswordViewModel } from '@/modules/account/viewmodels/useChangePasswordViewModel'
 
 interface ChangePasswordModalProps {
   isOpen: boolean

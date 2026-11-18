@@ -1,8 +1,8 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 
-import { Icon } from '../Icon'
-import { HeaderControls } from './HeaderControls'
-import { Logo } from './Logo'
+import { Icon } from '@/shared/components/Icon'
+import { HeaderControls } from '@/shared/components/layout/HeaderControls'
+import { Logo } from '@/shared/components/layout/Logo'
 
 export function PublicLayout() {
   const { pathname } = useLocation()

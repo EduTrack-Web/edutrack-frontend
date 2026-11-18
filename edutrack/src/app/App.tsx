@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom'
 
-import { AppShell } from '../shared/components/layout/AppShell'
+import { AppShell } from '@/shared/components/layout/AppShell'
 
 export function App() {
   return (

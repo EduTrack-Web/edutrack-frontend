@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { useAuth } from '../../../modules/auth/viewmodels/useAuth'
-import { formatAvatarUrl } from '../../api/httpClient'
-import { useToast } from '../../viewmodels/useToast'
-import { ConfirmLogoutModal } from '../ConfirmLogoutModal'
-import { Icon } from '../Icon'
-import { HeaderControls } from './HeaderControls'
+import { useAuth } from '@/modules/auth/viewmodels/useAuth'
+import { formatAvatarUrl } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { ConfirmLogoutModal } from '@/shared/components/ConfirmLogoutModal'
+import { Icon } from '@/shared/components/Icon'
+import { HeaderControls } from '@/shared/components/layout/HeaderControls'
 
 const initials = (name: string): string =>
   name

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { CalendarCategory, CalendarEvent, EntryType } from '../models/calendar.types'
-import { calendarApi } from '../services/calendarApi'
+import type { CalendarCategory, CalendarEvent, EntryType } from '@/modules/calendar/models/calendar.types'
+import { calendarApi } from '@/modules/calendar/services/calendarApi'
 
 export type CalendarViewMode = 'day' | 'week' | 'month' | 'year' | 'list'
 

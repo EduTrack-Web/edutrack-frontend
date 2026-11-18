@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import { validateEmail, validatePasswordReset } from '../models/authValidation'
-import { authApi } from '../services/authApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import { validateEmail, validatePasswordReset } from '@/modules/auth/models/authValidation'
+import { authApi } from '@/modules/auth/services/authApi'
 
 export function useForgotPasswordViewModel() {
   const { showToast } = useToast()

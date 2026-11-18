@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getTagTextColor } from './tagColor'
+import { getTagTextColor } from '@/modules/notes/models/tagColor'
 
 describe('tag text contrast', () => {
   it('uses the light theme color on dark tag backgrounds', () => {

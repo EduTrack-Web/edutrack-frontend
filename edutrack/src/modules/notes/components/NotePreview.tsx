@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import type { NoteContentMark, NoteContentNode } from '../models/notes.types'
+import type { NoteContentMark, NoteContentNode } from '@/modules/notes/models/notes.types'
 
 const renderMarks = (text: string, marks: NoteContentMark[] = []): ReactNode =>
   marks.reduce<ReactNode>((content, mark, index) => {

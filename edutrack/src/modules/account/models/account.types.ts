@@ -1,4 +1,4 @@
-import type { AuthUser, UserType } from '../../auth/models/AuthUser'
+import type { AuthUser, UserType } from '@/modules/auth/models/AuthUser'
 
 export interface UpdateProfilePayload {
   fullName?: string

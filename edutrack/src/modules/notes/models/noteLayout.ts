@@ -1,4 +1,4 @@
-import type { NoteSummary } from './notes.types'
+import type { NoteSummary } from '@/modules/notes/models/notes.types'
 
 export const sortNotesNewestFirst = <T extends NoteSummary>(notes: T[]): T[] =>
   [...notes].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))

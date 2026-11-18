@@ -5,15 +5,16 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef, useState } from 'react'
 
-import { GlassSelect } from '../../../shared/components/GlassSelect'
-import { NOTE_IMAGE_FILE_ACCEPT } from '../config/notes.config'
-import type { NoteContentNode, NoteImageUploadResult } from '../models/notes.types'
-import { EditorToolbarIcon } from './EditorToolbarIcon'
+import { GlassSelect } from '@/shared/components/GlassSelect'
+import { NOTE_IMAGE_FILE_ACCEPT } from '@/modules/notes/config/notes.config'
+import type { NoteContentNode, NoteImageUploadResult } from '@/modules/notes/models/notes.types'
+import { EditorToolbarIcon } from '@/modules/notes/components/EditorToolbarIcon'
 
 interface NoteEditorProps {
   initialContent: NoteContentNode
   isUploadingImage: boolean
   onChange: (content: NoteContentNode) => void
+  onReady: (content: NoteContentNode) => void
   onUploadImage: (file: File) => Promise<NoteImageUploadResult | undefined>
   editable?: boolean
 }
@@ -39,7 +40,7 @@ const TEXT_STYLE_OPTIONS: ReadonlyArray<{ value: TextStyleValue; label: string }
 const toolbarButtonClass = (active: boolean): string =>
   `note-toolbar-control${active ? ' is-active' : ''}`
 
-export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploadImage, editable = true }: NoteEditorProps) {
+export function NoteEditor({ initialContent, isUploadingImage, onChange, onReady, onUploadImage, editable = true }: NoteEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [contentError, setContentError] = useState<string | null>(null)
   const editor = useEditor({
@@ -67,6 +68,7 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
         'aria-label': 'Nội dung ghi chú',
       },
     },
+    onCreate: ({ editor: currentEditor }) => onReady(currentEditor.getJSON() as NoteContentNode),
     onContentError: () => setContentError('Nội dung ghi chú không tương thích với editor.'),
     onUpdate: ({ editor: currentEditor }) => onChange(currentEditor.getJSON() as NoteContentNode),
   })
@@ -124,7 +126,7 @@ export function NoteEditor({ initialContent, isUploadingImage, onChange, onUploa
   return (
     <div className="note-editor rounded-2xl border border-palette-200/80 bg-white/20 dark:border-white/10 dark:bg-black/5">
       {editable && <div className="flex flex-wrap gap-2 border-b border-palette-200/70 p-2 dark:border-white/10" role="toolbar" aria-label="Định dạng ghi chú">
-        <GlassSelect ariaLabel="Kiểu văn bản" className="note-text-style-trigger" onChange={applyTextStyle} options={TEXT_STYLE_OPTIONS} value={(toolbarState?.heading ?? 'paragraph') as TextStyleValue} />
+        <GlassSelect ariaLabel="Kiểu văn bản" className="note-text-style-trigger" menuClassName="note-text-style-menu" onChange={applyTextStyle} options={TEXT_STYLE_OPTIONS} value={(toolbarState?.heading ?? 'paragraph') as TextStyleValue} />
         <label aria-label="Màu chữ" className={`${toolbarButtonClass(false)} relative cursor-pointer`} title="Màu chữ">
           <EditorToolbarIcon name="textColor" />
           <span className="absolute inset-x-3 bottom-1.5 h-1 rounded-full" style={{ backgroundColor: typeof toolbarState?.textColor === 'string' ? toolbarState.textColor : '#052659' }} />

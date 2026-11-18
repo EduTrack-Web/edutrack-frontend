@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
 import {
   NOTE_TAG_COLOR_OPTIONS,
   NOTE_TAG_MAX_PER_NOTE,
   NOTE_TAG_NAME_MAX_LENGTH,
-} from '../config/notes.config'
-import type { NoteListItem, NoteSummary, NoteTag } from '../models/notes.types'
-import { distributeNotesIntoColumns, sortNotesNewestFirst } from '../models/noteLayout'
-import { notesApi } from '../services/notesApi'
+} from '@/modules/notes/config/notes.config'
+import type { NoteListItem, NoteSummary, NoteTag } from '@/modules/notes/models/notes.types'
+import { distributeNotesIntoColumns, sortNotesNewestFirst } from '@/modules/notes/models/noteLayout'
+import { notesApi } from '@/modules/notes/services/notesApi'
 
 const TABLET_BREAKPOINT_QUERY = '(min-width: 768px)'
 

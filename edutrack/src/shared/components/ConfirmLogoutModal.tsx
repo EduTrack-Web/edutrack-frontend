@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { Icon } from './Icon'
+import { Icon } from '@/shared/components/Icon'
 
 interface ConfirmLogoutModalProps {
   isOpen: boolean

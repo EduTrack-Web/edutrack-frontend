@@ -1,9 +1,9 @@
-import { Icon } from '../../../shared/components/Icon'
-import { NoteActionIcon } from '../components/NoteActionIcon'
-import { NoteConfirmDialog } from '../components/NoteConfirmDialog'
-import { NotePreview } from '../components/NotePreview'
-import { getNoteBackgroundOption, NOTE_DEFAULT_TITLE } from '../config/notes.config'
-import { useNoteTrashViewModel } from '../viewmodels/useNoteTrashViewModel'
+import { Icon } from '@/shared/components/Icon'
+import { NoteActionIcon } from '@/modules/notes/components/NoteActionIcon'
+import { NoteConfirmDialog } from '@/modules/notes/components/NoteConfirmDialog'
+import { NotePreview } from '@/modules/notes/components/NotePreview'
+import { getNoteBackgroundOption, NOTE_DEFAULT_TITLE } from '@/modules/notes/config/notes.config'
+import { useNoteTrashViewModel } from '@/modules/notes/viewmodels/useNoteTrashViewModel'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

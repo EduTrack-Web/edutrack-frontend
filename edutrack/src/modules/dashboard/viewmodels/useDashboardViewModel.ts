@@ -1,4 +1,4 @@
-import type { DashboardOverview } from '../models/DashboardOverview'
+import type { DashboardOverview } from '@/modules/dashboard/models/DashboardOverview'
 
 const overviewData: DashboardOverview = {
   title: 'Tổng quan học tập',

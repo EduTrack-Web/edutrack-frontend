@@ -1,5 +1,5 @@
-import type { NoteContentNode } from './notes.types'
-import type { NoteBackground } from '../config/notes.config'
+import type { NoteContentNode } from '@/modules/notes/models/notes.types'
+import type { NoteBackground } from '@/modules/notes/config/notes.config'
 
 export interface NoteDraft {
   title: string
@@ -16,18 +16,21 @@ const snapshotOf = (draft: NoteDraft): string => JSON.stringify(draft)
 
 export class NoteAutosaveTracker {
   private draft: NoteDraft | null = null
+  private savedSnapshot: string | null = null
   private dirty = false
   private saving = false
 
   initialize(draft: NoteDraft): void {
     this.draft = draft
+    this.savedSnapshot = snapshotOf(draft)
     this.dirty = false
     this.saving = false
   }
 
-  change(draft: NoteDraft): void {
+  change(draft: NoteDraft): boolean {
     this.draft = draft
-    this.dirty = true
+    this.dirty = snapshotOf(draft) !== this.savedSnapshot
+    return this.hasPendingChanges
   }
 
   beginSave(): NoteSaveAttempt | undefined {
@@ -38,15 +41,16 @@ export class NoteAutosaveTracker {
 
   completeSave(attempt: NoteSaveAttempt, savedDraft: NoteDraft): boolean {
     this.saving = false
-    if (!this.draft || snapshotOf(this.draft) !== attempt.snapshot) return false
-    this.draft = savedDraft
-    this.dirty = false
-    return true
+    this.savedSnapshot = snapshotOf(savedDraft)
+    if (!this.draft) return true
+    if (snapshotOf(this.draft) === attempt.snapshot) this.draft = savedDraft
+    this.dirty = snapshotOf(this.draft) !== this.savedSnapshot
+    return !this.hasPendingChanges
   }
 
   failSave(): void {
     this.saving = false
-    this.dirty = true
+    this.dirty = this.draft !== null && snapshotOf(this.draft) !== this.savedSnapshot
   }
 
   get currentDraft(): NoteDraft | null {
@@ -54,6 +58,6 @@ export class NoteAutosaveTracker {
   }
 
   get hasPendingChanges(): boolean {
-    return this.dirty
+    return this.dirty || this.saving
   }
 }

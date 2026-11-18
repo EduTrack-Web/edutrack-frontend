@@ -1,22 +1,22 @@
 import { useBlocker } from 'react-router-dom'
 
-import { Icon } from '../../../shared/components/Icon'
+import { Icon } from '@/shared/components/Icon'
 import {
   getNoteBackgroundOption,
   NOTE_BACKGROUND_OPTIONS,
   NOTE_DEFAULT_TITLE,
   NOTE_TITLE_MAX_LENGTH,
-} from '../config/notes.config'
-import { NoteEditor } from '../components/NoteEditor'
-import { NoteActionIcon } from '../components/NoteActionIcon'
-import { NoteActionsMenu } from '../components/NoteActionsMenu'
-import { NoteConfirmDialog } from '../components/NoteConfirmDialog'
-import { NoteTagChips } from '../components/NoteTagChips'
-import { NoteTagDialog } from '../components/NoteTagDialog'
-import { NoteShareDialog } from '../components/NoteShareDialog'
-import { EditorToolbarIcon } from '../components/EditorToolbarIcon'
-import { useNoteShareViewModel } from '../viewmodels/useNoteShareViewModel'
-import { useNoteEditorViewModel, type NoteSaveStatus } from '../viewmodels/useNoteEditorViewModel'
+} from '@/modules/notes/config/notes.config'
+import { NoteEditor } from '@/modules/notes/components/NoteEditor'
+import { NoteActionIcon } from '@/modules/notes/components/NoteActionIcon'
+import { NoteActionsMenu } from '@/modules/notes/components/NoteActionsMenu'
+import { NoteConfirmDialog } from '@/modules/notes/components/NoteConfirmDialog'
+import { NoteTagChips } from '@/modules/notes/components/NoteTagChips'
+import { NoteTagDialog } from '@/modules/notes/components/NoteTagDialog'
+import { NoteShareDialog } from '@/modules/notes/components/NoteShareDialog'
+import { EditorToolbarIcon } from '@/modules/notes/components/EditorToolbarIcon'
+import { useNoteShareViewModel } from '@/modules/notes/viewmodels/useNoteShareViewModel'
+import { useNoteEditorViewModel, type NoteSaveStatus } from '@/modules/notes/viewmodels/useNoteEditorViewModel'
 
 const statusText: Record<NoteSaveStatus, string> = {
   idle: '',
@@ -112,10 +112,12 @@ export function NoteEditorPage() {
         </label>
         <div className="mt-4">
           <NoteEditor
+            key={vm.note?.id}
             initialContent={vm.content}
             editable={vm.note?.access.canEdit}
             isUploadingImage={vm.isUploadingImage}
             onChange={vm.updateContent}
+            onReady={vm.initializeEditorContent}
             onUploadImage={vm.uploadImage}
           />
         </div>

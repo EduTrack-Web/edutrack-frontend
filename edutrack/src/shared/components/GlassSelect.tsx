@@ -13,6 +13,7 @@ interface GlassSelectProps<T extends string> {
   onChange: (value: T) => void
   disabled?: boolean
   className?: string
+  menuClassName?: string
 }
 
 export function GlassSelect<T extends string>({
@@ -22,6 +23,7 @@ export function GlassSelect<T extends string>({
   onChange,
   disabled = false,
   className = '',
+  menuClassName = '',
 }: GlassSelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -76,12 +78,12 @@ export function GlassSelect<T extends string>({
         <svg aria-hidden="true" className={`size-4 shrink-0 transition ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" /></svg>
       </button>
       {isOpen && createPortal(
-        <div aria-label={ariaLabel} className="glass-select-menu" ref={menuRef} role="listbox" style={{ left: position.left, top: position.top, width: position.width }}>
+        <div aria-label={ariaLabel} className={`glass-select-menu ${menuClassName}`} ref={menuRef} role="listbox" style={{ left: position.left, top: position.top, width: position.width }}>
           {options.map((option) => {
             const isSelected = option.value === value
             return (
               <button aria-selected={isSelected} className={`glass-select-option${isSelected ? ' is-selected' : ''}`} key={option.value} onClick={() => { onChange(option.value); setIsOpen(false) }} role="option" type="button">
-                <span>{option.label}</span>
+                <span className="min-w-0 truncate whitespace-nowrap">{option.label}</span>
                 {isSelected && <svg aria-hidden="true" className="size-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg>}
               </button>
             )

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 
-import { Icon } from '../../../shared/components/Icon'
-import { useDashboardViewModel } from '../viewmodels/useDashboardViewModel'
+import { Icon } from '@/shared/components/Icon'
+import { useDashboardViewModel } from '@/modules/dashboard/viewmodels/useDashboardViewModel'
 
 export function DashboardPage() {
   const vm = useDashboardViewModel()

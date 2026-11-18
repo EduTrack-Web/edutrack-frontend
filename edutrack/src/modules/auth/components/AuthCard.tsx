@@ -1,7 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Logo } from '../../../shared/components/layout/Logo'
+import { Logo } from '@/shared/components/layout/Logo'
 
 interface AuthCardProps extends PropsWithChildren { title: string; description: string; footer?: ReactNode }
 

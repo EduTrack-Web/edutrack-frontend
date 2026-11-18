@@ -1,8 +1,8 @@
-import { GlassSelect } from '../../../shared/components/GlassSelect'
-import { NoteActionIcon } from './NoteActionIcon'
-import { NoteConfirmDialog } from './NoteConfirmDialog'
-import type { NotePermission, NoteShareUser } from '../models/notes.types'
-import { useNoteShareViewModel } from '../viewmodels/useNoteShareViewModel'
+import { GlassSelect } from '@/shared/components/GlassSelect'
+import { NoteActionIcon } from '@/modules/notes/components/NoteActionIcon'
+import { NoteConfirmDialog } from '@/modules/notes/components/NoteConfirmDialog'
+import type { NotePermission, NoteShareUser } from '@/modules/notes/models/notes.types'
+import { useNoteShareViewModel } from '@/modules/notes/viewmodels/useNoteShareViewModel'
 
 export type NoteShareViewModel = ReturnType<typeof useNoteShareViewModel>
 

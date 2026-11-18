@@ -1,5 +1,5 @@
-import { request } from '../../../shared/api/httpClient'
-import type { ApiSuccess } from '../../auth/models/AuthUser'
+import { request } from '@/shared/api/httpClient'
+import type { ApiSuccess } from '@/modules/auth/models/AuthUser'
 import type {
   CalendarCategory,
   CalendarEvent,
@@ -8,7 +8,7 @@ import type {
   EventQueryFilters,
   UpdateCategoryInput,
   UpdateEventInput,
-} from '../models/calendar.types'
+} from '@/modules/calendar/models/calendar.types'
 
 export const calendarApi = {
   // CATEGORY APIS (LỊCH CỦA TÔI)

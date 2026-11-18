@@ -1,15 +1,15 @@
 import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 
-import { formatAvatarUrl } from '../../../shared/api/httpClient'
-import { ConfirmLogoutModal } from '../../../shared/components/ConfirmLogoutModal'
-import { Icon } from '../../../shared/components/Icon'
-import { useAccountViewModel } from '../viewmodels/useAccountViewModel'
-import { ChangePasswordModal } from './ChangePasswordModal'
-import { ConfirmUnlinkGoogleModal } from './ConfirmUnlinkGoogleModal'
-import { DeleteAccountModal } from './DeleteAccountModal'
-import { DisableTwoFactorModal } from './DisableTwoFactorModal'
-import { TwoFactorModal } from './TwoFactorModal'
+import { formatAvatarUrl } from '@/shared/api/httpClient'
+import { ConfirmLogoutModal } from '@/shared/components/ConfirmLogoutModal'
+import { Icon } from '@/shared/components/Icon'
+import { useAccountViewModel } from '@/modules/account/viewmodels/useAccountViewModel'
+import { ChangePasswordModal } from '@/modules/account/views/ChangePasswordModal'
+import { ConfirmUnlinkGoogleModal } from '@/modules/account/views/ConfirmUnlinkGoogleModal'
+import { DeleteAccountModal } from '@/modules/account/views/DeleteAccountModal'
+import { DisableTwoFactorModal } from '@/modules/account/views/DisableTwoFactorModal'
+import { TwoFactorModal } from '@/modules/account/views/TwoFactorModal'
 
 const initials = (name: string): string =>
   name

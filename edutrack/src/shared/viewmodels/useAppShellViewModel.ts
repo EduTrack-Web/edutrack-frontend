@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import type { NavigationItem } from '../models/navigation'
+import type { NavigationItem } from '@/shared/models/navigation'
 
 const navigationItems: readonly NavigationItem[] = [
   { label: 'Tổng quan', icon: 'dashboard', to: '/dashboard', available: true },

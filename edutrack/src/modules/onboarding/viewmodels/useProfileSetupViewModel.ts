@@ -1,13 +1,13 @@
 ﻿import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { UserType } from '../../auth/models/AuthUser'
-import { useAuth } from '../../auth/viewmodels/useAuth'
-import type { ProfileSetupPayload } from '../../account/models/account.types'
-import { validateUsernameFormat } from '../../account/models/accountValidation'
-import { accountApi } from '../../account/services/accountApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { UserType } from '@/modules/auth/models/AuthUser'
+import { useAuth } from '@/modules/auth/viewmodels/useAuth'
+import type { ProfileSetupPayload } from '@/modules/account/models/account.types'
+import { validateUsernameFormat } from '@/modules/account/models/accountValidation'
+import { accountApi } from '@/modules/account/services/accountApi'
 
 
 export type SetupStep = 1 | 2 | 3 | 4

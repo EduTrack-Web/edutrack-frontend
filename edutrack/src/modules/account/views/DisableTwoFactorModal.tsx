@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { Icon } from '../../../shared/components/Icon'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { Disable2faPayload } from '../models/account.types'
-import { accountApi } from '../services/accountApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { Icon } from '@/shared/components/Icon'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { Disable2faPayload } from '@/modules/account/models/account.types'
+import { accountApi } from '@/modules/account/services/accountApi'
 
 interface DisableTwoFactorModalProps {
   isOpen: boolean

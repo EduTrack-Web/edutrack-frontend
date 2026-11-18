@@ -1,13 +1,13 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { ApiError } from '../../../shared/api/httpClient'
-import { useToast } from '../../../shared/viewmodels/useToast'
-import type { UserType } from '../../auth/models/AuthUser'
-import { useAuth } from '../../auth/viewmodels/useAuth'
-import type { SessionItem, UserProfile } from '../models/account.types'
-import { validateProfileForm } from '../models/accountValidation'
-import { accountApi } from '../services/accountApi'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
+import type { UserType } from '@/modules/auth/models/AuthUser'
+import { useAuth } from '@/modules/auth/viewmodels/useAuth'
+import type { SessionItem, UserProfile } from '@/modules/account/models/account.types'
+import { validateProfileForm } from '@/modules/account/models/accountValidation'
+import { accountApi } from '@/modules/account/services/accountApi'
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024 // 5MB
 
