@@ -1,9 +1,59 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../../../shared/components/Icon'
-import type { CalendarCategory, CreateCategoryInput } from '../../models/calendar.types'
+import type { CalendarCategory, CalendarSettings, CategoryMember, CreateCategoryInput, ReminderItem, ReminderMethod } from '../../models/calendar.types'
 import { validateCategoryForm } from '../../models/calendarValidation'
+import { COMMON_TIMEZONES } from '../../models/calendarConstants'
 import { calendarApi } from '../../services/calendarApi'
-import { EXTENDED_CALENDAR_COLORS } from '../../viewmodels/useEventModalViewModel'
+import { EXTENDED_CALENDAR_COLORS, type ReminderUnit } from '../../viewmodels/useEventModalViewModel'
+
+const DEFAULT_SETTINGS: CalendarSettings = {
+  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Ho_Chi_Minh',
+  weekStartsOn: 0,
+  workingHoursStart: '08:00',
+  workingHoursEnd: '17:00',
+  defaultDurationMinutes: 60,
+  reminders: [{ method: 'in-app', minutesBefore: 15 }],
+  privacy: 'private',
+  archived: false,
+  sharedWith: [],
+}
+
+const QUICK_DURATIONS = [15, 30, 45, 60, 90, 120]
+
+interface ReminderFormRow {
+  id: string
+  method: ReminderMethod
+  quantity: number
+  unit: ReminderUnit
+}
+
+function minutesToFormRow(minutes: number, method: ReminderMethod, id: string): ReminderFormRow {
+  if (minutes >= 10080 && minutes % 10080 === 0) {
+    return { id, method, quantity: minutes / 10080, unit: 'weeks' }
+  }
+  if (minutes >= 1440 && minutes % 1440 === 0) {
+    return { id, method, quantity: minutes / 1440, unit: 'days' }
+  }
+  if (minutes >= 60 && minutes % 60 === 0) {
+    return { id, method, quantity: minutes / 60, unit: 'hours' }
+  }
+  return { id, method, quantity: Math.max(1, minutes), unit: 'minutes' }
+}
+
+function formRowToMinutes(quantity: number, unit: ReminderUnit): number {
+  const qty = Math.max(1, Number(quantity) || 1)
+  switch (unit) {
+    case 'weeks':
+      return qty * 10080
+    case 'days':
+      return qty * 1440
+    case 'hours':
+      return qty * 60
+    case 'minutes':
+    default:
+      return qty
+  }
+}
 
 interface CategoryModalProps {
   isOpen: boolean
@@ -18,10 +68,33 @@ export function CategoryModal({
   onClose,
   onSaved,
 }: CategoryModalProps) {
+  // Nhóm 1: Thông tin chung
   const [name, setName] = useState('')
-  const [color, setColor] = useState(EXTENDED_CALENDAR_COLORS[0])
+  const [color, setColor] = useState(EXTENDED_CALENDAR_COLORS[0] ?? '#2563EB')
   const [description, setDescription] = useState('')
 
+  // Nhóm 2: Thời gian và múi giờ
+  const [timeZone, setTimeZone] = useState(DEFAULT_SETTINGS.timeZone)
+  const [defaultDurationMinutes, setDefaultDurationMinutes] = useState(DEFAULT_SETTINGS.defaultDurationMinutes)
+
+  // Nhóm 3: Thông báo mặc định
+  const [reminderRows, setReminderRows] = useState<ReminderFormRow[]>([])
+
+  // Nhóm 4: Quyền riêng tư và chia sẻ / mời khách
+  const [privacy, setPrivacy] = useState<'private' | 'public'>('private')
+  const [archived, setArchived] = useState(false)
+  const [sharedWith, setSharedWith] = useState<CategoryMember[]>([])
+  const [newGuestEmail, setNewGuestEmail] = useState('')
+  const [newGuestRole, setNewGuestRole] = useState<'viewer' | 'editor' | 'admin'>('viewer')
+  const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
+
+  // Nhóm 5: Import/Export .ics
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importMessage, setImportMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Form State
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [generalError, setGeneralError] = useState<string | null>(null)
@@ -32,17 +105,42 @@ export function CategoryModal({
       if (!active) return
 
       if (isOpen) {
-        if (initialCategory) {
-          setName(initialCategory.name)
-          setColor(initialCategory.color)
-          setDescription(initialCategory.description ?? '')
-        } else {
-          setName('')
-          setColor(EXTENDED_CALENDAR_COLORS[0])
-          setDescription('')
-        }
         setErrors({})
         setGeneralError(null)
+        setImportMessage(null)
+        setNewGuestEmail('')
+        setGuestEmailError(null)
+
+        if (initialCategory) {
+          setName(initialCategory.name)
+          setColor(initialCategory.color || EXTENDED_CALENDAR_COLORS[0] || '#2563EB')
+          setDescription(initialCategory.description ?? '')
+
+          const s = initialCategory.settings ?? DEFAULT_SETTINGS
+          setTimeZone(s.timeZone || DEFAULT_SETTINGS.timeZone)
+          setDefaultDurationMinutes(s.defaultDurationMinutes || DEFAULT_SETTINGS.defaultDurationMinutes)
+          setPrivacy(s.privacy || 'private')
+          setArchived(Boolean(s.archived))
+          setSharedWith(initialCategory.sharedWith ?? s.sharedWith ?? [])
+
+          if (Array.isArray(s.reminders) && s.reminders.length > 0) {
+            setReminderRows(
+              s.reminders.map((r, i) => minutesToFormRow(r.minutesBefore, r.method, `rem-${i}-${Date.now()}`)),
+            )
+          } else {
+            setReminderRows([{ id: 'rem-default', method: 'in-app', quantity: 15, unit: 'minutes' }])
+          }
+        } else {
+          setName('')
+          setColor(EXTENDED_CALENDAR_COLORS[0] || '#2563EB')
+          setDescription('')
+          setTimeZone(DEFAULT_SETTINGS.timeZone)
+          setDefaultDurationMinutes(DEFAULT_SETTINGS.defaultDurationMinutes)
+          setPrivacy('private')
+          setArchived(false)
+          setSharedWith([])
+          setReminderRows([{ id: 'rem-default', method: 'in-app', quantity: 15, unit: 'minutes' }])
+        }
       }
     }, 0)
 
@@ -56,14 +154,89 @@ export function CategoryModal({
 
   const isEditing = Boolean(initialCategory)
 
+  // Xử lý thông báo mặc định
+  const handleAddReminder = () => {
+    if (reminderRows.length >= 10) return
+    const newRow: ReminderFormRow = {
+      id: `rem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      method: 'in-app',
+      quantity: 15,
+      unit: 'minutes',
+    }
+    setReminderRows((prev) => [...prev, newRow])
+  }
+
+  const handleRemoveReminder = (id: string) => {
+    setReminderRows((prev) => prev.filter((r) => r.id !== id))
+  }
+
+  const handleUpdateReminder = (
+    id: string,
+    field: 'method' | 'quantity' | 'unit',
+    val: ReminderMethod | number | ReminderUnit,
+  ) => {
+    setReminderRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r
+        return { ...r, [field]: val }
+      }),
+    )
+  }
+
+  // Xử lý khách chia sẻ lịch
+  const handleAddGuest = () => {
+    const trimmed = newGuestEmail.trim().toLowerCase()
+    if (!trimmed) return
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(trimmed)) {
+      setGuestEmailError('Email không đúng định dạng')
+      return
+    }
+    if (sharedWith.some((g) => g.email === trimmed)) {
+      setGuestEmailError('Người dùng này đã có trong danh sách')
+      return
+    }
+    setSharedWith((prev) => [...prev, { email: trimmed, role: newGuestRole }])
+    setNewGuestEmail('')
+    setGuestEmailError(null)
+  }
+
+  const handleRemoveGuest = (email: string) => {
+    setSharedWith((prev) => prev.filter((g) => g.email !== email))
+  }
+
+  const handleUpdateGuestRole = (email: string, role: 'viewer' | 'editor' | 'admin') => {
+    setSharedWith((prev) => prev.map((g) => (g.email === email ? { ...g, role } : g)))
+  }
+
+  // Xử lý Submit Form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setGeneralError(null)
+
+    const convertedReminders: ReminderItem[] = reminderRows.map((r) => ({
+      method: r.method,
+      minutesBefore: formRowToMinutes(r.quantity, r.unit),
+    }))
+
+    const settingsPayload: CalendarSettings = {
+      timeZone,
+      weekStartsOn: 0,
+      workingHoursStart: '08:00',
+      workingHoursEnd: '17:00',
+      defaultDurationMinutes: Math.max(5, Math.min(1440, Number(defaultDurationMinutes) || 60)),
+      reminders: convertedReminders,
+      privacy,
+      archived,
+      sharedWith,
+    }
 
     const payload: CreateCategoryInput = {
       name,
       color,
       description,
+      settings: settingsPayload,
+      sharedWith,
     }
 
     const valErrors = validateCategoryForm(payload)
@@ -93,124 +266,637 @@ export function CategoryModal({
     }
   }
 
+  // Xóa lịch
+  const handleDeleteCalendar = async () => {
+    if (!initialCategory) return
+    if (initialCategory.isDefault) {
+      setGeneralError('Không thể xóa lịch mặc định của hệ thống.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Bạn có chắc chắn muốn xóa vĩnh viễn lịch "${initialCategory.name}"? Các sự kiện thuộc lịch này sẽ được tách ra.`,
+    )
+    if (!confirmed) return
+
+    try {
+      setIsSubmitting(true)
+      await calendarApi.deleteCategory(initialCategory.id)
+      onSaved()
+      onClose()
+    } catch {
+      setGeneralError('Không thể xóa lịch lúc này. Vui lòng thử lại.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Xuất file iCalendar (.ics)
+  const handleExportIcs = async () => {
+    if (!initialCategory) return
+    try {
+      setIsExporting(true)
+      setImportMessage(null)
+      await calendarApi.exportCategoryIcs(initialCategory.id)
+      setImportMessage({ text: 'Đã xuất file .ics thành công!', type: 'success' })
+    } catch {
+      setImportMessage({ text: 'Lỗi khi xuất file .ics. Vui lòng thử lại.', type: 'error' })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Nhập file iCalendar (.ics)
+  const handleImportIcs = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !initialCategory) return
+    try {
+      setIsImporting(true)
+      setImportMessage(null)
+      const text = await file.text()
+      const res = await calendarApi.importCategoryIcs(initialCategory.id, text)
+      setImportMessage({
+        text: `Đã nhập thành công ${res.data?.importedCount ?? 0} sự kiện từ file .ics!`,
+        type: 'success',
+      })
+      onSaved()
+    } catch {
+      setImportMessage({ text: 'Lỗi khi nhập file .ics. Vui lòng kiểm tra định dạng file.', type: 'error' })
+    } finally {
+      setIsImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   return (
-    <div
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-2xs transition-opacity sm:p-6"
-      role="dialog"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+      {/* Overlay */}
       <div
-        className="relative flex w-full max-w-md flex-col rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-[#021024]"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+        onClick={onClose}
+      />
+
+      {/* Modal Dialog Bố cục cuộn dọc 4 phần */}
+      <div
+        aria-modal="true"
+        className="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xl dark:border-white/10 dark:bg-[#021024]"
+        role="dialog"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            {isEditing ? 'Chỉnh sửa lịch' : 'Tạo lịch mới'}
-          </h2>
+        {/* Header Modal */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-white/10">
+          <div className="flex items-center gap-3">
+            <span
+              className="grid size-9 place-items-center rounded-xl text-white shadow-xs"
+              style={{ backgroundColor: color }}
+            >
+              <Icon className="size-5" name="calendar" />
+            </span>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                {isEditing ? `Cài đặt lịch: ${initialCategory?.name}` : 'Tạo lịch mới'}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Tùy chỉnh thông tin, múi giờ, thông báo và chia sẻ khách
+              </p>
+            </div>
+          </div>
+
           <button
             aria-label="Đóng"
-            className="grid size-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+            className="grid size-8 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
             onClick={onClose}
             type="button"
           >
-            <Icon className="size-4" name="close" />
+            <Icon className="size-4.5" name="close" />
           </button>
         </div>
 
-        {generalError && (
-          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-600 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300">
-            {generalError}
-          </div>
-        )}
+        {/* Nội dung form cuộn dọc cả 4 phần */}
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+          <div className="flex-1 space-y-7 overflow-y-auto px-6 py-5">
+            {generalError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300">
+                {generalError}
+              </div>
+            )}
 
-        {/* Form Body */}
-        <form className="space-y-4" noValidate onSubmit={handleSubmit}>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-name">
-              Tên lịch <span className="text-rose-500">*</span>
-            </label>
-            <input
-              aria-invalid={Boolean(errors.name)}
-              className={`mt-1.5 w-full rounded-xl border bg-slate-50/70 px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-hidden transition-all focus:bg-white focus:ring-2 dark:bg-white/5 dark:text-white ${
-                errors.name
-                  ? 'border-rose-500 focus:ring-rose-500/20'
-                  : 'border-slate-200 focus:border-blue-600 focus:ring-blue-500/20 dark:border-white/10'
-              }`}
-              id="category-name"
-              onChange={(e) => {
-                setName(e.target.value)
-                setErrors((p) => { const n = { ...p }; delete n.name; return n })
-              }}
-              placeholder="Ví dụ: Học tập, Công việc, Thể thao..."
-              type="text"
-              value={name}
-            />
-            {errors.name && <p className="mt-1 text-xs text-rose-500">{errors.name}</p>}
-          </div>
+            {/* ==================== PHẦN 1: THÔNG TIN CHUNG ==================== */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
+                <span className="grid size-5.5 place-items-center rounded-md bg-blue-50 text-xs font-bold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                  1
+                </span>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  Thông tin chung
+                </h3>
+              </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-desc">
-              Mô tả
-            </label>
-            <textarea
-              className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-sm text-slate-900 outline-hidden transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-white/5 dark:text-white"
-              id="category-desc"
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Thêm mô tả về loại lịch này..."
-              rows={3}
-              value={description}
-            />
-          </div>
-
-          {/* Chọn màu sắc đa dạng */}
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                Màu nhận diện
-              </span>
-              <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400">
-                <Icon className="size-3.5" name="palette" />
-                <span>Màu tùy chọn</span>
+              {/* Tên lịch */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-name">
+                  Tên lịch <span className="text-rose-500">*</span>
+                </label>
                 <input
-                  aria-label="Chọn màu tùy chọn"
-                  className="sr-only"
-                  onChange={(e) => setColor(e.target.value)}
-                  type="color"
-                  value={color}
-                />
-              </label>
-            </div>
-
-            <div className="mt-2.5 grid grid-cols-6 gap-2 sm:grid-cols-9">
-              {EXTENDED_CALENDAR_COLORS.map((c) => (
-                <button
-                  aria-label={`Màu ${c}`}
-                  className={`size-7 rounded-full transition-transform ${
-                    (color ?? '').toLowerCase() === c.toLowerCase()
-                      ? 'scale-115 ring-2 ring-blue-600 ring-offset-2'
-                      : 'hover:scale-105'
+                  aria-describedby={errors.name ? 'category-name-error' : undefined}
+                  aria-invalid={Boolean(errors.name)}
+                  className={`mt-1.5 w-full rounded-xl border bg-slate-50/70 px-3.5 py-2.5 text-xs text-slate-900 outline-hidden transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-500/20 dark:bg-white/5 dark:text-white ${
+                    errors.name ? 'border-rose-500 dark:border-rose-500' : 'border-slate-200 dark:border-white/10'
                   }`}
-                  key={c}
-                  onClick={() => setColor(c)}
-                  style={{ backgroundColor: c }}
-                  type="button"
+                  id="category-name"
+                  maxLength={100}
+                  onChange={(e) => {
+                    setName(e.target.value)
+                    setErrors((prev) => {
+                      const next = { ...prev }
+                      delete next.name
+                      return next
+                    })
+                  }}
+                  placeholder="Ví dụ: Lịch học kỳ 1, Ôn thi chứng chỉ, CLB Tin học..."
+                  type="text"
+                  value={name}
                 />
-              ))}
-            </div>
+                {errors.name && (
+                  <p className="mt-1 text-xs font-semibold text-rose-500" id="category-name-error">
+                    {errors.name}
+                  </p>
+                )}
+              </div>
+
+              {/* Bảng màu nhận diện */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Màu sắc nhận diện
+                  </span>
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400">
+                    <Icon className="size-3.5" name="palette" />
+                    <span>Màu tùy chọn</span>
+                    <input
+                      aria-label="Chọn màu tùy chọn"
+                      className="sr-only"
+                      onChange={(e) => setColor(e.target.value)}
+                      type="color"
+                      value={color}
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-9">
+                  {EXTENDED_CALENDAR_COLORS.map((c) => {
+                    const isSelected = (color || '').toLowerCase() === c.toLowerCase()
+                    return (
+                      <button
+                        aria-label={`Màu ${c}`}
+                        className={`size-8 rounded-full transition-transform hover:scale-110 flex items-center justify-center ${
+                          isSelected ? 'ring-2 ring-blue-600 ring-offset-2 scale-110' : ''
+                        }`}
+                        key={c}
+                        onClick={() => setColor(c)}
+                        style={{ backgroundColor: c }}
+                        type="button"
+                      >
+                        {isSelected && <Icon className="size-4 text-white" name="check" />}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Huy hiệu xem trước */}
+                <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/80 p-2.5 dark:border-white/5 dark:bg-white/5">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Xem trước hiển thị:</span>
+                  <span
+                    className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-white shadow-2xs"
+                    style={{ backgroundColor: color }}
+                  >
+                    <span className="size-2 rounded-full bg-white/80" />
+                    <span>{name.trim() || 'Tên lịch của bạn'}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Mô tả lịch */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-desc">
+                  Mô tả / Ghi chú mục đích
+                </label>
+                <textarea
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-900 outline-hidden transition-all focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-500/20 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  id="category-desc"
+                  maxLength={500}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Thêm mô tả về loại sự kiện và kế hoạch trong lịch này..."
+                  rows={2}
+                  value={description}
+                />
+              </div>
+            </section>
+
+            {/* ==================== PHẦN 2: THỜI GIAN & MÚI GIỜ ==================== */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
+                <span className="grid size-5.5 place-items-center rounded-md bg-blue-50 text-xs font-bold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                  2
+                </span>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  Thời gian & Múi giờ
+                </h3>
+              </div>
+
+              {/* Múi giờ */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="time-zone">
+                  Múi giờ của lịch
+                </label>
+                <select
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-900 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  id="time-zone"
+                  onChange={(e) => setTimeZone(e.target.value)}
+                  value={timeZone}
+                >
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                  {!COMMON_TIMEZONES.some((tz) => tz.value === timeZone) && (
+                    <option value={timeZone}>{timeZone}</option>
+                  )}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Các sự kiện thuộc lịch này sẽ tự động áp dụng múi giờ đã chọn để tính toán giờ nhắc và lịch học.
+                </p>
+              </div>
+
+              {/* Thời lượng sự kiện mặc định */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="default-duration">
+                  Thời lượng sự kiện mặc định khi tạo mới
+                </label>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {QUICK_DURATIONS.map((mins) => {
+                    const isSelected = defaultDurationMinutes === mins
+                    return (
+                      <button
+                        className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'border border-slate-200 bg-slate-50/70 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
+                        }`}
+                        key={mins}
+                        onClick={() => setDefaultDurationMinutes(mins)}
+                        type="button"
+                      >
+                        {mins} phút {mins === 45 ? '(1 tiết)' : mins === 90 ? '(1 ca)' : ''}
+                      </button>
+                    )
+                  })}
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      aria-label="Nhập số phút tùy chỉnh"
+                      className="w-18 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-900 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      id="default-duration"
+                      max={1440}
+                      min={5}
+                      onChange={(e) => setDefaultDurationMinutes(Number(e.target.value) || 60)}
+                      type="number"
+                      value={defaultDurationMinutes}
+                    />
+                    <span className="text-xs text-slate-500">phút</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* ==================== PHẦN 3: THÔNG BÁO MẶC ĐỊNH ==================== */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="grid size-5.5 place-items-center rounded-md bg-blue-50 text-xs font-bold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                    3
+                  </span>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    Thông báo mặc định ({reminderRows.length}/10)
+                  </h3>
+                </div>
+                {reminderRows.length < 10 && (
+                  <button
+                    className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline dark:text-blue-400"
+                    onClick={handleAddReminder}
+                    type="button"
+                  >
+                    <Icon className="size-3.5" name="plus" />
+                    <span>Thêm mốc nhắc</span>
+                  </button>
+                )}
+              </div>
+
+              {reminderRows.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400 dark:border-white/10">
+                  Chưa có mốc nhắc tự động. Nhấn "Thêm mốc nhắc" để thiết lập.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {reminderRows.map((row, idx) => (
+                    <div
+                      className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 dark:border-white/10 dark:bg-white/5"
+                      key={row.id}
+                    >
+                      <span className="text-xs font-bold text-slate-400 w-6">#{idx + 1}</span>
+
+                      {/* Kênh thông báo */}
+                      <select
+                        aria-label="Kênh thông báo"
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/10 dark:text-white"
+                        onChange={(e) => handleUpdateReminder(row.id, 'method', e.target.value as ReminderMethod)}
+                        value={row.method}
+                      >
+                        <option value="in-app">Thông báo ứng dụng</option>
+                        <option value="email">Gửi Email</option>
+                      </select>
+
+                      <span className="text-xs text-slate-500">trước</span>
+
+                      {/* Số lượng */}
+                      <input
+                        aria-label="Số lượng thời gian"
+                        className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                        max={999}
+                        min={1}
+                        onChange={(e) => handleUpdateReminder(row.id, 'quantity', Number(e.target.value) || 1)}
+                        type="number"
+                        value={row.quantity}
+                      />
+
+                      {/* Đơn vị */}
+                      <select
+                        aria-label="Đơn vị thời gian"
+                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/10 dark:text-white"
+                        onChange={(e) => handleUpdateReminder(row.id, 'unit', e.target.value as ReminderUnit)}
+                        value={row.unit}
+                      >
+                        <option value="minutes">phút</option>
+                        <option value="hours">giờ</option>
+                        <option value="days">ngày</option>
+                        <option value="weeks">tuần</option>
+                      </select>
+
+                      <button
+                        aria-label="Xóa mốc nhắc"
+                        className="ml-auto grid size-7 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                        onClick={() => handleRemoveReminder(row.id)}
+                        type="button"
+                      >
+                        <Icon className="size-4" name="close" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* ==================== PHẦN 4: QUYỀN RIÊNG TƯ & QUẢN LÝ ==================== */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
+                <span className="grid size-5.5 place-items-center rounded-md bg-blue-50 text-xs font-bold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                  4
+                </span>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  Quyền riêng tư, Mời khách & Quản lý
+                </h3>
+              </div>
+
+              {/* Chế độ hiển thị riêng tư / công khai */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-privacy">
+                  Chế độ hiển thị lịch
+                </label>
+                <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                      privacy === 'private'
+                        ? 'border-blue-600 bg-blue-50/40 ring-1 ring-blue-600/30 dark:bg-blue-950/30'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5'
+                    }`}
+                    onClick={() => setPrivacy('private')}
+                    type="button"
+                  >
+                    <Icon className="size-4 text-slate-500 mt-0.5 shrink-0" name="lock" />
+                    <div>
+                      <span className="block text-xs font-bold text-slate-900 dark:text-white">
+                        Riêng tư (Chỉ mình tôi & khách mời)
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                        Chỉ bạn và các thành viên được mời trực tiếp mới có quyền truy cập lịch này.
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all ${
+                      privacy === 'public'
+                        ? 'border-blue-600 bg-blue-50/40 ring-1 ring-blue-600/30 dark:bg-blue-950/30'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5'
+                    }`}
+                    onClick={() => setPrivacy('public')}
+                    type="button"
+                  >
+                    <Icon className="size-4 text-blue-600 mt-0.5 shrink-0" name="globe" />
+                    <div>
+                      <span className="block text-xs font-bold text-slate-900 dark:text-white">
+                        Công khai (Mọi người có thể xem)
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                        Cho phép các thành viên khác trong trường/nhóm tìm kiếm và theo dõi lịch.
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Mời khách / Chia sẻ lịch với người khác */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-white/10 dark:bg-white/5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-white">
+                      Mời khách / Chia sẻ lịch với người khác
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Cấp quyền cho bạn bè, giảng viên hoặc thành viên nhóm tham gia quản lý lịch
+                    </p>
+                  </div>
+                </div>
+
+                {/* Ô nhập mời khách */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    aria-label="Email khách mời"
+                    className="flex-1 min-w-[200px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                    onChange={(e) => {
+                      setNewGuestEmail(e.target.value)
+                      if (guestEmailError) setGuestEmailError(null)
+                    }}
+                    placeholder="Nhập email khách (ví dụ: colleague@hcmute.edu.vn)..."
+                    type="email"
+                    value={newGuestEmail}
+                  />
+
+                  <select
+                    aria-label="Quyền của khách"
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/10 dark:text-white"
+                    onChange={(e) => setNewGuestRole(e.target.value as 'viewer' | 'editor' | 'admin')}
+                    value={newGuestRole}
+                  >
+                    <option value="viewer">Chỉ xem</option>
+                    <option value="editor">Chỉnh sửa sự kiện</option>
+                    <option value="admin">Quản lý toàn diện</option>
+                  </select>
+
+                  <button
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-blue-700 transition-colors"
+                    onClick={handleAddGuest}
+                    type="button"
+                  >
+                    + Thêm khách
+                  </button>
+                </div>
+                {guestEmailError && (
+                  <p className="text-xs font-semibold text-rose-500">{guestEmailError}</p>
+                )}
+
+                {/* Danh sách khách đã mời */}
+                {sharedWith.length > 0 && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-200/60 dark:border-white/5">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      Khách đã được mời ({sharedWith.length})
+                    </span>
+                    <div className="space-y-1.5">
+                      {sharedWith.map((guest) => (
+                        <div
+                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-white/10 dark:bg-white/5"
+                          key={guest.email}
+                        >
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate mr-2">
+                            {guest.email}
+                          </span>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <select
+                              aria-label={`Đổi quyền cho ${guest.email}`}
+                              className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700 outline-hidden dark:border-white/10 dark:bg-white/10 dark:text-slate-200"
+                              onChange={(e) =>
+                                handleUpdateGuestRole(guest.email, e.target.value as 'viewer' | 'editor' | 'admin')
+                              }
+                              value={guest.role}
+                            >
+                              <option value="viewer">Chỉ xem</option>
+                              <option value="editor">Chỉnh sửa</option>
+                              <option value="admin">Quản lý</option>
+                            </select>
+
+                            <button
+                              aria-label={`Xóa khách ${guest.email}`}
+                              className="grid size-6 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                              onClick={() => handleRemoveGuest(guest.email)}
+                              type="button"
+                            >
+                              <Icon className="size-3.5" name="close" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Nhập / Xuất file iCalendar (.ics) */}
+              {isEditing && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-white/10 dark:bg-white/5 space-y-2">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-white">
+                    Nhập & Xuất dữ liệu iCalendar (.ics)
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Tương thích với Google Calendar, Outlook, Apple Calendar
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                      disabled={isExporting}
+                      onClick={handleExportIcs}
+                      type="button"
+                    >
+                      {isExporting ? 'Đang xuất file...' : 'Xuất file .ics'}
+                    </button>
+
+                    <label className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-white/10 dark:bg-white/10 dark:text-white">
+                      <span>{isImporting ? 'Đang nhập...' : 'Nhập từ file .ics'}</span>
+                      <input
+                        accept=".ics,text/calendar"
+                        className="sr-only"
+                        disabled={isImporting}
+                        onChange={handleImportIcs}
+                        ref={fileInputRef}
+                        type="file"
+                      />
+                    </label>
+                  </div>
+
+                  {importMessage && (
+                    <p
+                      className={`text-xs font-semibold ${
+                        importMessage.type === 'success' ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {importMessage.text}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Quản lý lưu trữ & Xóa lịch */}
+              {isEditing && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 dark:border-white/10 dark:bg-white/2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${
+                        archived
+                          ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
+                      }`}
+                      onClick={() => setArchived(!archived)}
+                      type="button"
+                    >
+                      {archived ? 'Đã lưu trữ (Bấm để mở lại)' : 'Lưu trữ lịch này'}
+                    </button>
+                  </div>
+
+                  {!initialCategory?.isDefault && (
+                    <button
+                      className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:border-rose-900/40 dark:bg-white/5 dark:hover:bg-rose-950/30"
+                      onClick={handleDeleteCalendar}
+                      type="button"
+                    >
+                      Xóa vĩnh viễn lịch
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
           </div>
 
-          {/* Footer buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3">
+          {/* Footer Modal cố định */}
+          <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 bg-slate-50/50 px-6 py-3.5 dark:border-white/10 dark:bg-white/5">
             <button
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-white/10 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15"
               onClick={onClose}
               type="button"
             >
               Hủy
             </button>
             <button
-              className="rounded-full bg-blue-600 px-6 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+              className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-blue-700 disabled:opacity-50"
               disabled={isSubmitting}
               type="submit"
             >
