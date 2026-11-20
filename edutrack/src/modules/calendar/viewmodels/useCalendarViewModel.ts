@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CalendarCategory, CalendarEvent, EntryType } from '@/modules/calendar/models/calendar.types'
 import { calendarApi } from '@/modules/calendar/services/calendarApi'
+import { expandAllRecurringEvents } from '@/modules/calendar/utils/recurrenceExpander'
 
 export type CalendarViewMode = 'day' | 'week' | 'month' | 'year' | 'list'
 
@@ -10,16 +11,12 @@ export function useCalendarViewModel() {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // 5 Chế độ xem: Ngày, Tuần, Tháng, Năm, Danh sách
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
 
-  // Filter Tabs: 'all' | 'event' | 'task'
   const [activeFilterTab, setActiveFilterTab] = useState<'all' | EntryType>('all')
 
-  // Date Navigation State
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
 
-  // Modal States
   const [isEventModalOpen, setIsEventModalOpen] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [selectedModalDate, setSelectedModalDate] = useState<Date | null>(null)
@@ -27,7 +24,6 @@ export function useCalendarViewModel() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CalendarCategory | null>(null)
 
-  // Fetch Categories & Events
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true)
@@ -39,7 +35,6 @@ export function useCalendarViewModel() {
       const fetchedCats = catRes.data?.categories ?? []
       setCategories(fetchedCats)
 
-      // Mặc định chọn các category đang có `isVisible !== false`
       setSelectedCategoryIds((prev) => {
         if (prev.length === 0) {
           return fetchedCats.filter((c) => c.isVisible !== false).map((c) => c.id)
@@ -68,7 +63,6 @@ export function useCalendarViewModel() {
     }
   }, [fetchData])
 
-  // Toggle ẩn / hiện Lịch
   const handleToggleCategoryVisibility = async (categoryId: string) => {
     const isCurrentlyChecked = selectedCategoryIds.includes(categoryId)
     const nextChecked = isCurrentlyChecked
@@ -84,7 +78,6 @@ export function useCalendarViewModel() {
     }
   }
 
-  // Chỉ hiển thị duy nhất 1 lịch
   const handleShowOnlyCategory = async (categoryId: string) => {
     setSelectedCategoryIds([categoryId])
     setCategories((prev) =>
@@ -98,7 +91,6 @@ export function useCalendarViewModel() {
     }
   }
 
-  // Hiển thị tất cả các lịch
   const handleShowAllCategories = async () => {
     const allIds = categories.map((c) => c.id)
     setSelectedCategoryIds(allIds)
@@ -113,7 +105,6 @@ export function useCalendarViewModel() {
     }
   }
 
-  // Đổi màu nhanh cho Lịch
   const handleQuickChangeColor = async (categoryId: string, color: string) => {
     try {
       setCategories((prev) =>
@@ -133,7 +124,6 @@ export function useCalendarViewModel() {
     }
   }
 
-  // Delete Category
   const handleDeleteCategory = async (categoryId: string) => {
     if (!window.confirm('Bạn có chắc chắn muốn xóa lịch này? Các sự kiện sẽ được tách ra.')) return
     try {
@@ -146,7 +136,6 @@ export function useCalendarViewModel() {
     }
   }
 
-  // Điều hướng thông minh theo từng chế độ Ngày, Tuần, Tháng, Năm
   const handleToday = () => setCurrentDate(new Date())
 
   const handlePrev = () => {
@@ -160,7 +149,6 @@ export function useCalendarViewModel() {
       if (viewMode === 'year') {
         return new Date(d.getFullYear() - 1, d.getMonth(), 1)
       }
-      // month & list
       return new Date(d.getFullYear(), d.getMonth() - 1, 1)
     })
   }
@@ -176,7 +164,6 @@ export function useCalendarViewModel() {
       if (viewMode === 'year') {
         return new Date(d.getFullYear() + 1, d.getMonth(), 1)
       }
-      // month & list
       return new Date(d.getFullYear(), d.getMonth() + 1, 1)
     })
   }
@@ -185,7 +172,6 @@ export function useCalendarViewModel() {
     setCurrentDate(date)
   }
 
-  // Open modals
   const handleOpenCreateEvent = (forDate?: Date) => {
     setEditingEvent(null)
     setSelectedModalDate(forDate ?? currentDate)
@@ -193,6 +179,16 @@ export function useCalendarViewModel() {
   }
 
   const handleOpenEditEvent = (event: CalendarEvent) => {
+    const eventWithMeta = event as CalendarEvent & { _isOccurrence?: boolean; _baseEventId?: string }
+    if (eventWithMeta._isOccurrence && eventWithMeta._baseEventId) {
+      const baseEvent = events.find((e) => e.id === eventWithMeta._baseEventId)
+      if (baseEvent) {
+        setEditingEvent(baseEvent)
+        setSelectedModalDate(null)
+        setIsEventModalOpen(true)
+        return
+      }
+    }
     setEditingEvent(event)
     setSelectedModalDate(null)
     setIsEventModalOpen(true)
@@ -208,37 +204,49 @@ export function useCalendarViewModel() {
     setIsCategoryModalOpen(true)
   }
 
-  // Toggle complete task
+  const resolveBaseEventId = (eventId: string): string => {
+    if (eventId.includes('__occ_')) {
+      return eventId.split('__occ_')[0] ?? eventId
+    }
+    return eventId
+  }
+
   const handleToggleComplete = async (eventId: string, currentStatus: boolean) => {
+    const baseId = resolveBaseEventId(eventId)
     try {
       setEvents((prev) =>
         prev.map((e) =>
-          e.id === eventId
+          e.id === baseId
             ? { ...e, isCompleted: !currentStatus, completedAt: !currentStatus ? new Date().toISOString() : null }
             : e,
         ),
       )
-      await calendarApi.toggleTaskComplete(eventId, !currentStatus)
+      await calendarApi.toggleTaskComplete(baseId, !currentStatus)
     } catch (err) {
       console.error('Lỗi khi toggle task:', err)
       fetchData()
     }
   }
 
-  // Delete event
   const handleDeleteEvent = async (eventId: string) => {
+    const baseId = resolveBaseEventId(eventId)
     if (!window.confirm('Bạn có chắc chắn muốn xóa mục này?')) return
     try {
-      setEvents((prev) => prev.filter((e) => e.id !== eventId))
-      await calendarApi.deleteEvent(eventId)
+      setEvents((prev) => prev.filter((e) => e.id !== baseId))
+      await calendarApi.deleteEvent(baseId)
     } catch (err) {
       console.error('Lỗi khi xóa sự kiện:', err)
       fetchData()
     }
   }
 
-  // Filter events based on selected categories (Checkbox Ẩn / Hiện) & active tab
-  const displayedEvents = events.filter((e) => {
+  const windowStart = new Date(currentDate.getFullYear(), currentDate.getMonth() - 6, 1)
+  const windowEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 6, 31, 23, 59, 59)
+  const expandedEvents = expandAllRecurringEvents(events, windowStart, windowEnd)
+
+  const archivedIds = new Set(categories.filter((category) => category.settings?.archived).map((category) => category.id))
+  const displayedEvents = expandedEvents.filter((e) => {
+    if (e.calendarId && archivedIds.has(e.calendarId)) return false
     if (e.calendarId && !selectedCategoryIds.includes(e.calendarId)) {
       return false
     }
@@ -248,7 +256,6 @@ export function useCalendarViewModel() {
     return true
   })
 
-  // Format tiêu đề ngày/tuần/tháng/năm
   const getDateTitleLabel = (): string => {
     if (viewMode === 'day') {
       return currentDate.toLocaleDateString('vi-VN', {
@@ -297,7 +304,6 @@ export function useCalendarViewModel() {
     handleShowAllCategories,
     handleQuickChangeColor,
     handleDeleteCategory,
-    // Modals
     isEventModalOpen,
     editingEvent,
     selectedModalDate,
