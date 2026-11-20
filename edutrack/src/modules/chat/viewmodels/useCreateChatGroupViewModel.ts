@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '@/shared/api/httpClient'
@@ -16,46 +16,74 @@ const withoutField = (
   return next
 }
 
-export function useCreateChatGroupViewModel(onCreated?: () => void) {
+const normalizeSearchText = (value: string): string => value
+  .normalize('NFD')
+  .replace(/\p{Diacritic}/gu, '')
+  .toLocaleLowerCase('vi')
+
+const USER_SEARCH_DEBOUNCE_MS = 350
+const DEFAULT_GROUP_DESCRIPTION = ''
+const DEFAULT_GROUP_HISTORY_VISIBILITY: ChatGroupHistoryVisibility = 'all'
+
+export function useCreateChatGroupViewModel(
+  friends: ChatUserSummary[],
+  onCreated?: () => void,
+) {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [historyVisibility, setHistoryVisibility] = useState<ChatGroupHistoryVisibility>('from_join')
   const [participantQuery, setParticipantQuery] = useState('')
   const [searchResults, setSearchResults] = useState<FriendSearchResult[]>([])
   const [selectedUsers, setSelectedUsers] = useState<ChatUserSummary[]>([])
   const [fieldErrors, setFieldErrors] = useState<Readonly<Record<string, string>>>({})
   const [isSearching, setIsSearching] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const latestSearchId = useRef(0)
+  const visibleFriends = useMemo(() => {
+    const query = normalizeSearchText(participantQuery.trim())
+    if (!query || participantQuery.includes('@')) return query ? [] : friends
+    return friends.filter((friend) =>
+      normalizeSearchText(friend.username).includes(query))
+  }, [friends, participantQuery])
 
-  const searchUsers = async () => {
-    const query = participantQuery.trim()
-    if (!query) {
-      setFieldErrors((current) => ({ ...current, participantQuery: 'Vui lòng nhập username hoặc email.' }))
-      setSearchResults([])
-      return
-    }
+  const searchUsers = useCallback(async (query: string) => {
+    const searchId = ++latestSearchId.current
     setIsSearching(true)
     setFieldErrors((current) => withoutField(current, 'participantQuery'))
     try {
       const result = await chatApi.searchUsers(query)
-      const selectedIds = new Set(selectedUsers.map((user) => user.id))
-      setSearchResults(result.data.users.filter((user) => !selectedIds.has(user.id)))
+      if (searchId === latestSearchId.current) setSearchResults(result.data.users)
     } catch (error) {
+      if (searchId !== latestSearchId.current) return
       if (error instanceof ApiError && error.fieldErrors?.query) {
         setFieldErrors((current) => ({ ...current, participantQuery: error.fieldErrors?.query ?? '' }))
       } else {
         showToast(error instanceof ApiError ? error.message : 'Không thể tìm người dùng.', 'error')
       }
     } finally {
-      setIsSearching(false)
+      if (searchId === latestSearchId.current) setIsSearching(false)
     }
-  }
+  }, [showToast])
 
-  const selectUser = (user: FriendSearchResult) => {
-    setSelectedUsers((current) => current.some((item) => item.id === user.id) ? current : [...current, user])
-    setSearchResults((current) => current.filter((item) => item.id !== user.id))
+  useEffect(() => {
+    const query = participantQuery.trim()
+    if (!query) {
+      latestSearchId.current += 1
+      setIsSearching(false)
+      setSearchResults([])
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void searchUsers(query)
+    }, USER_SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [participantQuery, searchUsers])
+
+  const toggleUser = (user: ChatUserSummary) => {
+    setSelectedUsers((current) => current.some((item) => item.id === user.id)
+      ? current.filter((item) => item.id !== user.id)
+      : [...current, user])
     setFieldErrors((current) => withoutField(current, 'participantIds'))
   }
 
@@ -63,19 +91,28 @@ export function useCreateChatGroupViewModel(onCreated?: () => void) {
     setSelectedUsers((current) => current.filter((user) => user.id !== userId))
   }
 
+  const clearSelectedUsers = () => {
+    setSelectedUsers([])
+    setFieldErrors((current) => withoutField(current, 'participantIds'))
+  }
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const participantIds = selectedUsers.map((user) => user.id)
-    const validationErrors = validateChatGroupForm({ name, description, participantIds })
+    const validationErrors = validateChatGroupForm({
+      name,
+      description: DEFAULT_GROUP_DESCRIPTION,
+      participantIds,
+    })
     setFieldErrors(validationErrors)
     if (Object.keys(validationErrors).length > 0) return
     setIsSubmitting(true)
     try {
       const result = await chatApi.createGroup({
         name: name.trim().replace(/\s+/gu, ' '),
-        description: description.trim().replace(/\s+/gu, ' '),
+        description: DEFAULT_GROUP_DESCRIPTION,
         participantIds,
-        historyVisibility,
+        historyVisibility: DEFAULT_GROUP_HISTORY_VISIBILITY,
       })
       onCreated?.()
       showToast(result.message ?? 'Tạo nhóm trò chuyện thành công.', 'success')
@@ -95,25 +132,24 @@ export function useCreateChatGroupViewModel(onCreated?: () => void) {
 
   return {
     name,
-    description,
-    historyVisibility,
     participantQuery,
+    visibleFriends,
     searchResults,
     selectedUsers,
     fieldErrors,
     isSearching,
     isSubmitting,
     setName: (value: string) => { setName(value); setFieldErrors((current) => withoutField(current, 'name')) },
-    setDescription: (value: string) => { setDescription(value); setFieldErrors((current) => withoutField(current, 'description')) },
-    setHistoryVisibility,
     setParticipantQuery: (value: string) => {
+      latestSearchId.current += 1
       setParticipantQuery(value)
+      setIsSearching(false)
       setSearchResults([])
       setFieldErrors((current) => withoutField(current, 'participantQuery'))
     },
-    searchUsers,
-    selectUser,
+    toggleUser,
     removeUser,
+    clearSelectedUsers,
     submit,
   }
 }

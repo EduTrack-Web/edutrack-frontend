@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { useLanguage } from '@/modules/i18n/viewmodels/useLanguage'
 import { ApiError } from '@/shared/api/httpClient'
 import { useToast } from '@/shared/viewmodels/useToast'
 import {
@@ -19,6 +20,7 @@ const getNotesColumnCount = (): number =>
 
 export function useNotesViewModel() {
   const navigate = useNavigate()
+  const { language } = useLanguage()
   const { showToast } = useToast()
   const [notes, setNotes] = useState<NoteListItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -110,8 +112,7 @@ export function useNotesViewModel() {
     if (busyNoteId) return
     setBusyNoteId(noteId)
     try {
-      const language = localStorage.getItem('edutrack-language') === 'EN' ? 'en' : 'vi'
-      const result = await notesApi.duplicateNote(noteId, language)
+      const result = await notesApi.duplicateNote(noteId, language === 'EN' ? 'en' : 'vi')
       setNotes((current) => {
         const sourceTags = current.find((note) => note.id === noteId)?.tags ?? []
         return sortNotesNewestFirst([{ ...result.data.note, tags: sourceTags }, ...current])
