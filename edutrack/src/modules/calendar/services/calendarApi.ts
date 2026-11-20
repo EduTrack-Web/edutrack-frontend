@@ -11,7 +11,6 @@ import type {
 } from '@/modules/calendar/models/calendar.types'
 
 export const calendarApi = {
-  // CATEGORY APIS (LỊCH CỦA TÔI)
   getCategories: () => request<ApiSuccess<{ categories: CalendarCategory[] }>>('/calendar/categories'),
 
   createCategory: (payload: CreateCategoryInput) =>
@@ -48,7 +47,28 @@ export const calendarApi = {
       method: 'DELETE',
     }),
 
-  // EVENT APIS
+  exportCategoryIcs: async (categoryId: string) => {
+    const res = await fetch(`/v1/api/calendar/categories/${categoryId}/export`, {
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error('Không thể xuất file lịch')
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `calendar-${categoryId}.ics`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  },
+
+  importCategoryIcs: (categoryId: string, icsContent: string) =>
+    request<ApiSuccess<{ importedCount: number }>>(`/calendar/categories/${categoryId}/import`, {
+      method: 'POST',
+      body: JSON.stringify({ icsContent }),
+    }),
+
   getEvents: (filters: EventQueryFilters = {}) => {
     const search = new URLSearchParams()
     if (filters.from) search.set('from', filters.from)
@@ -80,10 +100,15 @@ export const calendarApi = {
       body: JSON.stringify(payload),
     }),
 
-  deleteEvent: (eventId: string) =>
-    request<ApiSuccess<null>>(`/calendar/events/${eventId}`, {
+  deleteEvent: (eventId: string, mode?: 'this' | 'following' | 'all', date?: string) => {
+    const params = new URLSearchParams()
+    if (mode) params.set('mode', mode)
+    if (date) params.set('date', date)
+    const suffix = params.size > 0 ? `?${params.toString()}` : ''
+    return request<ApiSuccess<null>>(`/calendar/events/${eventId}${suffix}`, {
       method: 'DELETE',
-    }),
+    })
+  },
 
   toggleTaskComplete: (eventId: string, isCompleted: boolean) =>
     request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}/toggle-complete`, {

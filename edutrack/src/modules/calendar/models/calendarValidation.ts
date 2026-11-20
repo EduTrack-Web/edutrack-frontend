@@ -80,5 +80,18 @@ export const validateCategoryForm = (input: Partial<CreateCategoryInput>): Recor
     errors.description = 'Mô tả không được vượt quá 500 ký tự'
   }
 
+  const settings = input.settings
+  if (settings) {
+    const { workingHoursStart, workingHoursEnd, defaultDurationMinutes, reminders } = settings
+    if (!workingHoursStart || !workingHoursEnd || workingHoursEnd <= workingHoursStart
+      || !Number.isInteger(defaultDurationMinutes) || defaultDurationMinutes < 5 || defaultDurationMinutes > 1440) {
+      errors.settings = 'Kiểm tra ngày bắt đầu tuần, khung giờ hoạt động và thời lượng mặc định (5–1440 phút).'
+    } else if (reminders.some(({ method, minutesBefore }, index) => !Number.isInteger(minutesBefore)
+      || minutesBefore < 0 || minutesBefore > 40320
+      || reminders.slice(0, index).some((item) => item.method === method && item.minutesBefore === minutesBefore))) {
+      errors.settings = 'Mốc nhắc phải từ 0 đến 40320 phút và không được trùng kênh cùng thời điểm.'
+    }
+  }
+
   return errors
 }

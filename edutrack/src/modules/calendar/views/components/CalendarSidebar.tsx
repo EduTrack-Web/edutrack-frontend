@@ -34,16 +34,16 @@ export function CalendarSidebar({
   onQuickChangeColor,
   onDeleteCategory,
 }: CalendarSidebarProps) {
+  const activeCategories = categories.filter((category) => !category.settings?.archived)
+  const archivedCategories = categories.filter((category) => category.settings?.archived)
   const [activeMenuCatId, setActiveMenuCatId] = useState<string | null>(null)
   const [miniCalMonth, setMiniCalMonth] = useState<Date>(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
 
-  // Tính toán các ngày cho Mini Calendar tháng
   const year = miniCalMonth.getFullYear()
   const month = miniCalMonth.getMonth()
   const firstDayOfMonth = new Date(year, month, 1)
   const lastDayOfMonth = new Date(year, month + 1, 0)
 
-  // Điều chỉnh ngày bắt đầu tuần (T2 là 0)
   let startDayOfWeek = firstDayOfMonth.getDay() - 1
   if (startDayOfWeek === -1) startDayOfWeek = 6
 
@@ -59,7 +59,6 @@ export function CalendarSidebar({
 
   return (
     <aside className="w-full shrink-0 space-y-5 md:w-64">
-      {/* Nút Tạo mới sự kiện lớn */}
       <button
         className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-200/90 bg-white py-3.5 pr-6 pl-4 text-sm font-bold text-slate-800 shadow-md transition-all hover:bg-slate-50 hover:shadow-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 active:scale-[0.99] dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
         onClick={onOpenCreateEvent}
@@ -71,7 +70,6 @@ export function CalendarSidebar({
         <span>Tạo mới sự kiện</span>
       </button>
 
-      {/* Mini Calendar (Bộ lịch tháng nhỏ gọn) */}
       <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3.5 shadow-2xs backdrop-blur-xs dark:border-white/10 dark:bg-white/5">
         <div className="flex items-center justify-between pb-2">
           <span className="text-xs font-bold text-slate-800 capitalize dark:text-white">
@@ -97,14 +95,12 @@ export function CalendarSidebar({
           </div>
         </div>
 
-        {/* Tiêu đề thứ trong tuần */}
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-400">
           {WEEKDAYS.map((wd) => (
             <div key={wd}>{wd}</div>
           ))}
         </div>
 
-        {/* Lưới các ngày trong tháng */}
         <div className="mt-1 grid grid-cols-7 gap-1 text-center text-xs">
           {Array.from({ length: totalSlots }).map((_, idx) => {
             const dayNum = idx - startDayOfWeek + 1
@@ -137,14 +133,13 @@ export function CalendarSidebar({
         </div>
       </div>
 
-      {/* Danh mục "Lịch của tôi" */}
       <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3.5 shadow-2xs backdrop-blur-xs dark:border-white/10 dark:bg-white/5">
         <div className="flex items-center justify-between pb-2.5">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
               Lịch của tôi
             </span>
-            {selectedCategoryIds.length < categories.length && (
+            {selectedCategoryIds.length < activeCategories.length && (
               <button
                 className="text-[11px] font-bold text-blue-600 hover:underline dark:text-blue-400"
                 onClick={onShowAllCategories}
@@ -174,10 +169,10 @@ export function CalendarSidebar({
             />
           )}
 
-          {categories.length === 0 ? (
+          {activeCategories.length === 0 ? (
             <p className="py-2 text-xs text-slate-400">Chưa có lịch nào.</p>
           ) : (
-            categories.map((cat) => {
+            activeCategories.map((cat) => {
               const isChecked = selectedCategoryIds.includes(cat.id)
               const isMenuOpen = activeMenuCatId === cat.id
 
@@ -214,7 +209,6 @@ export function CalendarSidebar({
                       </span>
                     </label>
 
-                    {/* Nút 3 chấm mở menu thao tác bổ trợ */}
                     <button
                       aria-label="Tùy chọn lịch"
                       className="grid size-6 place-items-center rounded-md text-slate-400 opacity-60 transition-opacity hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100 dark:hover:bg-white/10 dark:hover:text-white"
@@ -225,14 +219,12 @@ export function CalendarSidebar({
                     </button>
                   </div>
 
-                  {/* Dropdown Menu thao tác bổ trợ của Lịch */}
                   {isMenuOpen && (
                     <div
                       className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-[#021024]"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="space-y-1 border-b border-slate-100 pb-2 dark:border-white/10">
-                        {/* Chỉ hiện lịch này */}
                         <button
                           className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/10"
                           onClick={() => {
@@ -245,8 +237,7 @@ export function CalendarSidebar({
                           Chỉ hiện lịch này
                         </button>
 
-                        {/* Hiện tất cả các lịch */}
-                        {selectedCategoryIds.length < categories.length && (
+                        {selectedCategoryIds.length < activeCategories.length && (
                           <button
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/10"
                             onClick={() => {
@@ -287,7 +278,6 @@ export function CalendarSidebar({
                         )}
                       </div>
 
-                      {/* Đổi màu nhanh inline */}
                       <div className="pt-2">
                         <span className="block px-2 text-[10px] font-bold text-slate-400 uppercase">
                           Đổi màu nhanh
@@ -315,7 +305,18 @@ export function CalendarSidebar({
             })
           )}
         </div>
+        {archivedCategories.length > 0 && (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs font-semibold">Lịch đã lưu trữ</summary>
+            {archivedCategories.map((category) => (
+              <button className="block min-h-11 w-full break-words text-left text-sm" key={category.id} type="button" onClick={() => onOpenEditCategory(category)}>
+                {category.name}
+              </button>
+            ))}
+          </details>
+        )}
       </div>
+
     </aside>
   )
 }
