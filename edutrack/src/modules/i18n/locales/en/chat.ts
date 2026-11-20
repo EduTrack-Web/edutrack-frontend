@@ -1,0 +1,18 @@
+export const chatEn = {
+  'chat.message.dateHeading': '{weekday}, {monthName} {day}, {year}',
+  'chat.composerGuide.step': 'Guide 1/1',
+  'chat.composerGuide.title': 'Send messages faster',
+  'chat.composerGuide.description': 'Press Enter to send. Use Shift + Enter when you want to start a new line.',
+  'chat.composerGuide.skip': 'Skip',
+  'chat.composerGuide.understood': 'Got it',
+  'chat.presence.online': 'Active now',
+  'chat.presence.offline': 'Offline',
+  'chat.presence.justNow': 'Active just now',
+  'chat.presence.minutesAgo.one': 'Active {count} minute ago',
+  'chat.presence.minutesAgo.many': 'Active {count} minutes ago',
+  'chat.presence.hoursAgo.one': 'Active {count} hour ago',
+  'chat.presence.hoursAgo.many': 'Active {count} hours ago',
+  'chat.presence.daysAgo.one': 'Active {count} day ago',
+  'chat.presence.daysAgo.many': 'Active {count} days ago',
+  'chat.presence.onDate': 'Active on {date}',
+} as const

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { useLanguage } from '@/modules/i18n/viewmodels/useLanguage'
 import { ApiError } from '@/shared/api/httpClient'
 import { useToast } from '@/shared/viewmodels/useToast'
 import {
@@ -20,6 +21,7 @@ export type NoteSaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 export function useNoteEditorViewModel() {
   const { noteId = '' } = useParams()
   const navigate = useNavigate()
+  const { language } = useLanguage()
   const { showToast } = useToast()
   const [note, setNote] = useState<NoteDetail | null>(null)
   const [title, setTitle] = useState('')
@@ -366,8 +368,7 @@ export function useNoteEditorViewModel() {
       return
     }
     try {
-      const language = localStorage.getItem('edutrack-language') === 'EN' ? 'en' : 'vi'
-      const result = await notesApi.duplicateNote(noteId, language)
+      const result = await notesApi.duplicateNote(noteId, language === 'EN' ? 'en' : 'vi')
       showToast(result.message ?? 'Đã nhân bản ghi chú.', 'success')
       navigate(`/notes/${result.data.note.id}`)
     } catch (error) {

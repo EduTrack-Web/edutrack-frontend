@@ -7,11 +7,16 @@ export interface ChatChannel {
 
 export interface ChatMessage {
   id: string
-  channelId: string
-  senderId: string
-  senderName: string
+  groupId: string
+  clientMessageId: string
   content: string
+  sender: ChatUserSummary
   createdAt: string
+}
+
+export interface ChatMessagePage {
+  messages: ChatMessage[]
+  nextCursor: string | null
 }
 
 export interface ChatUserSummary {
@@ -39,7 +44,58 @@ export interface BlockedUserItem extends ChatUserSummary {
   blockedAt: string
 }
 
-export type ChatFriendsTab = 'friends' | 'requests' | 'blocked'
+export interface ChatConversationLastMessage {
+  id: string
+  content: string
+  sender: ChatUserSummary
+  isOwn: boolean
+  createdAt: string
+}
+
+export interface DirectConversationSummary {
+  id: string
+  participant: ChatUserSummary & {
+    isOnline: boolean
+    lastActiveAt?: string
+  }
+  lastMessage?: ChatConversationLastMessage
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatPresence {
+  userId: string
+  isOnline: boolean
+  lastActiveAt?: string
+}
+
+export interface DirectChatMessage {
+  id: string
+  conversationId: string
+  clientMessageId: string
+  content: string
+  sender: ChatUserSummary
+  createdAt: string
+}
+
+export interface DirectChatMessagePage {
+  messages: DirectChatMessage[]
+  nextCursor: string | null
+}
+
+export type ChatSearchConversationType = 'direct' | 'group'
+
+export interface ChatMessageSearchResult {
+  messageId: string
+  conversationId: string
+  conversationType: ChatSearchConversationType
+  conversationName: string
+  content: string
+  sender: ChatUserSummary
+  createdAt: string
+}
+
+export type ChatFriendsTab = 'friends' | 'requests' | 'sent' | 'blocked'
 
 export type ChatGroupRole = 'owner' | 'manager' | 'member'
 export type ChatGroupHistoryVisibility = 'from_join' | 'all'
@@ -53,6 +109,7 @@ export interface ChatGroupSummary {
   pendingInvitationCount: number
   historyVisibility: ChatGroupHistoryVisibility
   inviteLinksEnabled: boolean
+  lastMessage?: ChatConversationLastMessage
   createdAt: string
   updatedAt: string
 }
