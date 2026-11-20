@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom'
 
 import { router } from '@/app/router'
 import { AuthProvider } from '@/modules/auth/viewmodels/AuthProvider'
+import { LanguageProvider } from '@/modules/i18n/viewmodels/LanguageProvider'
 import { ThemeProvider } from '@/shared/viewmodels/ThemeProvider'
 import { ToastProvider } from '@/shared/viewmodels/ToastProvider'
 import '@/index.css'
@@ -11,11 +12,13 @@ import '@/index.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <RouterProvider router={router} />
-        </AuthProvider>
-      </ToastProvider>
+      <LanguageProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
+        </ToastProvider>
+      </LanguageProvider>
     </ThemeProvider>
   </StrictMode>,
 )

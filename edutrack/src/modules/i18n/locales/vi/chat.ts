@@ -1,0 +1,18 @@
+export const chatVi = {
+  'chat.message.dateHeading': '{weekday}, ngày {day} tháng {month} năm {year}',
+  'chat.composerGuide.step': 'Hướng dẫn 1/1',
+  'chat.composerGuide.title': 'Gửi tin nhắn nhanh',
+  'chat.composerGuide.description': 'Nhấn Enter để gửi tin nhắn. Dùng Shift + Enter khi bạn muốn xuống dòng.',
+  'chat.composerGuide.skip': 'Bỏ qua',
+  'chat.composerGuide.understood': 'Đã hiểu',
+  'chat.presence.online': 'Đang hoạt động',
+  'chat.presence.offline': 'Không hoạt động',
+  'chat.presence.justNow': 'Vừa hoạt động',
+  'chat.presence.minutesAgo.one': 'Hoạt động {count} phút trước',
+  'chat.presence.minutesAgo.many': 'Hoạt động {count} phút trước',
+  'chat.presence.hoursAgo.one': 'Hoạt động {count} giờ trước',
+  'chat.presence.hoursAgo.many': 'Hoạt động {count} giờ trước',
+  'chat.presence.daysAgo.one': 'Hoạt động {count} ngày trước',
+  'chat.presence.daysAgo.many': 'Hoạt động {count} ngày trước',
+  'chat.presence.onDate': 'Hoạt động {date}',
+} as const
