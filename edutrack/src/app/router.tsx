@@ -8,6 +8,10 @@ import { DashboardPage } from '@/modules/dashboard/views/DashboardPage'
 import { CalendarPage } from '@/modules/calendar/views/CalendarPage'
 import { NotesPage } from '@/modules/notes/views/NotesPage'
 import { ChatPage } from '@/modules/chat/views/ChatPage'
+import { ChatHomePage } from '@/modules/chat/views/ChatHomePage'
+import { ChatLayout } from '@/modules/chat/views/ChatLayout'
+import { ChatRequestsPage } from '@/modules/chat/views/ChatRequestsPage'
+import { ChatSettingsPage } from '@/modules/chat/views/ChatSettingsPage'
 import { LandingPage } from '@/modules/landing/views/LandingPage'
 import { ProfileSetupPage } from '@/modules/onboarding/views/ProfileSetupPage'
 import { PublicLayout } from '@/shared/components/layout/PublicLayout'
@@ -52,13 +56,29 @@ export const router = createBrowserRouter([
           return { Component: NoteEditorPage }
         },
       },
-      { path: '/chat', element: <ChatPage /> },
       {
-        path: '/chat/groups/:groupId',
-        lazy: async () => {
-          const { ChatGroupPage } = await import('@/modules/chat/views/ChatGroupPage')
-          return { Component: ChatGroupPage }
-        },
+        path: '/chat',
+        element: <ChatLayout />,
+        children: [
+          { index: true, element: <ChatHomePage /> },
+          { path: 'contacts', element: <ChatPage /> },
+          { path: 'requests', element: <ChatRequestsPage /> },
+          { path: 'settings', element: <ChatSettingsPage /> },
+          {
+            path: 'conversations/:conversationId',
+            lazy: async () => {
+              const { DirectChatPage } = await import('@/modules/chat/views/DirectChatPage')
+              return { Component: DirectChatPage }
+            },
+          },
+          {
+            path: 'groups/:groupId',
+            lazy: async () => {
+              const { ChatGroupPage } = await import('@/modules/chat/views/ChatGroupPage')
+              return { Component: ChatGroupPage }
+            },
+          },
+        ],
       },
       {
         path: '/chat/join/:token',
