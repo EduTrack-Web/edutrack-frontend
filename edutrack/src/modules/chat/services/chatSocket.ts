@@ -33,7 +33,7 @@ export type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>
 export const createChatSocket = (): ChatSocket => io(
   API_ORIGIN || window.location.origin,
   {
-    path: '/v1/api/socket.io',
+    path: '/api/v1/socket.io',
     withCredentials: true,
     autoConnect: false,
   },

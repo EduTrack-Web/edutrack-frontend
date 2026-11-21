@@ -1,4 +1,4 @@
-import { API_ORIGIN, request } from '@/shared/api/httpClient'
+import { API_BASE_URL, request } from '@/shared/api/httpClient'
 import type { ApiSuccess, AuthUser } from '@/modules/auth/models/AuthUser'
 
 export interface LoginResult {
@@ -10,31 +10,31 @@ export interface LoginResult {
 
 export const authApi = {
   login: (identifier: string, password: string) =>
-    request<ApiSuccess<LoginResult>>('/auth/login', { method: 'POST', body: JSON.stringify({ identifier, password }) }),
+    request<ApiSuccess<LoginResult>>('/auth/sessions', { method: 'POST', body: JSON.stringify({ identifier, password }) }),
 
   register: (payload: { fullName: string; email: string; password: string; confirmPassword: string }) =>
-    request<ApiSuccess<{ user: AuthUser; otpId: string }>>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
+    request<ApiSuccess<{ user: AuthUser; otpId: string }>>('/auth/registrations', { method: 'POST', body: JSON.stringify(payload) }),
 
   verifyRegistration: (otpId: string, code: string) =>
-    request<ApiSuccess<{ user: AuthUser }>>('/auth/verify-registration', { method: 'POST', body: JSON.stringify({ otpId, code }) }),
+    request<ApiSuccess<{ user: AuthUser }>>('/auth/registration-verifications', { method: 'POST', body: JSON.stringify({ otpId, code }) }),
 
   verifyTwoFactor: (otpId: string, code: string) =>
-    request<ApiSuccess<{ user: AuthUser }>>('/auth/verify-two-factor', { method: 'POST', body: JSON.stringify({ otpId, code }) }),
+    request<ApiSuccess<{ user: AuthUser }>>('/auth/two-factor-verifications', { method: 'POST', body: JSON.stringify({ otpId, code }) }),
 
   forgotPassword: (email: string) =>
-    request<ApiSuccess<{ accepted: true; otpId?: string }>>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+    request<ApiSuccess<{ accepted: true; otpId?: string }>>('/auth/password-reset-requests', { method: 'POST', body: JSON.stringify({ email }) }),
 
   resendOtp: (otpId: string, purpose: 'registration' | 'password-reset' | 'login-2fa') =>
-    request<ApiSuccess<{ otpId: string }>>('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ otpId, purpose }) }),
+    request<ApiSuccess<{ otpId: string }>>('/auth/otp-resend-requests', { method: 'POST', body: JSON.stringify({ otpId, purpose }) }),
 
   resetPassword: (payload: { otpId: string; code: string; newPassword: string; confirmPassword: string }) =>
-    request<ApiSuccess<never>>('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) }),
+    request<ApiSuccess<never>>('/auth/password-resets', { method: 'POST', body: JSON.stringify(payload) }),
 
-  me: () => request<ApiSuccess<{ user: AuthUser }>>('/auth/me'),
+  me: () => request<ApiSuccess<{ user: AuthUser }>>('/auth/sessions/current'),
 
-  refresh: () => request<ApiSuccess<{ user: AuthUser }>>('/auth/refresh', { method: 'POST' }),
+  refresh: () => request<ApiSuccess<{ user: AuthUser }>>('/auth/sessions/current', { method: 'PATCH' }),
 
-  logout: () => request<ApiSuccess<never>>('/auth/logout', { method: 'POST' }),
+  logout: () => request<ApiSuccess<never>>('/auth/sessions/current', { method: 'DELETE' }),
 
-  googleLoginUrl: `${API_ORIGIN}/v1/api/auth/google`,
+  googleLoginUrl: `${API_BASE_URL}/auth/google/authorizations`,
 }

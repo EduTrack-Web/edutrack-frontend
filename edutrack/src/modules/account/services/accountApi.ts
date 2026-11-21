@@ -20,11 +20,11 @@ import type {
 
 export const accountApi = {
   getProfile: async (): Promise<{ success: true; data: { user: UserProfile } }> => {
-    return request('/account/profile', { method: 'GET' })
+    return request('/users/me', { method: 'GET' })
   },
 
   updateProfile: async (payload: UpdateProfilePayload): Promise<UpdateProfileApiResponse> => {
-    return request('/account/profile', {
+    return request('/users/me', {
       method: 'PATCH',
       body: JSON.stringify(payload),
     })
@@ -34,84 +34,84 @@ export const accountApi = {
     const formData = new FormData()
     formData.append('avatar', file)
 
-    return request('/account/avatar', {
-      method: 'POST',
+    return request('/users/me/avatar', {
+      method: 'PUT',
       body: formData,
     })
   },
 
   // Onboarding Profile Setup
   checkUsername: async (username: string): Promise<CheckUsernameApiResponse> => {
-    return request(`/account/check-username?username=${encodeURIComponent(username)}`, {
+    return request(`/users/username-availability?username=${encodeURIComponent(username)}`, {
       method: 'GET',
     })
   },
 
   setupProfile: async (payload: ProfileSetupPayload): Promise<ProfileSetupApiResponse> => {
-    return request('/account/profile-setup', {
-      method: 'POST',
+    return request('/users/me/profile-completion', {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     })
   },
 
   changePassword: async (payload: ChangePasswordPayload): Promise<ChangePasswordApiResponse> => {
-    return request('/account/change-password', {
-      method: 'POST',
+    return request('/users/me/password', {
+      method: 'PUT',
       body: JSON.stringify(payload),
     })
   },
 
   getSessions: async (): Promise<SessionsApiResponse> => {
-    return request('/account/sessions', { method: 'GET' })
+    return request('/users/me/sessions', { method: 'GET' })
   },
 
   revokeOtherSessions: async (): Promise<RevokeSessionsApiResponse> => {
-    return request('/account/sessions/revoke-others', {
-      method: 'POST',
+    return request('/users/me/sessions', {
+      method: 'DELETE',
     })
   },
 
   // Xác thực 2 bước (2FA)
   send2faOtp: async (): Promise<Send2faOtpApiResponse> => {
-    return request('/account/2fa/send-otp', {
+    return request('/users/me/two-factor-challenges', {
       method: 'POST',
     })
   },
 
   enable2fa: async (payload: Enable2faPayload): Promise<SimpleApiResponse> => {
-    return request('/account/2fa/enable', {
-      method: 'POST',
+    return request('/users/me/two-factor-authentication', {
+      method: 'PUT',
       body: JSON.stringify(payload),
     })
   },
 
   disable2fa: async (payload: Disable2faPayload): Promise<SimpleApiResponse> => {
-    return request('/account/2fa/disable', {
-      method: 'POST',
+    return request('/users/me/two-factor-authentication', {
+      method: 'DELETE',
       body: JSON.stringify(payload),
     })
   },
 
   // Liên kết tài khoản Google
   getGoogleLinkUrl: (): string => {
-    return `${API_BASE_URL}/auth/google?action=link`
+    return `${API_BASE_URL}/auth/google/authorizations?action=link`
   },
 
   unlinkGoogle: async (): Promise<SimpleApiResponse> => {
-    return request('/account/google/unlink', {
-      method: 'POST',
+    return request('/users/me/google-link', {
+      method: 'DELETE',
     })
   },
 
   // Xóa tài khoản vĩnh viễn (Danger Zone)
   sendDeleteAccountOtp: async (): Promise<Send2faOtpApiResponse> => {
-    return request('/account/delete/send-otp', {
+    return request('/users/me/deletion-verifications', {
       method: 'POST',
     })
   },
 
   deleteAccount: async (payload: DeleteAccountPayload): Promise<SimpleApiResponse> => {
-    return request('/account', {
+    return request('/users/me', {
       method: 'DELETE',
       body: JSON.stringify(payload),
     })

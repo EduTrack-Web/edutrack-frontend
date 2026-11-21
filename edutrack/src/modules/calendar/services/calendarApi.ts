@@ -1,4 +1,4 @@
-import { request } from '@/shared/api/httpClient'
+import { API_BASE_URL, request } from '@/shared/api/httpClient'
 import type { ApiSuccess } from '@/modules/auth/models/AuthUser'
 import type {
   CalendarCategory,
@@ -32,13 +32,13 @@ export const calendarApi = {
     }),
 
   setOnlyCategoryVisible: (categoryId: string) =>
-    request<ApiSuccess<{ categories: CalendarCategory[] }>>(`/calendar/categories/${categoryId}/only`, {
-      method: 'PATCH',
+    request<ApiSuccess<{ categories: CalendarCategory[] }>>(`/calendar/categories/${categoryId}/visibility-selection`, {
+      method: 'PUT',
     }),
 
   setAllCategoriesVisibility: (isVisible = true) =>
-    request<ApiSuccess<{ categories: CalendarCategory[] }>>('/calendar/categories/visibility/all', {
-      method: 'PATCH',
+    request<ApiSuccess<{ categories: CalendarCategory[] }>>('/calendar/category-visibility', {
+      method: 'PUT',
       body: JSON.stringify({ isVisible }),
     }),
 
@@ -48,7 +48,7 @@ export const calendarApi = {
     }),
 
   exportCategoryIcs: async (categoryId: string) => {
-    const res = await fetch(`/v1/api/calendar/categories/${categoryId}/export`, {
+    const res = await fetch(`${API_BASE_URL}/calendar/categories/${categoryId}/export-file`, {
       credentials: 'include',
     })
     if (!res.ok) throw new Error('Không thể xuất file lịch')
@@ -64,7 +64,7 @@ export const calendarApi = {
   },
 
   importCategoryIcs: (categoryId: string, icsContent: string) =>
-    request<ApiSuccess<{ importedCount: number }>>(`/calendar/categories/${categoryId}/import`, {
+    request<ApiSuccess<{ importedCount: number }>>(`/calendar/categories/${categoryId}/imports`, {
       method: 'POST',
       body: JSON.stringify({ icsContent }),
     }),
@@ -111,19 +111,19 @@ export const calendarApi = {
   },
 
   toggleTaskComplete: (eventId: string, isCompleted: boolean) =>
-    request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}/toggle-complete`, {
+    request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}/completion`, {
       method: 'PATCH',
       body: JSON.stringify({ isCompleted }),
     }),
 
   respondInvite: (eventId: string, status: 'accepted' | 'declined') =>
-    request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}/respond-invite`, {
-      method: 'POST',
+    request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}/invitations/me`, {
+      method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
 
   leaveEvent: (eventId: string) =>
-    request<ApiSuccess<null>>(`/calendar/events/${eventId}/leave`, {
-      method: 'POST',
+    request<ApiSuccess<null>>(`/calendar/events/${eventId}/attendees/me`, {
+      method: 'DELETE',
     }),
 }

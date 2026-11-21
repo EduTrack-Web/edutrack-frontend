@@ -1,7 +1,7 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
   ?? import.meta.env.VITE_API_URL
-  ?? 'http://localhost:8888/v1/api'
-export const API_ORIGIN = API_BASE_URL.replace(/\/v1\/api\/?$/, '')
+  ?? 'http://localhost:8888/api/v1'
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, '')
 
 export const formatAvatarUrl = (url?: string | null): string | undefined => {
   if (!url) return undefined
@@ -76,7 +76,7 @@ export const ensureCsrfToken = async (force = false): Promise<string> => {
     if (csrfToken) return csrfToken
   }
 
-  const response = await fetch(`${API_BASE_URL}/auth/csrf`, { credentials: 'include' })
+  const response = await fetch(`${API_BASE_URL}/auth/csrf-token`, { credentials: 'include' })
   const body: unknown = await readBody(response)
   if (!response.ok || typeof body !== 'object' || body === null || !('data' in body)) {
     throw new ApiError(response.status, 'CSRF_INITIALIZATION_FAILED', 'Không thể khởi tạo phiên bảo mật.')
@@ -95,8 +95,8 @@ const performSilentRefresh = async (): Promise<boolean> => {
   refreshPromise = (async () => {
     try {
       const token = await ensureCsrfToken()
-      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE_URL}/auth/sessions/current`, {
+        method: 'PATCH',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -108,8 +108,8 @@ const performSilentRefresh = async (): Promise<boolean> => {
         // Nếu bị chặn 403 do CSRF cookie lệch, thử force refresh CSRF rồi gọi lại
         if (response.status === 403) {
           const freshToken = await ensureCsrfToken(true)
-          const retryRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
-            method: 'POST',
+          const retryRes = await fetch(`${API_BASE_URL}/auth/sessions/current`, {
+            method: 'PATCH',
             credentials: 'include',
             headers: {
               'Content-Type': 'application/json',
@@ -132,12 +132,12 @@ const performSilentRefresh = async (): Promise<boolean> => {
 }
 
 const isAuthExempt = (path: string): boolean =>
-  path.startsWith('/auth/login') ||
-  path.startsWith('/auth/refresh') ||
-  path.startsWith('/auth/register') ||
-  path.startsWith('/auth/verify-registration') ||
-  path.startsWith('/auth/forgot-password') ||
-  path.startsWith('/auth/reset-password')
+  path === '/auth/sessions' ||
+  path === '/auth/sessions/current' ||
+  path.startsWith('/auth/registrations') ||
+  path.startsWith('/auth/registration-verifications') ||
+  path.startsWith('/auth/password-reset-requests') ||
+  path.startsWith('/auth/password-resets')
 
 export const request = async <T>(
   path: string,
