@@ -48,13 +48,13 @@ export const chatApi = {
   getGroup: (groupId: string) =>
     request<ApiSuccess<{ group: ChatGroupDetail }>>(`/chat/groups/${groupId}`),
   createGroupInviteLink: (groupId: string) =>
-    request<ApiSuccess<{ invite: ChatGroupInviteResult }>>(`/chat/groups/${groupId}/invite-link`, {
+    request<ApiSuccess<{ invite: ChatGroupInviteResult }>>(`/chat/groups/${groupId}/invite-links`, {
       method: 'POST',
     }),
   previewGroupInvite: (token: string) =>
-    request<ApiSuccess<{ invite: ChatGroupInvitePreview }>>(`/chat/group-invites/${encodeURIComponent(token)}`),
+    request<ApiSuccess<{ invite: ChatGroupInvitePreview }>>(`/chat/group-invitations/${encodeURIComponent(token)}`),
   joinGroupByInvite: (token: string) =>
-    request<ApiSuccess<{ group: ChatGroupSummary }>>(`/chat/group-invites/${encodeURIComponent(token)}/join`, {
+    request<ApiSuccess<{ group: ChatGroupSummary }>>(`/chat/group-invitations/${encodeURIComponent(token)}/membership`, {
       method: 'POST',
     }),
   getChannels: () => request<ApiSuccess<{ channels: ChatChannel[] }>>('/chat/channels'),
@@ -70,9 +70,9 @@ export const chatApi = {
       body: JSON.stringify({ content, clientMessageId }),
     }),
   getFriends: (query = '') =>
-    request<ApiSuccess<{ friends: ChatUserSummary[] }>>(`/chat/friends${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+    request<ApiSuccess<{ friends: ChatUserSummary[] }>>(`/chat/friendships${query ? `?q=${encodeURIComponent(query)}` : ''}`),
   searchUsers: (query: string) =>
-    request<ApiSuccess<{ users: FriendSearchResult[] }>>(`/chat/friends/search?q=${encodeURIComponent(query)}`),
+    request<ApiSuccess<{ users: FriendSearchResult[] }>>(`/chat/friend-candidates?q=${encodeURIComponent(query)}`),
   getFriendRequests: () =>
     request<ApiSuccess<{ requests: FriendRequestItem[] }>>('/chat/friend-requests'),
   sendFriendRequest: (identifier: string) =>
@@ -81,15 +81,15 @@ export const chatApi = {
       body: JSON.stringify({ identifier }),
     }),
   acceptFriendRequest: (requestId: string) =>
-    request<ApiSuccess<{ friend: ChatUserSummary }>>(`/chat/friend-requests/${requestId}/accept`, {
+    request<ApiSuccess<{ friend: ChatUserSummary }>>(`/chat/friend-requests/${requestId}/acceptance`, {
       method: 'POST',
     }),
   declineFriendRequest: (requestId: string) =>
-    request<ApiSuccess<Record<string, never>>>(`/chat/friend-requests/${requestId}/decline`, {
-      method: 'POST',
+    request<ApiSuccess<Record<string, never>>>(`/chat/received-friend-requests/${requestId}`, {
+      method: 'DELETE',
     }),
   revokeFriendRequest: (requestId: string) =>
-    request<ApiSuccess<Record<string, never>>>(`/chat/friend-requests/${requestId}`, {
+    request<ApiSuccess<Record<string, never>>>(`/chat/sent-friend-requests/${requestId}`, {
       method: 'DELETE',
     }),
   getBlockedUsers: () =>

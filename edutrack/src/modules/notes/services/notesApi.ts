@@ -25,7 +25,7 @@ export const notesApi = {
       method: 'POST',
     }),
   duplicateNote: (noteId: string, language: 'vi' | 'en') =>
-    request<ApiSuccess<{ note: NoteDetail }>>(`/notes/${noteId}/duplicate`, {
+    request<ApiSuccess<{ note: NoteDetail }>>(`/notes/${noteId}/copies`, {
       method: 'POST',
       body: JSON.stringify({ language }),
     }),
@@ -37,24 +37,24 @@ export const notesApi = {
     }),
   moveToTrash: (noteId: string) =>
     request<ApiSuccess<{ note: TrashedNoteSummary }>>(`/notes/${noteId}`, { method: 'DELETE' }),
-  getTrashedNotes: () => request<ApiSuccess<{ notes: TrashedNoteSummary[] }>>('/notes/trash'),
+  getTrashedNotes: () => request<ApiSuccess<{ notes: TrashedNoteSummary[] }>>('/trash/notes'),
   restoreNote: (noteId: string) =>
-    request<ApiSuccess<{ note: NoteDetail }>>(`/notes/${noteId}/restore`, { method: 'POST' }),
+    request<ApiSuccess<{ note: NoteDetail }>>(`/trash/notes/${noteId}`, { method: 'PUT' }),
   deletePermanently: (noteId: string) =>
-    request<ApiSuccess<Record<string, never>>>(`/notes/${noteId}/permanent`, { method: 'DELETE' }),
-  getTags: () => request<ApiSuccess<{ tags: NoteTag[] }>>('/notes/tags'),
+    request<ApiSuccess<Record<string, never>>>(`/trash/notes/${noteId}`, { method: 'DELETE' }),
+  getTags: () => request<ApiSuccess<{ tags: NoteTag[] }>>('/note-tags'),
   createTag: (name: string, color: string) =>
-    request<ApiSuccess<{ tag: NoteTag }>>('/notes/tags', {
+    request<ApiSuccess<{ tag: NoteTag }>>('/note-tags', {
       method: 'POST',
       body: JSON.stringify({ name, color }),
     }),
   updateTag: (tagId: string, name: string, color: string) =>
-    request<ApiSuccess<{ tag: NoteTag }>>(`/notes/tags/${tagId}`, {
+    request<ApiSuccess<{ tag: NoteTag }>>(`/note-tags/${tagId}`, {
       method: 'PATCH',
       body: JSON.stringify({ name, color }),
     }),
   deleteTag: (tagId: string) =>
-    request<ApiSuccess<Record<string, never>>>(`/notes/tags/${tagId}`, { method: 'DELETE' }),
+    request<ApiSuccess<Record<string, never>>>(`/note-tags/${tagId}`, { method: 'DELETE' }),
   getNoteTags: (noteId: string) => request<ApiSuccess<{ tags: NoteTag[] }>>(`/notes/${noteId}/tags`),
   setNoteTags: (noteId: string, tagIds: string[]) =>
     request<ApiSuccess<{ tags: NoteTag[] }>>(`/notes/${noteId}/tags`, {
@@ -64,20 +64,20 @@ export const notesApi = {
   removeNoteTag: (noteId: string, tagId: string) =>
     request<ApiSuccess<Record<string, never>>>(`/notes/${noteId}/tags/${tagId}`, { method: 'DELETE' }),
   getCollaborators: (noteId: string) =>
-    request<ApiSuccess<{ owner: NoteShareUser; collaborators: NoteCollaborator[] }>>(`/notes/${noteId}/shares`),
+    request<ApiSuccess<{ owner: NoteShareUser; collaborators: NoteCollaborator[] }>>(`/notes/${noteId}/collaborators`),
   searchShareUsers: (noteId: string, query: string) =>
-    request<ApiSuccess<{ users: NoteShareUser[] }>>(`/notes/${noteId}/share-users?q=${encodeURIComponent(query)}`),
+    request<ApiSuccess<{ users: NoteShareUser[] }>>(`/notes/${noteId}/collaborator-candidates?q=${encodeURIComponent(query)}`),
   setCollaborator: (noteId: string, userId: string, permission: NotePermission) =>
-    request<ApiSuccess<{ collaborator: NoteCollaborator }>>(`/notes/${noteId}/shares`, {
+    request<ApiSuccess<{ collaborator: NoteCollaborator }>>(`/notes/${noteId}/collaborators`, {
       method: 'PUT',
       body: JSON.stringify({ userId, permission }),
     }),
   removeCollaborator: (noteId: string, userId: string) =>
-    request<ApiSuccess<Record<string, never>>>(`/notes/${noteId}/shares/${userId}`, { method: 'DELETE' }),
+    request<ApiSuccess<Record<string, never>>>(`/notes/${noteId}/collaborators/${userId}`, { method: 'DELETE' }),
   uploadImage: (file: File) => {
     const body = new FormData()
     body.append('image', file)
-    return request<ApiSuccess<{ image: NoteImageUploadResult }>>('/notes/images', { method: 'POST', body })
+    return request<ApiSuccess<{ image: NoteImageUploadResult }>>('/note-images', { method: 'POST', body })
   },
 }
 

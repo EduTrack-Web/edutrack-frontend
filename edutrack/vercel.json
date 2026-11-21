@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/v1/api/:path*",
-      "destination": "https://edutrack-backend-1146.onrender.com/v1/api/:path*"
+      "source": "/api/v1/:path*",
+      "destination": "https://edutrack-backend-1146.onrender.com/api/v1/:path*"
     },
     {
       "source": "/(.*)",
