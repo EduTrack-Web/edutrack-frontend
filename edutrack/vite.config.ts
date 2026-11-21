@@ -4,7 +4,6 @@ import babel from '@rolldown/plugin-babel'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 
-// https://vite.dev/config/
 export default defineConfig({
   resolve: {
     alias: {
@@ -16,4 +15,15 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('@tiptap')) return 'vendor-tiptap'
+          if (id.includes('socket.io-client') || id.includes('engine.io-client')) return 'vendor-socket'
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/react-router')) return 'vendor-react'
+        },
+      },
+    },
+  },
 })
