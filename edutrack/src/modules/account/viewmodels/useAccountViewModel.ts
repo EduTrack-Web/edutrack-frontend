@@ -199,6 +199,12 @@ export function useAccountViewModel() {
         errorMessage = 'Không thể liên kết tài khoản Google. Vui lòng thử lại.'
       } else if (oauthError === 'GOOGLE_AUTH_FAILED') {
         errorMessage = 'Xác thực Google không thành công hoặc phiên liên kết đã hết hạn.'
+      } else if (oauthError === 'GOOGLE_AUTH_SESSION_EXPIRED') {
+        errorMessage = 'Phiên xác thực Google đã hết hạn hoặc đã được sử dụng. Vui lòng liên kết lại.'
+      } else if (oauthError === 'GOOGLE_OAUTH_NOT_CONFIGURED') {
+        errorMessage = 'Cấu hình đăng nhập Google chưa hợp lệ. Vui lòng liên hệ quản trị viên.'
+      } else if (oauthError === 'GOOGLE_PROVIDER_UNAVAILABLE') {
+        errorMessage = 'Không thể kết nối với Google lúc này. Vui lòng thử lại sau.'
       }
       showToast(errorMessage, 'error')
       searchParams.delete('oauthError')

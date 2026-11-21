@@ -9,19 +9,23 @@ import { OtpResendButton } from '@/modules/auth/components/OtpResendButton'
 import { useLoginViewModel } from '@/modules/auth/viewmodels/useLoginViewModel'
 import { useToast } from '@/shared/viewmodels/useToast'
 
+const googleErrorMessages: Readonly<Record<string, string>> = {
+  GOOGLE_LINK_REQUIRED: 'Email này đã có tài khoản EduTrack. Vui lòng đăng nhập bằng mật khẩu, sau đó liên kết Google trong trang tài khoản.',
+  GOOGLE_ACCESS_DENIED: 'Bạn đã hủy hoặc từ chối đăng nhập bằng Google.',
+  GOOGLE_AUTH_SESSION_EXPIRED: 'Phiên xác thực Google đã hết hạn hoặc đã được sử dụng. Vui lòng chọn đăng nhập bằng Google lại.',
+  GOOGLE_OAUTH_NOT_CONFIGURED: 'Cấu hình đăng nhập Google chưa hợp lệ. Vui lòng liên hệ quản trị viên.',
+  GOOGLE_PROVIDER_UNAVAILABLE: 'Không thể kết nối với Google lúc này. Vui lòng thử lại sau.',
+}
+
 export function LoginPage() {
   const vm = useLoginViewModel()
   const { showToast } = useToast()
   const oauthHandled = useRef(false)
   const [searchParams] = useSearchParams()
   const oauthError = searchParams.get('oauthError')
-  const oauthMessage = oauthError === 'GOOGLE_LINK_REQUIRED'
-    ? 'Email này đã có tài khoản EduTrack. Vui lòng đăng nhập bằng mật khẩu, sau đó liên kết Google trong trang tài khoản.'
-    : oauthError === 'GOOGLE_ACCESS_DENIED'
-      ? 'Bạn đã hủy hoặc từ chối đăng nhập bằng Google.'
-      : oauthError
-        ? 'Không thể đăng nhập bằng Google lúc này. Vui lòng thử lại.'
-        : undefined
+  const oauthMessage = oauthError
+    ? googleErrorMessages[oauthError] ?? 'Không thể đăng nhập bằng Google lúc này. Vui lòng thử lại.'
+    : undefined
   useEffect(() => {
     if (oauthMessage && !oauthHandled.current) {
       oauthHandled.current = true

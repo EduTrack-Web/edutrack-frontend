@@ -18,6 +18,20 @@ import { notesApi } from '@/modules/notes/services/notesApi'
 
 export type NoteSaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 
+const fetchNoteEditorData = async (noteId: string): Promise<{
+  note: NoteDetail
+  tags: NoteTag[]
+  tagsUnavailable: boolean
+}> => {
+  const noteResult = await notesApi.getNote(noteId)
+  try {
+    const tagsResult = await notesApi.getNoteTags(noteId)
+    return { note: noteResult.data.note, tags: tagsResult.data.tags, tagsUnavailable: false }
+  } catch {
+    return { note: noteResult.data.note, tags: [], tagsUnavailable: true }
+  }
+}
+
 export function useNoteEditorViewModel() {
   const { noteId = '' } = useParams()
   const navigate = useNavigate()
@@ -50,6 +64,17 @@ export function useNoteEditorViewModel() {
   const autosaveRef = useRef(new NoteAutosaveTracker())
   const lastErrorSnapshotRef = useRef<string | null>(null)
 
+  const applyLoadedNote = useCallback((loaded: NoteDetail, tags: NoteTag[]) => {
+    const draft = { title: loaded.title, content: loaded.content, background: loaded.background }
+    setNote(loaded)
+    setTitle(loaded.title)
+    setContent(loaded.content)
+    setBackground(loaded.background)
+    setNoteTags(tags)
+    autosaveRef.current.initialize(draft)
+    setSaveStatus('saved')
+  }, [])
+
   const loadNote = useCallback(async () => {
     if (!noteId) {
       setLoadError('Không tìm thấy ghi chú.')
@@ -59,22 +84,17 @@ export function useNoteEditorViewModel() {
     setIsLoading(true)
     setLoadError(null)
     try {
-      const [result, tagsResult] = await Promise.all([notesApi.getNote(noteId), notesApi.getNoteTags(noteId)])
-      const loaded = result.data.note
-      const draft = { title: loaded.title, content: loaded.content, background: loaded.background }
-      setNote(loaded)
-      setTitle(loaded.title)
-      setContent(loaded.content)
-      setBackground(loaded.background)
-      setNoteTags(tagsResult.data.tags)
-      autosaveRef.current.initialize(draft)
-      setSaveStatus('saved')
+      const result = await fetchNoteEditorData(noteId)
+      applyLoadedNote(result.note, result.tags)
+      if (result.tagsUnavailable) {
+        showToast('Ghi chú đã được mở nhưng chưa thể tải danh sách thẻ.', 'warning')
+      }
     } catch (error) {
       setLoadError(error instanceof ApiError ? error.message : 'Không thể tải ghi chú.')
     } finally {
       setIsLoading(false)
     }
-  }, [noteId])
+  }, [applyLoadedNote, noteId, showToast])
 
   useEffect(() => {
     let active = true
@@ -87,25 +107,20 @@ export function useNoteEditorViewModel() {
       })
       return () => { active = false }
     }
-    void Promise.all([notesApi.getNote(noteId), notesApi.getNoteTags(noteId)])
-      .then(([result, tagsResult]) => {
+    void fetchNoteEditorData(noteId)
+      .then((result) => {
         if (!active) return
-        const loaded = result.data.note
-        const draft = { title: loaded.title, content: loaded.content, background: loaded.background }
-        setNote(loaded)
-        setTitle(loaded.title)
-        setContent(loaded.content)
-        setBackground(loaded.background)
-        setNoteTags(tagsResult.data.tags)
-        autosaveRef.current.initialize(draft)
-        setSaveStatus('saved')
+        applyLoadedNote(result.note, result.tags)
+        if (result.tagsUnavailable) {
+          showToast('Ghi chú đã được mở nhưng chưa thể tải danh sách thẻ.', 'warning')
+        }
       })
       .catch((error: unknown) => {
         if (active) setLoadError(error instanceof ApiError ? error.message : 'Không thể tải ghi chú.')
       })
       .finally(() => { if (active) setIsLoading(false) })
     return () => { active = false }
-  }, [noteId])
+  }, [applyLoadedNote, noteId, showToast])
 
   const markChanged = useCallback((nextDraft: NoteDraft) => {
     if (note && !note.access.canEdit) return
