@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   CalendarCategory,
   CalendarEvent,
@@ -16,6 +16,7 @@ import type {
 } from '../models/calendar.types'
 import { validateEventForm } from '../models/calendarValidation'
 import { calendarApi } from '../services/calendarApi'
+import { useAuth } from '@/modules/auth/viewmodels/useAuth'
 
 export const EXTENDED_CALENDAR_COLORS = [
   '#2563EB',
@@ -127,6 +128,31 @@ function toCalendarInstant(value: string, timeZone?: string): string {
   return matches.length ? new Date(Math.min(...matches)).toISOString() : ''
 }
 
+function formatInstantToWallTime(isoString: string, timeZone: string): { date: string; time: string } | null {
+  const d = new Date(isoString)
+  if (!Number.isFinite(d.getTime())) return null
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+    const parts = Object.fromEntries(
+      formatter.formatToParts(d).map(({ type, value }) => [type, value]),
+    )
+    return {
+      date: `${parts.year}-${parts.month}-${parts.day}`,
+      time: `${parts.hour}:${parts.minute}`,
+    }
+  } catch {
+    return null
+  }
+}
+
 export function useEventModalViewModel({
   isOpen,
   initialEvent,
@@ -135,7 +161,20 @@ export function useEventModalViewModel({
   onClose,
   onSaved,
 }: UseEventModalViewModelProps) {
+  const { user } = useAuth()
   const defaults = getInitialDateStrings()
+
+  const isOwner = !initialEvent || !initialEvent.userId || (initialEvent.userId === user?.id)
+  const creatorEmail = initialEvent?.creatorEmail || initialEvent?.creator?.email || ''
+  const currentGuest = initialEvent?.guests?.find(
+    (g) => Boolean(user?.email && g.email.toLowerCase() === user.email.toLowerCase()),
+  )
+  const isGuest = Boolean(!isOwner && currentGuest)
+  const canModify = isOwner || Boolean(currentGuest?.canModify)
+  const canInviteOthers = isOwner || Boolean(currentGuest?.canInviteOthers ?? true)
+  const canSeeGuestList = isOwner || Boolean(currentGuest?.canSeeGuestList ?? true)
+
+  const [guestStatus, setGuestStatus] = useState<'pending' | 'accepted' | 'declined'>('pending')
 
   const [entryType, setEntryType] = useState<EntryType>('event')
   const [title, setTitle] = useState('')
@@ -175,7 +214,6 @@ export function useEventModalViewModel({
   const [checklist, setChecklist] = useState<SubtaskItem[]>([])
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
 
-  // Múi giờ tùy chỉnh của sự kiện & Khách mời
   const [timeZone, setTimeZone] = useState('')
   const [guests, setGuests] = useState<EventGuest[]>([])
   const [newGuestEmail, setNewGuestEmail] = useState('')
@@ -188,6 +226,8 @@ export function useEventModalViewModel({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
+  const [guestToRemove, setGuestToRemove] = useState<string | null>(null)
   const [deleteRecurringMode, setDeleteRecurringMode] = useState<'this' | 'following' | 'all'>('this')
   const [generalError, setGeneralError] = useState<string | null>(null)
 
@@ -196,21 +236,37 @@ export function useEventModalViewModel({
     (initialEvent as unknown as { _isOccurrence?: boolean })?._isOccurrence,
   )
 
+  const lastInitKeyRef = useRef<string | null>(null)
+
   useEffect(() => {
     let active = true
     const timer = window.setTimeout(() => {
       if (!active) return
 
       if (!isOpen) {
+        lastInitKeyRef.current = null
         setErrors({})
         setGeneralError(null)
         setIsColorPickerOpen(false)
         setIsCustomRecurrenceOpen(false)
         setShowDeleteConfirm(false)
+        setShowLeaveConfirm(false)
+        setGuestToRemove(null)
         setIsDeleting(false)
         setDeleteRecurringMode('this')
         return
       }
+
+      const baseEventId =
+        (initialEvent as unknown as { _baseEventId?: string })?._baseEventId || initialEvent?.id
+      const currentInitKey = initialEvent
+        ? `edit:${baseEventId}:${initialEvent.updatedAt || ''}`
+        : `new:${initialDate ? initialDate.toISOString() : ''}`
+
+      if (lastInitKeyRef.current === currentInitKey) {
+        return
+      }
+      lastInitKeyRef.current = currentInitKey
 
       if (initialEvent) {
         const start = new Date(initialEvent.startDate)
@@ -227,7 +283,21 @@ export function useEventModalViewModel({
         setIsAllDay(initialEvent.isAllDay)
         const initialCat = categories.find((c) => c.id === initialEvent.calendarId)
         setTimeZone(initialEvent.timeZone || initialCat?.settings?.timeZone || 'Asia/Ho_Chi_Minh')
-        setGuests(initialEvent.guests ?? [])
+        const initialGuests = initialEvent.guests ?? []
+        setGuests(initialGuests)
+        if (initialGuests.length > 0) {
+          setGuestCanModify(initialGuests.some((g) => g.canModify))
+          setGuestCanInviteOthers(initialGuests.every((g) => g.canInviteOthers !== false))
+          setGuestCanSeeGuestList(initialGuests.every((g) => g.canSeeGuestList !== false))
+        } else {
+          setGuestCanModify(false)
+          setGuestCanInviteOthers(true)
+          setGuestCanSeeGuestList(true)
+        }
+        const foundGuest = initialEvent.guests?.find(
+          (g) => Boolean(user?.email && g.email.toLowerCase() === user.email.toLowerCase()),
+        )
+        setGuestStatus(foundGuest?.status || 'pending')
         setNewGuestEmail('')
         setGuestEmailError(null)
 
@@ -337,6 +407,7 @@ export function useEventModalViewModel({
         setVisibility('default')
         setTimeZone(defaultCalendar?.settings?.timeZone || 'Asia/Ho_Chi_Minh')
         setGuests([])
+        setGuestStatus('pending')
         setNewGuestEmail('')
         setGuestEmailError(null)
         setGuestCanModify(false)
@@ -364,7 +435,7 @@ export function useEventModalViewModel({
       active = false
       window.clearTimeout(timer)
     }
-  }, [isOpen, initialEvent, initialDate, categories])
+  }, [isOpen, initialEvent, initialDate, categories, user?.email])
 
   const clearError = (field: string) => {
     setErrors((prev) => {
@@ -386,7 +457,11 @@ export function useEventModalViewModel({
   const handleCalendarSelect = (id: string) => {
     setCalendarId(id)
     clearError('calendarId')
-    const settings = categories.find((category) => category.id === id)?.settings
+    const newCategory = categories.find((category) => category.id === id)
+    if (newCategory) {
+      setColor(newCategory.color || '')
+    }
+    const settings = newCategory?.settings
     if (settings?.timeZone && !initialEvent) {
       setTimeZone(settings.timeZone)
     }
@@ -404,23 +479,74 @@ export function useEventModalViewModel({
     }
   }
 
-  // Quản lý khách mời của sự kiện
+  const handleTimeZoneChange = (newTz: string) => {
+    const oldTz = timeZone || selectedCategory?.settings?.timeZone || 'Asia/Ho_Chi_Minh'
+    setTimeZone(newTz)
+    if (!newTz || newTz === oldTz) return
+
+    if (startDate && startTime) {
+      const startIso = toCalendarInstant(`${startDate}T${startTime}:00`, oldTz)
+      if (startIso) {
+        const converted = formatInstantToWallTime(startIso, newTz)
+        if (converted) {
+          setStartDate(converted.date)
+          setStartTime(converted.time)
+        }
+      }
+    }
+
+    if (endDate && endTime) {
+      const endIso = toCalendarInstant(`${endDate}T${endTime}:00`, oldTz)
+      if (endIso) {
+        const converted = formatInstantToWallTime(endIso, newTz)
+        if (converted) {
+          setEndDate(converted.date)
+          setEndTime(converted.time)
+        }
+      }
+    }
+
+    if (deadlineDate && deadlineTime) {
+      const deadlineIso = toCalendarInstant(`${deadlineDate}T${deadlineTime}:00`, oldTz)
+      if (deadlineIso) {
+        const converted = formatInstantToWallTime(deadlineIso, newTz)
+        if (converted) {
+          setDeadlineDate(converted.date)
+          setDeadlineTime(converted.time)
+        }
+      }
+    }
+  }
+
   const handleAddGuest = () => {
     const trimmed = newGuestEmail.trim().toLowerCase()
     if (!trimmed) return
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(trimmed)) {
-      setGuestEmailError('Email không hợp lệ')
+    const usernameRegex = /^[a-zA-Z0-9._-]{3,40}$/
+    if (!emailRegex.test(trimmed) && !usernameRegex.test(trimmed)) {
+      setGuestEmailError('Vui lòng nhập email hoặc username hợp lệ')
       return
     }
-    if (guests.some((g) => g.email === trimmed)) {
+    if (user?.email && trimmed === user.email.toLowerCase()) {
+      setGuestEmailError('Bạn không thể tự mời chính mình')
+      return
+    }
+    if (creatorEmail && trimmed === creatorEmail.trim().toLowerCase()) {
+      setGuestEmailError('Không thể mời lại người tạo sự kiện')
+      return
+    }
+    if (!isOwner && initialEvent?.creator?.email && trimmed === initialEvent.creator.email.trim().toLowerCase()) {
+      setGuestEmailError('Không thể mời lại người tạo sự kiện')
+      return
+    }
+    if (guests.some((g) => g.email.trim().toLowerCase() === trimmed)) {
       setGuestEmailError('Khách này đã được thêm vào danh sách')
       return
     }
     const newGuest: EventGuest = {
       email: trimmed,
-      role: guestCanModify ? 'editor' : 'viewer',
-      canModify: guestCanModify,
+      role: isOwner && guestCanModify ? 'editor' : 'viewer',
+      canModify: isOwner ? guestCanModify : false,
       canInviteOthers: guestCanInviteOthers,
       canSeeGuestList: guestCanSeeGuestList,
       status: 'pending',
@@ -430,8 +556,116 @@ export function useEventModalViewModel({
     setGuestEmailError(null)
   }
 
+  const handleToggleAllGuestCanModify = (checked: boolean) => {
+    setGuestCanModify(checked)
+    setGuests((prev) =>
+      prev.map((g) => ({
+        ...g,
+        canModify: checked,
+        role: checked ? 'editor' : 'viewer',
+      })),
+    )
+  }
+
+  const handleToggleAllGuestCanInviteOthers = (checked: boolean) => {
+    setGuestCanInviteOthers(checked)
+    setGuests((prev) =>
+      prev.map((g) => ({
+        ...g,
+        canInviteOthers: checked,
+      })),
+    )
+  }
+
+  const handleToggleAllGuestCanSeeGuestList = (checked: boolean) => {
+    setGuestCanSeeGuestList(checked)
+    setGuests((prev) =>
+      prev.map((g) => ({
+        ...g,
+        canSeeGuestList: checked,
+      })),
+    )
+  }
+
+  const handleToggleGuestCanModify = (email: string) => {
+    setGuests((prev) =>
+      prev.map((g) => {
+        if (g.email.trim().toLowerCase() === email.trim().toLowerCase()) {
+          const nextCanModify = !g.canModify
+          return {
+            ...g,
+            canModify: nextCanModify,
+            role: nextCanModify ? 'editor' : 'viewer',
+          }
+        }
+        return g
+      }),
+    )
+  }
+
   const handleRemoveGuest = (email: string) => {
     setGuests((prev) => prev.filter((g) => g.email !== email))
+  }
+
+  const handleRequestRemoveGuest = (email: string) => {
+    setGuestToRemove(email)
+  }
+
+  const handleConfirmRemoveGuest = () => {
+    if (guestToRemove) {
+      handleRemoveGuest(guestToRemove)
+      setGuestToRemove(null)
+    }
+  }
+
+  const handleCancelRemoveGuest = () => {
+    setGuestToRemove(null)
+  }
+
+  const handleConfirmLeaveEvent = async () => {
+    setShowLeaveConfirm(false)
+    await handleLeaveEvent()
+  }
+
+  const handleRespondInvite = async (status: 'accepted' | 'declined') => {
+    if (!initialEvent) return
+    try {
+      setIsSubmitting(true)
+      const realEventId =
+        (initialEvent as unknown as { _baseEventId?: string })._baseEventId || initialEvent.id
+      await calendarApi.respondInvite(realEventId, status)
+      setGuestStatus(status)
+      setGuests((prev) =>
+        prev.map((g) =>
+          user?.email && g.email.toLowerCase() === user.email.toLowerCase()
+            ? { ...g, status }
+            : g,
+        ),
+      )
+      onSaved()
+      window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
+    } catch (err) {
+      setGeneralError(err instanceof Error ? err.message : 'Không thể phản hồi lời mời')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleLeaveEvent = async () => {
+    if (!initialEvent) return
+    try {
+      setIsDeleting(true)
+      const realEventId =
+        (initialEvent as unknown as { _baseEventId?: string })._baseEventId || initialEvent.id
+      await calendarApi.leaveEvent(realEventId)
+      onSaved()
+      window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
+      onClose()
+    } catch (err) {
+      setGeneralError(err instanceof Error ? err.message : 'Không thể rời sự kiện')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const selectedCategory = categories.find((c) => c.id === calendarId)
@@ -613,6 +847,31 @@ export function useEventModalViewModel({
       }
     }
 
+    const submissionGuests = [...guests]
+    const pendingGuestInput = newGuestEmail.trim().toLowerCase()
+    if (pendingGuestInput) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const usernameRegex = /^[a-zA-Z0-9._-]{3,40}$/
+      if (emailRegex.test(pendingGuestInput) || usernameRegex.test(pendingGuestInput)) {
+        if (
+          (!user?.email || pendingGuestInput !== user.email.toLowerCase()) &&
+          (!creatorEmail || pendingGuestInput !== creatorEmail.toLowerCase()) &&
+          !submissionGuests.some((g) => g.email.toLowerCase() === pendingGuestInput)
+        ) {
+          submissionGuests.push({
+            email: pendingGuestInput,
+            role: isOwner && guestCanModify ? 'editor' : 'viewer',
+            canModify: isOwner ? guestCanModify : false,
+            canInviteOthers: guestCanInviteOthers,
+            canSeeGuestList: guestCanSeeGuestList,
+            status: 'pending',
+          })
+          setGuests(submissionGuests)
+          setNewGuestEmail('')
+        }
+      }
+    }
+
     const payload: CreateEventInput = {
       title,
       entryType,
@@ -629,7 +888,7 @@ export function useEventModalViewModel({
       availability,
       visibility,
       timeZone: activeTimeZone,
-      guests,
+      guests: submissionGuests,
       checklist: entryType === 'task' ? checklist : [],
       reminders: convertedReminders,
       recurrence: recurrencePayload,
@@ -652,11 +911,14 @@ export function useEventModalViewModel({
     try {
       setIsSubmitting(true)
       if (initialEvent) {
-        await calendarApi.updateEvent(initialEvent.id, payload)
+        const realEventId =
+          (initialEvent as unknown as { _baseEventId?: string })._baseEventId || initialEvent.id
+        await calendarApi.updateEvent(realEventId, payload)
       } else {
         await calendarApi.createEvent(payload)
       }
       onSaved()
+      window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
       onClose()
     } catch (err: unknown) {
       const maybeErr = err as { fieldErrors?: Record<string, string>; message?: string }
@@ -713,9 +975,11 @@ export function useEventModalViewModel({
     activeColor,
     timeZone,
     setTimeZone,
+    handleTimeZoneChange,
     guests,
     newGuestEmail,
     setNewGuestEmail,
+    creatorEmail,
     guestEmailError,
     guestCanModify,
     setGuestCanModify,
@@ -723,6 +987,10 @@ export function useEventModalViewModel({
     setGuestCanInviteOthers,
     guestCanSeeGuestList,
     setGuestCanSeeGuestList,
+    handleToggleAllGuestCanModify,
+    handleToggleAllGuestCanInviteOthers,
+    handleToggleAllGuestCanSeeGuestList,
+    handleToggleGuestCanModify,
     handleAddGuest,
     handleRemoveGuest,
     inputTimeZone: timeZone,
@@ -790,7 +1058,24 @@ export function useEventModalViewModel({
     showDeleteConfirm,
     setShowDeleteConfirm,
     handleDeleteEvent,
+    showLeaveConfirm,
+    setShowLeaveConfirm,
+    guestToRemove,
+    handleRequestRemoveGuest,
+    handleConfirmRemoveGuest,
+    handleCancelRemoveGuest,
+    handleConfirmLeaveEvent,
     generalError,
     handleSubmit,
+    isOwner,
+    isGuest,
+    currentGuest,
+    guestStatus,
+    setGuestStatus,
+    canModify,
+    canInviteOthers,
+    canSeeGuestList,
+    handleRespondInvite,
+    handleLeaveEvent,
   }
 }

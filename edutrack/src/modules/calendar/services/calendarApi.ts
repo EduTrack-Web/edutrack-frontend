@@ -115,4 +115,15 @@ export const calendarApi = {
       method: 'PATCH',
       body: JSON.stringify({ isCompleted }),
     }),
+
+  respondInvite: (eventId: string, status: 'accepted' | 'declined') =>
+    request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}/respond-invite`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    }),
+
+  leaveEvent: (eventId: string) =>
+    request<ApiSuccess<null>>(`/calendar/events/${eventId}/leave`, {
+      method: 'POST',
+    }),
 }

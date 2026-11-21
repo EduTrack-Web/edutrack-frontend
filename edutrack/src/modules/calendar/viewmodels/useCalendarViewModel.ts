@@ -24,9 +24,11 @@ export function useCalendarViewModel() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CalendarCategory | null>(null)
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isSilent = false) => {
     try {
-      setIsLoading(true)
+      if (!isSilent) {
+        setIsLoading(true)
+      }
       const [catRes, evRes] = await Promise.all([
         calendarApi.getCategories(),
         calendarApi.getEvents(),
@@ -48,18 +50,27 @@ export function useCalendarViewModel() {
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu lịch:', err)
     } finally {
-      setIsLoading(false)
+      if (!isSilent) {
+        setIsLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
     let active = true
     const timer = window.setTimeout(() => {
-      if (active) void fetchData()
+      if (active) void fetchData(false)
     }, 0)
+
+    const handleRefresh = () => {
+      void fetchData(true)
+    }
+    window.addEventListener('edutrack-calendar-refresh', handleRefresh)
+
     return () => {
       active = false
       window.clearTimeout(timer)
+      window.removeEventListener('edutrack-calendar-refresh', handleRefresh)
     }
   }, [fetchData])
 
@@ -101,7 +112,7 @@ export function useCalendarViewModel() {
       await calendarApi.setAllCategoriesVisibility(true)
     } catch (err) {
       console.error('Lỗi khi hiển thị tất cả các lịch:', err)
-      fetchData()
+      fetchData(true)
     }
   }
 
@@ -120,7 +131,7 @@ export function useCalendarViewModel() {
       await calendarApi.updateCategory(categoryId, { color })
     } catch (err) {
       console.error('Lỗi khi đổi màu lịch:', err)
-      fetchData()
+      fetchData(true)
     }
   }
 
@@ -130,7 +141,7 @@ export function useCalendarViewModel() {
       await calendarApi.deleteCategory(categoryId)
       setSelectedCategoryIds((prev) => prev.filter((id) => id !== categoryId))
       setCategories((prev) => prev.filter((c) => c.id !== categoryId))
-      fetchData()
+      fetchData(true)
     } catch (err) {
       console.error('Lỗi khi xóa lịch:', err)
     }
@@ -180,6 +191,14 @@ export function useCalendarViewModel() {
 
   const handleOpenEditEvent = (event: CalendarEvent) => {
     const eventWithMeta = event as CalendarEvent & { _isOccurrence?: boolean; _baseEventId?: string }
+    const baseId = eventWithMeta._baseEventId || event.id
+
+    void calendarApi.getEventById(baseId).then((res) => {
+      if (res.data?.event) {
+        setEditingEvent(res.data.event)
+      }
+    }).catch(() => {})
+
     if (eventWithMeta._isOccurrence && eventWithMeta._baseEventId) {
       const baseEvent = events.find((e) => e.id === eventWithMeta._baseEventId)
       if (baseEvent) {
@@ -224,7 +243,7 @@ export function useCalendarViewModel() {
       await calendarApi.toggleTaskComplete(baseId, !currentStatus)
     } catch (err) {
       console.error('Lỗi khi toggle task:', err)
-      fetchData()
+      fetchData(true)
     }
   }
 
@@ -236,7 +255,7 @@ export function useCalendarViewModel() {
       await calendarApi.deleteEvent(baseId)
     } catch (err) {
       console.error('Lỗi khi xóa sự kiện:', err)
-      fetchData()
+      fetchData(true)
     }
   }
 
@@ -245,9 +264,11 @@ export function useCalendarViewModel() {
   const expandedEvents = expandAllRecurringEvents(events, windowStart, windowEnd)
 
   const archivedIds = new Set(categories.filter((category) => category.settings?.archived).map((category) => category.id))
+  const userCategoryIds = new Set(categories.map((category) => category.id))
+
   const displayedEvents = expandedEvents.filter((e) => {
     if (e.calendarId && archivedIds.has(e.calendarId)) return false
-    if (e.calendarId && !selectedCategoryIds.includes(e.calendarId)) {
+    if (e.calendarId && userCategoryIds.has(e.calendarId) && !selectedCategoryIds.includes(e.calendarId)) {
       return false
     }
     if (activeFilterTab !== 'all' && e.entryType !== activeFilterTab) {

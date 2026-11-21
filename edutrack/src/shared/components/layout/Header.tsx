@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '@/modules/auth/viewmodels/useAuth'
+import { useNotifications } from '@/modules/notifications/viewmodels/useNotifications'
 import { formatAvatarUrl } from '@/shared/api/httpClient'
 import { useToast } from '@/shared/viewmodels/useToast'
 import { ConfirmLogoutModal } from '@/shared/components/ConfirmLogoutModal'
@@ -15,6 +16,19 @@ const initials = (name: string): string =>
     .slice(-2)
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'U'
+
+const formatTimeAgo = (dateStr: string): string => {
+  const diffMs = Date.now() - new Date(dateStr).getTime()
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 60) return 'Vừa xong'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} phút trước`
+  const diffHours = Math.floor(diffMin / 60)
+  if (diffHours < 24) return `${diffHours} giờ trước`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 7) return `${diffDays} ngày trước`
+  return new Date(dateStr).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+}
 
 const getUserTypeLabel = (type?: string): string => {
   switch (type) {
@@ -36,15 +50,10 @@ interface HeaderProps {
   onOpenSidebar: () => void
 }
 
-interface NotificationItem {
-  id: string
-  title: string
-  time: string
-  unread: boolean
-}
-
 export function Header({ onOpenSidebar }: HeaderProps) {
   const { user, logout } = useAuth()
+  const { notifications, unreadCount, refresh, markAsRead, markAllAsRead, respondInvitation } =
+    useNotifications()
   const { showToast } = useToast()
   const navigate = useNavigate()
 
@@ -56,7 +65,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
 
-  // Đóng dropdown khi click ra ngoài
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node
@@ -72,16 +80,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Thông báo mẫu thời gian thực
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: '1', title: 'Hạn nộp Báo cáo đồ án tuần 8', time: '17:00 hôm nay', unread: true },
-    { id: '2', title: 'Thực hành Lập trình Web - Phòng A3-201', time: '07:30 ngày mai', unread: true },
-    { id: '3', title: 'Nhắc nhở họp nhóm đề tài EduTrack', time: '20:00 tối mai', unread: false },
-  ])
-
-  const unreadCount = notifications.filter((n) => n.unread).length
-
-  // Ngày hiện tại định dạng Việt Nam
   const todayText = new Date().toLocaleDateString('vi-VN', {
     weekday: 'long',
     day: 'numeric',
@@ -102,15 +100,9 @@ export function Header({ onOpenSidebar }: HeaderProps) {
     }
   }
 
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })))
-    showToast('Đã đánh dấu đã đọc tất cả thông báo.', 'info')
-  }
-
   return (
     <>
       <header className="glass-header sticky top-3 z-30 mx-3 mt-3 flex min-h-16 items-center rounded-[22px] px-4 sm:mx-4 sm:px-6">
-        {/* Nút mở Sidebar trên mobile */}
         <button
           aria-label="Mở thanh điều hướng"
           className="mr-3 grid size-11 shrink-0 place-items-center rounded-2xl text-palette-950 transition hover:bg-palette-100/70 dark:text-palette-100 dark:hover:bg-white/10 md:hidden"
@@ -120,7 +112,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
           <Icon name="menu" />
         </button>
 
-        {/* Thông tin chào đón & Ngày tháng thực tế */}
         <div className="hidden min-w-0 sm:block">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-extrabold text-palette-950 dark:text-white">
@@ -135,9 +126,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
           </p>
         </div>
 
-        {/* Cụm điều khiển bên phải */}
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          {/* Chuông thông báo */}
           <div className="relative" ref={notifRef}>
             <button
               aria-expanded={notifOpen}
@@ -145,7 +134,13 @@ export function Header({ onOpenSidebar }: HeaderProps) {
               className="glass-icon-button relative size-11"
               type="button"
               onClick={() => {
-                setNotifOpen((prev) => !prev)
+                setNotifOpen((prev) => {
+                  const nextState = !prev
+                  if (nextState) {
+                    void refresh()
+                  }
+                  return nextState
+                })
                 setMenuOpen(false)
               }}
             >
@@ -157,7 +152,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
               )}
             </button>
 
-            {/* Dropdown Thông báo */}
             {notifOpen && (
               <div className="glass-panel absolute right-0 top-14 w-80 max-w-[calc(100vw-2rem)] rounded-2xl p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between border-b border-palette-200/70 pb-2.5 px-2 dark:border-white/10">
@@ -175,30 +169,93 @@ export function Header({ onOpenSidebar }: HeaderProps) {
                   )}
                 </div>
 
-                <div className="mt-2 divide-y divide-palette-200/50 dark:divide-white/5">
-                  {notifications.map((item) => (
-                    <div
-                      className={`flex items-start gap-3 p-2.5 rounded-xl transition ${
-                        item.unread ? 'bg-palette-100/60 dark:bg-white/5' : 'hover:bg-black/5 dark:hover:bg-white/5'
-                      }`}
-                      key={item.id}
-                    >
-                      <span className="mt-1 grid size-7 shrink-0 place-items-center rounded-lg bg-palette-200/80 text-palette-700 dark:bg-white/10 dark:text-palette-200">
-                        <Icon className="size-3.5" name="clock" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-palette-950 dark:text-white">
-                          {item.title}
-                        </p>
-                        <p className="text-[10px] text-palette-700 dark:text-palette-200">
-                          {item.time}
-                        </p>
-                      </div>
-                      {item.unread && (
-                        <span className="mt-2 size-1.5 shrink-0 rounded-full bg-palette-700 dark:bg-palette-200" />
-                      )}
+                <div className="mt-2 max-h-80 overflow-y-auto divide-y divide-palette-200/50 dark:divide-white/5">
+                  {notifications.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-palette-600 dark:text-palette-300">
+                      Hiện tại bạn không có thông báo nào.
                     </div>
-                  ))}
+                  ) : (
+                    notifications.map((item) => {
+                      const isCalendarNotif = item.type.startsWith('event_') || Boolean(item.eventId)
+                      return (
+                        <div
+                          className={`flex flex-col gap-2 p-2.5 rounded-xl cursor-pointer transition ${
+                            !item.isRead ? 'bg-palette-100/60 dark:bg-white/5' : 'hover:bg-black/5 dark:hover:bg-white/5'
+                          }`}
+                          key={item.id}
+                          onClick={() => {
+                            if (!item.isRead) void markAsRead(item.id)
+                            setNotifOpen(false)
+                            if (item.link) {
+                              navigate(item.link)
+                            } else if (isCalendarNotif) {
+                              navigate('/calendar')
+                              window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
+                            }
+                          }}
+                        >
+                        <div className="flex items-start gap-2.5">
+                          <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-palette-200/80 text-palette-700 dark:bg-white/10 dark:text-palette-200">
+                            <Icon
+                              className="size-3.5"
+                              name={item.type === 'event_invitation' ? 'account' : 'clock'}
+                            />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-palette-950 dark:text-white leading-tight">
+                              {item.title}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-palette-800 dark:text-palette-200 line-clamp-2">
+                              {item.message}
+                            </p>
+                            <p className="mt-1 text-[10px] text-palette-500 dark:text-palette-400">
+                              {formatTimeAgo(item.createdAt)}
+                            </p>
+                          </div>
+                          {!item.isRead && (
+                            <span className="mt-1 size-2 shrink-0 rounded-full bg-blue-600 dark:bg-blue-400" />
+                          )}
+                        </div>
+
+                        {item.type === 'event_invitation' && item.eventId && (
+                          <div className="ml-9 flex items-center gap-2 pt-1">
+                            {item.metadata?.status === 'accepted' ? (
+                              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                ✓ Đã chấp nhận tham gia
+                              </span>
+                            ) : item.metadata?.status === 'declined' ? (
+                              <span className="text-[11px] font-bold text-rose-500">
+                                ✕ Đã từ chối lời mời
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-blue-700 active:scale-95"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void respondInvitation(item.id, item.eventId!, 'accepted')
+                                  }}
+                                >
+                                  Tham gia
+                                </button>
+                                <button
+                                  className="rounded-lg border border-palette-300 bg-white/50 px-2.5 py-1 text-[11px] font-semibold text-palette-700 transition hover:bg-palette-200/60 dark:border-white/10 dark:bg-white/10 dark:text-palette-200"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void respondInvitation(item.id, item.eventId!, 'declined')
+                                  }}
+                                >
+                                  Từ chối
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }))}
                 </div>
 
                 <div className="mt-2 border-t border-palette-200/70 pt-2 text-center dark:border-white/10">
@@ -214,10 +271,8 @@ export function Header({ onOpenSidebar }: HeaderProps) {
             )}
           </div>
 
-          {/* Cụm chuyển đổi giao diện Dark/Light */}
           <HeaderControls />
 
-          {/* Menu Tài khoản */}
           <div className="relative" ref={menuRef}>
             <button
               aria-expanded={menuOpen}
@@ -241,7 +296,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
               )}
             </button>
 
-            {/* Dropdown Menu tài khoản */}
             {menuOpen && (
               <div className="glass-panel absolute right-0 top-14 w-60 rounded-2xl p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                 <div className="border-b border-palette-200/70 px-3 py-3 dark:border-white/10">
@@ -296,7 +350,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         </div>
       </header>
 
-      {/* Modal Xác nhận đăng xuất (UC-03) */}
       <ConfirmLogoutModal
         isLoading={isLoggingOut}
         isOpen={isLogoutModalOpen}
