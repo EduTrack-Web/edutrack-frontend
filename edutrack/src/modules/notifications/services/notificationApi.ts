@@ -7,13 +7,15 @@ export const notificationApi = {
     request<ApiSuccess<{ notifications: NotificationItem[]; unreadCount: number }>>('/notifications'),
 
   markAsRead: (notificationId: string) =>
-    request<ApiSuccess<{ notification: NotificationItem }>>(`/notifications/${notificationId}/read`, {
+    request<ApiSuccess<{ notification: NotificationItem }>>(`/notifications/${notificationId}`, {
       method: 'PATCH',
+      body: JSON.stringify({ isRead: true }),
     }),
 
   markAllAsRead: () =>
-    request<ApiSuccess<null>>('/notifications/read-all', {
+    request<ApiSuccess<null>>('/notifications', {
       method: 'PATCH',
+      body: JSON.stringify({ isRead: true }),
     }),
 
   deleteNotification: (notificationId: string) =>

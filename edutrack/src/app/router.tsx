@@ -1,19 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom'
 
-import { ForgotPasswordPage } from '@/modules/auth/views/ForgotPasswordPage'
-import { LoginPage } from '@/modules/auth/views/LoginPage'
-import { RegisterPage } from '@/modules/auth/views/RegisterPage'
-import { AccountPage } from '@/modules/account/views/AccountPage'
-import { DashboardPage } from '@/modules/dashboard/views/DashboardPage'
-import { CalendarPage } from '@/modules/calendar/views/CalendarPage'
-import { NotesPage } from '@/modules/notes/views/NotesPage'
-import { ChatPage } from '@/modules/chat/views/ChatPage'
-import { ChatHomePage } from '@/modules/chat/views/ChatHomePage'
-import { ChatLayout } from '@/modules/chat/views/ChatLayout'
-import { ChatRequestsPage } from '@/modules/chat/views/ChatRequestsPage'
-import { ChatSettingsPage } from '@/modules/chat/views/ChatSettingsPage'
-import { LandingPage } from '@/modules/landing/views/LandingPage'
-import { ProfileSetupPage } from '@/modules/onboarding/views/ProfileSetupPage'
 import { PublicLayout } from '@/shared/components/layout/PublicLayout'
 import { App } from '@/app/App'
 import { GuestOnly, RequireAuth } from '@/app/RouteGuards'
@@ -22,26 +8,67 @@ export const router = createBrowserRouter([
   {
     element: <PublicLayout />,
     children: [
-      { path: '/', element: <GuestOnly><LandingPage /></GuestOnly> },
-      { path: '/login', element: <GuestOnly><LoginPage /></GuestOnly> },
-      { path: '/register', element: <GuestOnly><RegisterPage /></GuestOnly> },
-      { path: '/forgot-password', element: <GuestOnly><ForgotPasswordPage /></GuestOnly> },
+      {
+        path: '/',
+        lazy: async () => {
+          const { LandingPage } = await import('@/modules/landing/views/LandingPage')
+          return { Component: () => <GuestOnly><LandingPage /></GuestOnly> }
+        },
+      },
+      {
+        path: '/login',
+        lazy: async () => {
+          const { LoginPage } = await import('@/modules/auth/views/LoginPage')
+          return { Component: () => <GuestOnly><LoginPage /></GuestOnly> }
+        },
+      },
+      {
+        path: '/register',
+        lazy: async () => {
+          const { RegisterPage } = await import('@/modules/auth/views/RegisterPage')
+          return { Component: () => <GuestOnly><RegisterPage /></GuestOnly> }
+        },
+      },
+      {
+        path: '/forgot-password',
+        lazy: async () => {
+          const { ForgotPasswordPage } = await import('@/modules/auth/views/ForgotPasswordPage')
+          return { Component: () => <GuestOnly><ForgotPasswordPage /></GuestOnly> }
+        },
+      },
     ],
   },
   {
     path: '/onboarding',
-    element: (
-      <RequireAuth>
-        <ProfileSetupPage />
-      </RequireAuth>
-    ),
+    lazy: async () => {
+      const { ProfileSetupPage } = await import('@/modules/onboarding/views/ProfileSetupPage')
+      return { Component: () => <RequireAuth><ProfileSetupPage /></RequireAuth> }
+    },
   },
   {
     element: <RequireAuth><App /></RequireAuth>,
     children: [
-      { path: '/dashboard', element: <DashboardPage /> },
-      { path: '/calendar', element: <CalendarPage /> },
-      { path: '/notes', element: <NotesPage /> },
+      {
+        path: '/dashboard',
+        lazy: async () => {
+          const { DashboardPage } = await import('@/modules/dashboard/views/DashboardPage')
+          return { Component: DashboardPage }
+        },
+      },
+      {
+        path: '/calendar',
+        lazy: async () => {
+          const { CalendarPage } = await import('@/modules/calendar/views/CalendarPage')
+          return { Component: CalendarPage }
+        },
+      },
+      {
+        path: '/notes',
+        lazy: async () => {
+          const { NotesPage } = await import('@/modules/notes/views/NotesPage')
+          return { Component: NotesPage }
+        },
+      },
       {
         path: '/notes/trash',
         lazy: async () => {
@@ -58,12 +85,39 @@ export const router = createBrowserRouter([
       },
       {
         path: '/chat',
-        element: <ChatLayout />,
+        lazy: async () => {
+          const { ChatLayout } = await import('@/modules/chat/views/ChatLayout')
+          return { Component: ChatLayout }
+        },
         children: [
-          { index: true, element: <ChatHomePage /> },
-          { path: 'contacts', element: <ChatPage /> },
-          { path: 'requests', element: <ChatRequestsPage /> },
-          { path: 'settings', element: <ChatSettingsPage /> },
+          {
+            index: true,
+            lazy: async () => {
+              const { ChatHomePage } = await import('@/modules/chat/views/ChatHomePage')
+              return { Component: ChatHomePage }
+            },
+          },
+          {
+            path: 'contacts',
+            lazy: async () => {
+              const { ChatPage } = await import('@/modules/chat/views/ChatPage')
+              return { Component: ChatPage }
+            },
+          },
+          {
+            path: 'requests',
+            lazy: async () => {
+              const { ChatRequestsPage } = await import('@/modules/chat/views/ChatRequestsPage')
+              return { Component: ChatRequestsPage }
+            },
+          },
+          {
+            path: 'settings',
+            lazy: async () => {
+              const { ChatSettingsPage } = await import('@/modules/chat/views/ChatSettingsPage')
+              return { Component: ChatSettingsPage }
+            },
+          },
           {
             path: 'conversations/:conversationId',
             lazy: async () => {
@@ -87,7 +141,13 @@ export const router = createBrowserRouter([
           return { Component: ChatGroupInvitePage }
         },
       },
-      { path: '/account', element: <AccountPage /> },
+      {
+        path: '/account',
+        lazy: async () => {
+          const { AccountPage } = await import('@/modules/account/views/AccountPage')
+          return { Component: AccountPage }
+        },
+      },
     ],
   },
 ])

@@ -5,7 +5,7 @@ Frontend React, TypeScript và Tailwind CSS, tổ chức theo MVVM và module ng
 ## Cấu hình local
 
 1. Sao chép `.env.example` thành `.env`.
-2. Đặt `VITE_API_BASE_URL=http://localhost:8888/v1/api` hoặc URL backend tương ứng.
+2. Đặt `VITE_API_BASE_URL=http://localhost:8888/api/v1` hoặc URL backend tương ứng.
 3. Chạy `npm run dev`.
 
 Frontend gửi cookie bằng `credentials: include`; backend phải cho phép đúng frontend origin.

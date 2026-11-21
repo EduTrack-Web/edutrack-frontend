@@ -41,10 +41,11 @@ export function useNotifications() {
         }
       }
     } catch {
+      if (!silent) showToast('Không thể tải thông báo. Vui lòng thử lại.', 'error')
     } finally {
       if (!silent) setIsLoading(false)
     }
-  }, [])
+  }, [showToast])
 
   useEffect(() => {
     let active = true
