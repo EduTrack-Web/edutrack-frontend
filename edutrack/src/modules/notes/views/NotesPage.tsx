@@ -21,7 +21,7 @@ export function NotesPage() {
   }).format(new Date(value))
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
+    <div className="w-full max-w-none space-y-4 sm:space-y-6">
       <section className="p-1 sm:p-2">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

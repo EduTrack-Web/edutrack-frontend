@@ -294,10 +294,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
               ) : (
                 <span>{initials(user?.fullName ?? 'User')}</span>
               )}
-              <span
-                aria-hidden="true"
-                className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-white bg-emerald-500 shadow-xs dark:border-palette-900"
-              />
             </button>
 
             {menuOpen && (
