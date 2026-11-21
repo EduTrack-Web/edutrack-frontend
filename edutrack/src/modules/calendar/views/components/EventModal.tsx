@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../../../shared/components/Icon'
 import type { CalendarCategory, CalendarEvent, EventPriority, RecurrenceFrequency, ReminderMethod } from '../../models/calendar.types'
 import {
@@ -39,6 +39,20 @@ export function EventModal(props: EventModalProps) {
   const { isOpen, initialEvent, onClose, onOpenCreateCategory } = props
   const vm = useEventModalViewModel(props)
   const [showTooltip, setShowTooltip] = useState(false)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isOpen && vm.canModify) {
+      const timer = window.setTimeout(() => {
+        if (titleInputRef.current) {
+          titleInputRef.current.focus()
+          const len = titleInputRef.current.value.length
+          titleInputRef.current.setSelectionRange(len, len)
+        }
+      }, 60)
+      return () => window.clearTimeout(timer)
+    }
+  }, [isOpen, vm.canModify])
 
   if (!isOpen) return null
 
@@ -58,11 +72,11 @@ export function EventModal(props: EventModalProps) {
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-3.5 dark:border-white/10">
           <div className="flex items-center gap-2">
             <button
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                !isTask
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${!isTask
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                } ${!vm.canModify ? 'opacity-70 cursor-not-allowed' : ''}`}
+              disabled={!vm.canModify}
               onClick={() => vm.handleTabChange('event')}
               type="button"
             >
@@ -70,11 +84,11 @@ export function EventModal(props: EventModalProps) {
               <span>Sự kiện</span>
             </button>
             <button
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                isTask
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${isTask
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                } ${!vm.canModify ? 'opacity-70 cursor-not-allowed' : ''}`}
+              disabled={!vm.canModify}
               onClick={() => vm.handleTabChange('task')}
               type="button"
             >
@@ -100,11 +114,95 @@ export function EventModal(props: EventModalProps) {
             </div>
           )}
 
+          {vm.isGuest && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50/70 p-3.5 dark:border-blue-900/40 dark:bg-blue-950/30">
+              <div className="flex items-center gap-2.5">
+                <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-blue-600 text-white">
+                  <Icon className="size-4" name="account" />
+                </span>
+                <div>
+                  <p className="text-xs font-bold text-blue-950 dark:text-blue-100">
+                    Bạn là khách mời của sự kiện này
+                  </p>
+                  <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                    Trạng thái:{' '}
+                    <span className="font-extrabold">
+                      {vm.guestStatus === 'accepted'
+                        ? 'Đã tham gia'
+                        : vm.guestStatus === 'declined'
+                          ? 'Đã từ chối'
+                          : 'Chờ bạn phản hồi'}
+                    </span>
+                    {!vm.canModify && ' • Chế độ chỉ xem'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                {vm.guestStatus === 'pending' && (
+                  <>
+                    <button
+                      className="rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+                      disabled={vm.isSubmitting}
+                      onClick={() => void vm.handleRespondInvite('accepted')}
+                      type="button"
+                    >
+                      Tham gia
+                    </button>
+                    <button
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-100 active:scale-95 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 disabled:opacity-50"
+                      disabled={vm.isSubmitting}
+                      onClick={() => void vm.handleRespondInvite('declined')}
+                      type="button"
+                    >
+                      Từ chối
+                    </button>
+                  </>
+                )}
+
+                {vm.guestStatus === 'accepted' && (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-xl bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                      ✓ Đã tham gia
+                    </span>
+                    <button
+                      className="rounded-xl border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 shadow-2xs transition-colors hover:bg-rose-50 active:scale-95 dark:border-rose-900/40 dark:bg-white/10 dark:text-rose-400"
+                      disabled={vm.isDeleting}
+                      onClick={() => void vm.handleLeaveEvent()}
+                      type="button"
+                    >
+                      Rời sự kiện
+                    </button>
+                  </div>
+                )}
+
+                {vm.guestStatus === 'declined' && (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-xl bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                      ✕ Đã từ chối
+                    </span>
+                    <button
+                      className="rounded-xl bg-blue-600 px-3 py-1 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700 active:scale-95 disabled:opacity-50"
+                      disabled={vm.isSubmitting}
+                      onClick={() => void vm.handleRespondInvite('accepted')}
+                      type="button"
+                    >
+                      Tham gia lại
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div>
             <input
+              ref={titleInputRef}
               aria-describedby={vm.errors.title ? 'title-error' : undefined}
               aria-invalid={Boolean(vm.errors.title)}
-              className="w-full border-b border-slate-200 pb-2 text-xl font-bold text-slate-900 outline-hidden transition-colors placeholder:text-slate-400 focus:border-blue-600 dark:border-white/15 dark:text-white"
+              className="w-full border-b border-slate-200 pb-2 text-xl font-bold text-slate-900 placeholder:text-slate-400 focus:border-slate-300 dark:border-white/15 dark:focus:border-white/30 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 transition-colors"
+              style={{ outline: 'none', boxShadow: 'none' }}
+              disabled={!vm.canModify}
               onChange={(e) => vm.setTitle(e.target.value)}
               placeholder={isTask ? 'Thêm tiêu đề nhiệm vụ...' : 'Thêm tiêu đề sự kiện...'}
               type="text"
@@ -124,9 +222,7 @@ export function EventModal(props: EventModalProps) {
                   Thời gian diễn ra
                 </span>
 
-                {/* Khung thời gian 2 khối cân đối, vừa khít, không bị tràn */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Bắt đầu */}
                   <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 dark:border-white/10 dark:bg-white/5 space-y-1.5 shadow-2xs">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       Bắt đầu
@@ -134,7 +230,8 @@ export function EventModal(props: EventModalProps) {
                     <div className="flex items-center gap-1.5">
                       <input
                         aria-label="Ngày bắt đầu"
-                        className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white"
+                        className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
                         onChange={(e) => vm.setStartDate(e.target.value)}
                         type="date"
                         value={vm.startDate}
@@ -142,7 +239,8 @@ export function EventModal(props: EventModalProps) {
                       {!vm.isAllDay && (
                         <input
                           aria-label="Giờ bắt đầu"
-                          className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-slate-50/70 px-1.5 py-1.5 text-xs font-bold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white"
+                          className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-slate-50/70 px-1.5 py-1.5 text-xs font-bold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                          disabled={!vm.canModify}
                           onChange={(e) => vm.setStartTime(e.target.value)}
                           type="time"
                           value={vm.startTime}
@@ -151,7 +249,6 @@ export function EventModal(props: EventModalProps) {
                     </div>
                   </div>
 
-                  {/* Kết thúc */}
                   <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 dark:border-white/10 dark:bg-white/5 space-y-1.5 shadow-2xs">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       Kết thúc
@@ -159,7 +256,8 @@ export function EventModal(props: EventModalProps) {
                     <div className="flex items-center gap-1.5">
                       <input
                         aria-label="Ngày kết thúc"
-                        className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white"
+                        className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
                         onChange={(e) => vm.setEndDate(e.target.value)}
                         type="date"
                         value={vm.endDate}
@@ -167,7 +265,8 @@ export function EventModal(props: EventModalProps) {
                       {!vm.isAllDay && (
                         <input
                           aria-label="Giờ kết thúc"
-                          className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-slate-50/70 px-1.5 py-1.5 text-xs font-bold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white"
+                          className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-slate-50/70 px-1.5 py-1.5 text-xs font-bold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                          disabled={!vm.canModify}
                           onChange={(e) => vm.setEndTime(e.target.value)}
                           type="time"
                           value={vm.endTime}
@@ -181,7 +280,8 @@ export function EventModal(props: EventModalProps) {
                   <label className="flex cursor-pointer items-center gap-2 select-none" htmlFor="event-is-allday">
                     <input
                       checked={vm.isAllDay}
-                      className="size-4 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
+                      className="size-4 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
+                      disabled={!vm.canModify}
                       id="event-is-allday"
                       onChange={(e) => vm.setIsAllDay(e.target.checked)}
                       type="checkbox"
@@ -191,7 +291,8 @@ export function EventModal(props: EventModalProps) {
 
                   <div className="flex items-center gap-1.5 text-xs">
                     <select
-                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                      disabled={!vm.canModify}
                       onChange={(e) => vm.handleSelectRecurrence(e.target.value as RecurrenceFrequency)}
                       aria-invalid={Boolean(vm.errors.recurrence)}
                       aria-describedby={vm.errors.recurrence ? 'event-recurrence-error' : undefined}
@@ -211,7 +312,8 @@ export function EventModal(props: EventModalProps) {
                     )}
                     {vm.recurrenceFreq === 'custom' && (
                       <button
-                        className="flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300"
+                        className="flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
                         onClick={() => vm.setIsCustomRecurrenceOpen(true)}
                         title="Chỉnh sửa cấu hình lặp lại"
                         type="button"
@@ -235,7 +337,8 @@ export function EventModal(props: EventModalProps) {
                   <Icon className="size-4.5" name="link" />
                 </span>
                 <input
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                  disabled={!vm.canModify}
                   onChange={(e) => vm.setOnlineMeetingUrl(e.target.value)}
                   placeholder="Thêm hội nghị truyền hình trên Google Meet, Zoom..."
                   type="url"
@@ -248,7 +351,8 @@ export function EventModal(props: EventModalProps) {
                   <Icon className="size-4.5" name="mapPin" />
                 </span>
                 <input
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                  disabled={!vm.canModify}
                   onChange={(e) => vm.setLocation(e.target.value)}
                   placeholder="Thêm vị trí, phòng học..."
                   type="text"
@@ -266,7 +370,8 @@ export function EventModal(props: EventModalProps) {
                   <label className="flex cursor-pointer items-center gap-1.5 select-none" htmlFor="task-is-allday">
                     <input
                       checked={vm.isAllDay}
-                      className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
+                      className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
+                      disabled={!vm.canModify}
                       id="task-is-allday"
                       onChange={(e) => vm.setIsAllDay(e.target.checked)}
                       type="checkbox"
@@ -278,7 +383,8 @@ export function EventModal(props: EventModalProps) {
                 <div className="flex items-center gap-2 text-xs">
                   <input
                     aria-label="Ngày hạn chót"
-                    className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                    disabled={!vm.canModify}
                     onChange={(e) => vm.setDeadlineDate(e.target.value)}
                     type="date"
                     value={vm.deadlineDate}
@@ -287,7 +393,8 @@ export function EventModal(props: EventModalProps) {
                   {!vm.isAllDay && (
                     <input
                       aria-label="Giờ hạn chót"
-                      className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                      disabled={!vm.canModify}
                       onChange={(e) => vm.setDeadlineTime(e.target.value)}
                       type="time"
                       value={vm.deadlineTime}
@@ -305,11 +412,11 @@ export function EventModal(props: EventModalProps) {
                     const isSelected = vm.priority === item.value
                     return (
                       <button
-                        className={`flex items-center justify-center gap-2 rounded-xl border py-2 text-xs font-bold transition-all ${
-                          isSelected
-                            ? 'border-blue-600 bg-blue-50/70 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 ring-2 ring-blue-600/30'
-                            : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
-                        }`}
+                        className={`flex items-center justify-center gap-2 rounded-xl border py-2 text-xs font-bold transition-all ${isSelected
+                          ? 'border-blue-600 bg-blue-50/70 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 ring-2 ring-blue-600/30'
+                          : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
+                          } ${!vm.canModify ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        disabled={!vm.canModify}
                         key={item.value}
                         onClick={() => vm.setPriority(item.value)}
                         type="button"
@@ -334,7 +441,8 @@ export function EventModal(props: EventModalProps) {
                         <label className="flex flex-1 cursor-pointer items-center gap-2 select-none" htmlFor={`check-${item.id}`}>
                           <input
                             checked={item.isCompleted}
-                            className="size-4 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
+                            className="size-4 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
+                            disabled={!vm.canModify}
                             id={`check-${item.id}`}
                             onChange={() => vm.handleToggleSubtask(item.id)}
                             type="checkbox"
@@ -343,41 +451,45 @@ export function EventModal(props: EventModalProps) {
                             {item.title}
                           </span>
                         </label>
-                        <button
-                          aria-label="Xóa bước này"
-                          className="text-slate-400 hover:text-rose-500"
-                          onClick={() => vm.handleRemoveSubtask(item.id)}
-                          type="button"
-                        >
-                          <Icon className="size-3.5" name="close" />
-                        </button>
+                        {vm.canModify && (
+                          <button
+                            aria-label="Xóa bước này"
+                            className="text-slate-400 hover:text-rose-500"
+                            onClick={() => vm.handleRemoveSubtask(item.id)}
+                            type="button"
+                          >
+                            <Icon className="size-3.5" name="close" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
 
-                <div className="flex items-center gap-2">
-                  <input
-                    className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                    onChange={(e) => vm.setNewSubtaskTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        vm.handleAddSubtask()
-                      }
-                    }}
-                    placeholder="Thêm bước thực hiện (ví dụ: Vẽ kiến trúc)..."
-                    type="text"
-                    value={vm.newSubtaskTitle}
-                  />
-                  <button
-                    className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-300 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
-                    onClick={vm.handleAddSubtask}
-                    type="button"
-                  >
-                    + Thêm
-                  </button>
-                </div>
+                {vm.canModify && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      onChange={(e) => vm.setNewSubtaskTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          vm.handleAddSubtask()
+                        }
+                      }}
+                      placeholder="Thêm bước thực hiện (ví dụ: Vẽ kiến trúc)..."
+                      type="text"
+                      value={vm.newSubtaskTitle}
+                    />
+                    <button
+                      className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-300 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+                      onClick={vm.handleAddSubtask}
+                      type="button"
+                    >
+                      + Thêm
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-3">
@@ -385,7 +497,8 @@ export function EventModal(props: EventModalProps) {
                   <Icon className="size-4.5" name="link" />
                 </span>
                 <input
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                  disabled={!vm.canModify}
                   onChange={(e) => vm.setSubmissionUrl(e.target.value)}
                   placeholder="Link nộp bài LMS, Google Drive, GitHub repo..."
                   type="url"
@@ -459,7 +572,8 @@ export function EventModal(props: EventModalProps) {
               </span>
               <div className="relative flex flex-1 items-center gap-2">
                 <select
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                  disabled={!vm.canModify}
                   onChange={(e) => vm.handleCalendarSelect(e.target.value)}
                   value={vm.calendarId}
                 >
@@ -470,85 +584,85 @@ export function EventModal(props: EventModalProps) {
                   ))}
                 </select>
 
-              <div className="relative">
-                <button
-                  aria-label="Chọn màu thẻ"
-                  className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs transition-all hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-                  onClick={() => vm.setIsColorPickerOpen(!vm.isColorPickerOpen)}
-                  title="Tùy chỉnh màu sắc thẻ sự kiện"
-                  type="button"
-                >
-                  <span
-                    className="size-4 rounded-full shadow-2xs"
-                    style={{ backgroundColor: vm.activeColor }}
-                  />
-                  <Icon className="size-3 text-slate-400" name="chevronDown" />
-                </button>
-
-                {vm.isColorPickerOpen && (
-                  <div
-                    className="absolute right-0 bottom-full z-30 mb-2 w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-white/10 dark:bg-[#021024]"
-                    onClick={(e) => e.stopPropagation()}
+                <div className="relative">
+                  <button
+                    aria-label="Chọn màu thẻ"
+                    className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs transition-all hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 disabled:opacity-75 disabled:cursor-not-allowed"
+                    disabled={!vm.canModify}
+                    onClick={() => vm.setIsColorPickerOpen(!vm.isColorPickerOpen)}
+                    title="Tùy chỉnh màu sắc thẻ sự kiện"
+                    type="button"
                   >
-                    <div className="flex items-center justify-between pb-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                      <span>Màu sắc thẻ</span>
-                      {vm.color && (
-                        <button
-                          className="text-blue-600 hover:underline dark:text-blue-400"
-                          onClick={() => {
-                            vm.setColor('')
-                            vm.setIsColorPickerOpen(false)
-                          }}
-                          type="button"
-                        >
-                          Theo màu lịch
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-6 gap-2">
-                      {EXTENDED_CALENDAR_COLORS.map((hex) => {
-                        const isSelected = (vm.color || vm.activeColor).toLowerCase() === hex.toLowerCase()
-                        return (
+                    <span
+                      className="size-4 rounded-full shadow-2xs"
+                      style={{ backgroundColor: vm.activeColor }}
+                    />
+                    <Icon className="size-3 text-slate-400" name="chevronDown" />
+                  </button>
+
+                  {vm.isColorPickerOpen && (
+                    <div
+                      className="absolute right-0 bottom-full z-30 mb-2 w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-white/10 dark:bg-[#021024]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between pb-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                        <span>Màu sắc thẻ</span>
+                        {vm.color && (
                           <button
-                            aria-label={`Chọn màu ${hex}`}
-                            className={`size-6 rounded-full transition-transform hover:scale-110 ${
-                              isSelected ? 'ring-2 ring-blue-600 ring-offset-2' : ''
-                            }`}
-                            key={hex}
+                            className="text-blue-600 hover:underline dark:text-blue-400"
                             onClick={() => {
-                              vm.setColor(hex)
+                              vm.setColor('')
                               vm.setIsColorPickerOpen(false)
                             }}
-                            style={{ backgroundColor: hex }}
                             type="button"
-                          />
-                        )
-                      })}
+                          >
+                            Theo màu lịch
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-6 gap-2">
+                        {EXTENDED_CALENDAR_COLORS.map((hex) => {
+                          const isSelected = (vm.color || vm.activeColor).toLowerCase() === hex.toLowerCase()
+                          return (
+                            <button
+                              aria-label={`Chọn màu ${hex}`}
+                              className={`size-6 rounded-full transition-transform hover:scale-110 ${isSelected ? 'ring-2 ring-blue-600 ring-offset-2' : ''
+                                }`}
+                              key={hex}
+                              onClick={() => {
+                                vm.setColor(hex)
+                                vm.setIsColorPickerOpen(false)
+                              }}
+                              style={{ backgroundColor: hex }}
+                              type="button"
+                            />
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                </div>
+
+                {onOpenCreateCategory && vm.canModify && (
+                  <button
+                    className="shrink-0 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                    onClick={onOpenCreateCategory}
+                    type="button"
+                  >
+                    + Lịch mới
+                  </button>
                 )}
               </div>
-
-              {onOpenCreateCategory && (
-                <button
-                  className="shrink-0 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                  onClick={onOpenCreateCategory}
-                  type="button"
-                >
-                  + Lịch mới
-                </button>
-              )}
-              </div>
             </div>
-            {/* Múi giờ sự kiện tùy chỉnh */}
             <div className="flex items-center gap-2 pl-11 text-xs">
               <span className="text-slate-500 shrink-0 font-medium dark:text-slate-400">
                 Múi giờ:
               </span>
               <select
                 aria-label="Múi giờ sự kiện"
-                className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
-                onChange={(e) => vm.setTimeZone(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                disabled={!vm.canModify}
+                onChange={(e) => vm.handleTimeZoneChange(e.target.value)}
                 value={vm.timeZone}
               >
                 {COMMON_TIMEZONES.map((tz) => (
@@ -563,89 +677,134 @@ export function EventModal(props: EventModalProps) {
             </div>
           </div>
 
-          {/* Mời khách tham gia sự kiện & phân quyền */}
           <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/10">
             <div className="flex items-start gap-3">
               <span className="mt-0.5 grid size-8 shrink-0 place-items-center text-slate-400">
                 <Icon className="size-4.5" name="account" />
               </span>
               <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
-                    onChange={(e) => vm.setNewGuestEmail(e.target.value)}
-                    placeholder="Thêm khách mời (nhập email)..."
-                    type="email"
-                    value={vm.newGuestEmail}
-                  />
-                  <button
-                    className="shrink-0 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700"
-                    onClick={vm.handleAddGuest}
-                    type="button"
-                  >
-                    + Mời
-                  </button>
-                </div>
+                {vm.creatorEmail && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Người tạo:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">{vm.creatorEmail}</span>
+                  </div>
+                )}
+                {vm.canInviteOthers ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      onChange={(e) => vm.setNewGuestEmail(e.target.value)}
+                      placeholder="Thêm khách mời (nhập email hoặc username)..."
+                      type="text"
+                      value={vm.newGuestEmail}
+                    />
+                    <button
+                      className="shrink-0 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700"
+                      onClick={vm.handleAddGuest}
+                      type="button"
+                    >
+                      + Mời
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">
+                    Người tạo sự kiện không cho phép khách mời mời thêm người khác.
+                  </p>
+                )}
                 {vm.guestEmailError && (
                   <p className="text-xs font-semibold text-rose-500">{vm.guestEmailError}</p>
                 )}
 
-                {/* Quyền của khách */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                  <label className="flex cursor-pointer items-center gap-1.5 select-none">
-                    <input
-                      checked={vm.guestCanModify}
-                      className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
-                      onChange={(e) => vm.setGuestCanModify(e.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>Khách có thể sửa sự kiện</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-1.5 select-none">
-                    <input
-                      checked={vm.guestCanInviteOthers}
-                      className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
-                      onChange={(e) => vm.setGuestCanInviteOthers(e.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>Khách có thể mời người khác</span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-1.5 select-none">
-                    <input
-                      checked={vm.guestCanSeeGuestList}
-                      className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
-                      onChange={(e) => vm.setGuestCanSeeGuestList(e.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>Xem danh sách khách</span>
-                  </label>
-                </div>
-
-                {/* Danh sách khách đã mời */}
-                {vm.guests.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {vm.guests.map((g) => (
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-slate-200"
-                        key={g.email}
-                      >
-                        <span>{g.email}</span>
-                        {g.canModify && (
-                          <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                            (Được sửa)
-                          </span>
-                        )}
-                        <button
-                          aria-label={`Xóa khách ${g.email}`}
-                          className="ml-0.5 text-slate-400 hover:text-rose-600"
-                          onClick={() => vm.handleRemoveGuest(g.email)}
-                          type="button"
-                        >
-                          <Icon className="size-3" name="close" />
-                        </button>
-                      </span>
-                    ))}
+                {vm.isOwner && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                    <label className="flex cursor-pointer items-center gap-1.5 select-none">
+                      <input
+                        checked={vm.guestCanModify}
+                        className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
+                        onChange={(e) => vm.handleToggleAllGuestCanModify(e.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Khách có thể sửa sự kiện</span>
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-1.5 select-none">
+                      <input
+                        checked={vm.guestCanInviteOthers}
+                        className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
+                        onChange={(e) => vm.handleToggleAllGuestCanInviteOthers(e.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Khách có thể mời người khác</span>
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-1.5 select-none">
+                      <input
+                        checked={vm.guestCanSeeGuestList}
+                        className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500"
+                        onChange={(e) => vm.handleToggleAllGuestCanSeeGuestList(e.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>Xem danh sách khách</span>
+                    </label>
                   </div>
+                )}
+
+                {vm.canSeeGuestList ? (
+                  vm.guests.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {vm.guests.map((g) => (
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-white/10 dark:text-slate-200"
+                          key={g.email}
+                        >
+                          <span>{g.email}</span>
+                          {g.status === 'accepted' ? (
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                              (Đã tham gia)
+                            </span>
+                          ) : g.status === 'declined' ? (
+                            <span className="text-[10px] font-bold text-rose-500">
+                              (Từ chối)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                              (Chờ phản hồi)
+                            </span>
+                          )}
+                          {vm.isOwner ? (
+                            <button
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold transition ${
+                                g.canModify
+                                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300'
+                                  : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-white/10 dark:text-slate-300'
+                              }`}
+                              onClick={() => vm.handleToggleGuestCanModify(g.email)}
+                              title={g.canModify ? 'Click để chuyển sang quyền chỉ xem' : 'Click để cấp quyền chỉnh sửa'}
+                              type="button"
+                            >
+                              {g.canModify ? 'Có thể sửa' : 'Chỉ xem'}
+                            </button>
+                          ) : (
+                            g.canModify && (
+                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                • Sửa
+                              </span>
+                            )
+                          )}
+                          {vm.isOwner && (
+                            <button
+                              aria-label={`Xóa khách ${g.email}`}
+                              className="ml-0.5 text-slate-400 hover:text-rose-600"
+                              onClick={() => vm.handleRequestRemoveGuest(g.email)}
+                              type="button"
+                            >
+                              <Icon className="size-3" name="close" />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <p className="text-xs text-slate-400 italic">Danh sách khách mời được ẩn bởi người tạo.</p>
                 )}
               </div>
             </div>
@@ -657,7 +816,8 @@ export function EventModal(props: EventModalProps) {
             </span>
             <div className="flex flex-1 items-center gap-2">
               <select
-                className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white"
+                className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                disabled={!vm.canModify}
                 onChange={(e) => vm.setAvailability(e.target.value as 'busy' | 'free')}
                 value={vm.availability}
               >
@@ -666,7 +826,8 @@ export function EventModal(props: EventModalProps) {
               </select>
 
               <select
-                className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white"
+                className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                disabled={!vm.canModify}
                 onChange={(e) => vm.setVisibility(e.target.value as 'default' | 'public' | 'private')}
                 value={vm.visibility}
               >
@@ -699,7 +860,8 @@ export function EventModal(props: EventModalProps) {
               <Icon className="size-4.5" name="notes" />
             </span>
             <textarea
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+              disabled={!vm.canModify}
               onChange={(e) => vm.setDescription(e.target.value)}
               placeholder="Thêm nội dung mô tả, ghi chú chi tiết..."
               rows={3}
@@ -708,9 +870,8 @@ export function EventModal(props: EventModalProps) {
           </div>
         </form>
 
-        {/* Footer actions: Nút Xóa (nếu đang chỉnh sửa), Hủy và Lưu */}
         <div className="flex items-center justify-between border-t border-slate-100 px-6 py-3 bg-slate-50/50 dark:border-white/10 dark:bg-white/2">
-          {isEditing ? (
+          {isEditing && vm.isOwner ? (
             <button
               className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 transition-colors"
               onClick={() => vm.setShowDeleteConfirm(true)}
@@ -718,6 +879,16 @@ export function EventModal(props: EventModalProps) {
             >
               <Icon className="size-3.5" name="trash" />
               <span>Xóa {isTask ? 'nhiệm vụ' : 'sự kiện'}</span>
+            </button>
+          ) : isEditing && vm.isGuest && vm.guestStatus === 'accepted' ? (
+            <button
+              className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/70 px-3.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100 transition-colors dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400"
+              disabled={vm.isDeleting}
+              onClick={() => vm.setShowLeaveConfirm(true)}
+              type="button"
+            >
+              <Icon className="size-3.5" name="close" />
+              <span>Rời khỏi sự kiện</span>
             </button>
           ) : (
             <div />
@@ -731,14 +902,26 @@ export function EventModal(props: EventModalProps) {
             >
               Hủy
             </button>
-            <button
-              className="rounded-xl bg-blue-600 px-5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              disabled={vm.isSubmitting}
-              onClick={vm.handleSubmit}
-              type="button"
-            >
-              {vm.isSubmitting ? 'Đang lưu...' : isEditing ? 'Cập nhật' : 'Lưu'}
-            </button>
+            {vm.canModify || vm.canInviteOthers ? (
+              <button
+                className="rounded-xl bg-blue-600 px-5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                disabled={vm.isSubmitting}
+                onClick={vm.handleSubmit}
+                type="button"
+              >
+                {vm.isSubmitting
+                  ? 'Đang lưu...'
+                  : !vm.canModify && vm.canInviteOthers
+                  ? 'Lưu khách mời'
+                  : isEditing
+                  ? 'Cập nhật'
+                  : 'Lưu'}
+              </button>
+            ) : (
+              <span className="rounded-xl bg-slate-100 px-4 py-1.5 text-xs font-semibold text-slate-500 dark:bg-white/10 dark:text-slate-400 select-none">
+                Chế độ chỉ xem
+              </span>
+            )}
           </div>
         </div>
 
@@ -787,11 +970,10 @@ export function EventModal(props: EventModalProps) {
                       const isSelected = vm.customDaysOfWeek.includes(btn.day)
                       return (
                         <button
-                          className={`size-8 rounded-full text-xs font-bold transition-all ${
-                            isSelected
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300'
-                          }`}
+                          className={`size-8 rounded-full text-xs font-bold transition-all ${isSelected
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-300'
+                            }`}
                           key={btn.day}
                           onClick={() => vm.handleToggleCustomDay(btn.day)}
                           type="button"
@@ -889,7 +1071,6 @@ export function EventModal(props: EventModalProps) {
           </div>
         )}
 
-        {/* Modal xác nhận xóa sự kiện / nhiệm vụ */}
         {vm.showDeleteConfirm && (
           <div
             aria-modal="true"
@@ -918,15 +1099,13 @@ export function EventModal(props: EventModalProps) {
                 </div>
               </div>
 
-              {/* Các tùy chọn xóa sự kiện lặp lại */}
               {vm.isRecurring && (
                 <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-white/5 dark:bg-white/5">
                   <label
-                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${
-                      vm.deleteRecurringMode === 'this'
-                        ? 'bg-white shadow-2xs dark:bg-white/10'
-                        : 'hover:bg-white/50 dark:hover:bg-white/5'
-                    }`}
+                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${vm.deleteRecurringMode === 'this'
+                      ? 'bg-white shadow-2xs dark:bg-white/10'
+                      : 'hover:bg-white/50 dark:hover:bg-white/5'
+                      }`}
                   >
                     <input
                       checked={vm.deleteRecurringMode === 'this'}
@@ -947,11 +1126,10 @@ export function EventModal(props: EventModalProps) {
                   </label>
 
                   <label
-                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${
-                      vm.deleteRecurringMode === 'following'
-                        ? 'bg-white shadow-2xs dark:bg-white/10'
-                        : 'hover:bg-white/50 dark:hover:bg-white/5'
-                    }`}
+                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${vm.deleteRecurringMode === 'following'
+                      ? 'bg-white shadow-2xs dark:bg-white/10'
+                      : 'hover:bg-white/50 dark:hover:bg-white/5'
+                      }`}
                   >
                     <input
                       checked={vm.deleteRecurringMode === 'following'}
@@ -972,11 +1150,10 @@ export function EventModal(props: EventModalProps) {
                   </label>
 
                   <label
-                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${
-                      vm.deleteRecurringMode === 'all'
-                        ? 'bg-white shadow-2xs dark:bg-white/10'
-                        : 'hover:bg-white/50 dark:hover:bg-white/5'
-                    }`}
+                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${vm.deleteRecurringMode === 'all'
+                      ? 'bg-white shadow-2xs dark:bg-white/10'
+                      : 'hover:bg-white/50 dark:hover:bg-white/5'
+                      }`}
                   >
                     <input
                       checked={vm.deleteRecurringMode === 'all'}
@@ -1014,6 +1191,98 @@ export function EventModal(props: EventModalProps) {
                   type="button"
                 >
                   {vm.isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {vm.showLeaveConfirm && (
+          <div
+            aria-modal="true"
+            className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+            role="dialog"
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                  <Icon className="size-5" name="close" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Rời khỏi sự kiện này?
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Bạn có chắc chắn muốn rời khỏi sự kiện <span className="font-semibold text-slate-700 dark:text-slate-200">"{vm.title || 'này'}"</span> không?
+                    Sự kiện sẽ bị xóa khỏi lịch của bạn và người tạo sự kiện sẽ nhận được thông báo phản hồi.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
+                <button
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+                  disabled={vm.isDeleting}
+                  onClick={() => vm.setShowLeaveConfirm(false)}
+                  type="button"
+                >
+                  Hủy
+                </button>
+                <button
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                  disabled={vm.isDeleting}
+                  onClick={() => void vm.handleConfirmLeaveEvent()}
+                  type="button"
+                >
+                  {vm.isDeleting ? 'Đang rời...' : 'Xác nhận rời'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {Boolean(vm.guestToRemove) && (
+          <div
+            aria-modal="true"
+            className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+            role="dialog"
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                  <Icon className="size-5" name="trash" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Xóa khách mời khỏi sự kiện?
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Bạn có chắc chắn muốn xóa khách mời <span className="font-semibold text-slate-700 dark:text-slate-200">{vm.guestToRemove}</span> khỏi danh sách không?
+                    {isEditing ? ' Nhấn Cập nhật sự kiện sau đó để lưu thay đổi.' : ''}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
+                <button
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+                  onClick={vm.handleCancelRemoveGuest}
+                  type="button"
+                >
+                  Hủy
+                </button>
+                <button
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition-colors"
+                  onClick={vm.handleConfirmRemoveGuest}
+                  type="button"
+                >
+                  Xác nhận xóa
                 </button>
               </div>
             </div>
