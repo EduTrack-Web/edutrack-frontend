@@ -6,6 +6,7 @@ import { GuestOnly, RequireAuth } from '@/app/RouteGuards'
 
 export const router = createBrowserRouter([
   {
+    hydrateFallbackElement: null,
     element: <PublicLayout />,
     children: [
       {
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    hydrateFallbackElement: null,
     path: '/onboarding',
     lazy: async () => {
       const { ProfileSetupPage } = await import('@/modules/onboarding/views/ProfileSetupPage')
@@ -46,6 +48,7 @@ export const router = createBrowserRouter([
     },
   },
   {
+    hydrateFallbackElement: null,
     element: <RequireAuth><App /></RequireAuth>,
     children: [
       {
