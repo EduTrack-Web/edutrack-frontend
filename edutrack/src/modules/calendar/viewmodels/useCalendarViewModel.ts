@@ -5,6 +5,7 @@ import type {
   CalendarPreferences,
   EntryType,
   VietnameseLunarDate,
+  RecurringUpdateMode,
 } from '@/modules/calendar/models/calendar.types'
 import {
   clipRangeToSupportedLunarYears,
