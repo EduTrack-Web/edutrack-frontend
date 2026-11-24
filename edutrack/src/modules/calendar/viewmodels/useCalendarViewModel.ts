@@ -1,17 +1,49 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { CalendarCategory, CalendarEvent, EntryType, RecurringUpdateMode } from '@/modules/calendar/models/calendar.types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  CalendarCategory,
+  CalendarEvent,
+  CalendarPreferences,
+  EntryType,
+  VietnameseLunarDate,
+} from '@/modules/calendar/models/calendar.types'
+import {
+  clipRangeToSupportedLunarYears,
+  enumerateDateKeys,
+  getVisibleLunarDateRange,
+  groupMissingDateRanges,
+  isRangeInsideSupportedLunarYears,
+  LUNAR_OUT_OF_RANGE_CODE,
+  LUNAR_OUT_OF_RANGE_MESSAGE,
+  LUNAR_RATE_LIMITED_MESSAGE,
+} from '@/modules/calendar/models/lunarCalendar'
 import { calendarApi } from '@/modules/calendar/services/calendarApi'
 import { expandAllRecurringEvents } from '@/modules/calendar/utils/recurrenceExpander'
+import { ApiError } from '@/shared/api/httpClient'
+import { useToast } from '@/shared/viewmodels/useToast'
 import { useRecurringConfirmation } from './useRecurringConfirmation'
 
 export type CalendarViewMode = 'day' | 'week' | 'month' | 'year' | 'list'
 
+const LUNAR_FETCH_DEBOUNCE_MS = 300
+
 export function useCalendarViewModel() {
   const { confirmation, confirmRecurring } = useRecurringConfirmation()
+  const { showToast } = useToast()
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [categories, setCategories] = useState<CalendarCategory[]>([])
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [calendarPreferences, setCalendarPreferences] = useState<CalendarPreferences>({
+    showLunarCalendar: false,
+  })
+  const [isPreferencesLoaded, setIsPreferencesLoaded] = useState(false)
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false)
+  const [lunarDatesBySolarDate, setLunarDatesBySolarDate] = useState<
+    Readonly<Record<string, VietnameseLunarDate>>
+  >({})
+  const lunarDateCacheRef = useRef(new Map<string, VietnameseLunarDate>())
+  const inFlightLunarDateKeysRef = useRef(new Set<string>())
+  const isLunarOutOfRangeNoticeShownRef = useRef(false)
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
 
@@ -31,9 +63,14 @@ export function useCalendarViewModel() {
       if (!isSilent) {
         setIsLoading(true)
       }
-      const [catRes, evRes] = await Promise.all([
+      const preferenceRequest = calendarApi.getPreferences().catch((error: unknown) => {
+        console.error('Không thể tải cài đặt hiển thị lịch:', error)
+        return null
+      })
+      const [catRes, evRes, preferenceRes] = await Promise.all([
         calendarApi.getCategories(),
         calendarApi.getEvents(),
+        preferenceRequest,
       ])
 
       const fetchedCats = catRes.data?.categories ?? []
@@ -49,6 +86,10 @@ export function useCalendarViewModel() {
       if (evRes.data?.events) {
         setEvents(evRes.data.events)
       }
+      if (preferenceRes?.data?.preferences) {
+        setCalendarPreferences(preferenceRes.data.preferences)
+      }
+      setIsPreferencesLoaded(true)
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu lịch:', err)
     } finally {
@@ -57,6 +98,76 @@ export function useCalendarViewModel() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!isPreferencesLoaded || !calendarPreferences.showLunarCalendar) return
+
+    const visibleRange = getVisibleLunarDateRange(viewMode, currentDate)
+    if (!visibleRange) return
+
+    // Gộp các lần chuyển ngày/tháng/năm liên tiếp thành một lần tải để không vượt giới hạn request.
+    const timer = window.setTimeout(() => {
+      if (isRangeInsideSupportedLunarYears(visibleRange)) {
+        isLunarOutOfRangeNoticeShownRef.current = false
+      } else if (!isLunarOutOfRangeNoticeShownRef.current) {
+        isLunarOutOfRangeNoticeShownRef.current = true
+        showToast(LUNAR_OUT_OF_RANGE_MESSAGE, 'info')
+      }
+
+      const supportedRange = clipRangeToSupportedLunarYears(visibleRange)
+      if (!supportedRange) return
+
+      const unavailableKeys = new Set<string>([
+        ...lunarDateCacheRef.current.keys(),
+        ...inFlightLunarDateKeysRef.current,
+      ])
+      const missingRanges = groupMissingDateRanges(supportedRange, unavailableKeys)
+
+      for (const missingRange of missingRanges) {
+        const requestedKeys = enumerateDateKeys(missingRange)
+        requestedKeys.forEach((dateKey) => inFlightLunarDateKeysRef.current.add(dateKey))
+
+        void calendarApi.getLunarDates(missingRange.from, missingRange.to)
+          .then((response) => {
+            for (const lunarDate of response.data?.dates ?? []) {
+              lunarDateCacheRef.current.set(lunarDate.solarDate, lunarDate)
+            }
+            setLunarDatesBySolarDate(Object.fromEntries(lunarDateCacheRef.current))
+          })
+          .catch((error: unknown) => {
+            if (error instanceof ApiError && error.code === LUNAR_OUT_OF_RANGE_CODE) {
+              showToast(LUNAR_OUT_OF_RANGE_MESSAGE, 'info')
+            } else if (error instanceof ApiError && error.status === 429) {
+              showToast(LUNAR_RATE_LIMITED_MESSAGE, 'info')
+            } else {
+              showToast('Không thể tải dữ liệu lịch Âm. Lịch Dương vẫn được hiển thị bình thường.', 'error')
+            }
+          })
+          .finally(() => {
+            requestedKeys.forEach((dateKey) => inFlightLunarDateKeysRef.current.delete(dateKey))
+          })
+      }
+    }, LUNAR_FETCH_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [calendarPreferences.showLunarCalendar, currentDate, isPreferencesLoaded, showToast, viewMode])
+
+  const handleUpdateCalendarPreferences = async (
+    preferences: CalendarPreferences,
+  ): Promise<boolean> => {
+    try {
+      setIsSavingPreferences(true)
+      const response = await calendarApi.updatePreferences(preferences)
+      setCalendarPreferences(response.data?.preferences ?? preferences)
+      showToast('Đã cập nhật cài đặt hiển thị lịch.', 'success')
+      return true
+    } catch {
+      showToast('Không thể lưu cài đặt, vui lòng thử lại.', 'error')
+      return false
+    } finally {
+      setIsSavingPreferences(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -373,6 +484,9 @@ export function useCalendarViewModel() {
     events: displayedEvents,
     allEventsCount: events.length,
     isLoading,
+    calendarPreferences,
+    isSavingPreferences,
+    lunarDatesBySolarDate,
     viewMode,
     setViewMode,
     activeFilterTab,
@@ -402,6 +516,7 @@ export function useCalendarViewModel() {
     handleToggleComplete,
     handleDeleteEvent,
     handleMoveEvent,
+    handleUpdateCalendarPreferences,
     refreshData: fetchData,
   }
 }

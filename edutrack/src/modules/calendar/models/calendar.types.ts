@@ -6,6 +6,25 @@ export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yea
 export type RecurringUpdateMode = 'this' | 'following' | 'all' | 'all_this_weekday'
 export type ReminderMethod = 'in-app' | 'email'
 
+export interface CalendarPreferences {
+  showLunarCalendar: boolean
+}
+
+export interface VietnameseLunarDate {
+  solarDate: string
+  lunarDay: number
+  lunarMonth: number
+  lunarYear: number
+  isLeapMonth: boolean
+  alternateLunar?: {
+    label: string
+    lunarDay: number
+    lunarMonth: number
+    lunarYear: number
+    isLeapMonth: boolean
+  }
+}
+
 export interface EventGuest {
   email: string
   role?: 'viewer' | 'editor'
