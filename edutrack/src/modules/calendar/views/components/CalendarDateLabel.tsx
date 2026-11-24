@@ -24,23 +24,24 @@ export function CalendarDateLabel({
   variant = 'month',
 }: CalendarDateLabelProps) {
   const isDay = variant === 'day'
+  const isWeek = variant === 'week'
   const isYear = variant === 'year'
   const isMonth = variant === 'month'
-  const isStacked = isDay || isYear
+  const isAlwaysStacked = isDay || isYear
 
-  const solarSize = variant === 'week'
-    ? 'size-8 text-xl sm:size-9 sm:text-2xl'
+  const solarSize = isWeek
+    ? 'size-6 text-xs sm:size-8 sm:text-lg lg:size-9 lg:text-xl'
     : isDay
       ? 'size-9 text-base'
       : isYear
         ? 'size-5 text-[10px]'
-        : 'size-6 text-xs'
+        : 'size-5 text-[11px] sm:size-6 sm:text-xs'
 
   const lunarSize = isYear
     ? 'text-[8px] leading-none'
     : isDay
       ? 'text-xs leading-tight'
-      : 'text-[10px] sm:text-[11px]'
+      : 'text-[9px] leading-tight sm:text-[11px]'
 
   const solarStyle = isToday
     ? 'bg-blue-600 font-bold text-white shadow-xs'
@@ -55,12 +56,13 @@ export function CalendarDateLabel({
   const formattedLunar = lunarDate ? formatLunarDateLabel(lunarDate, showLunarMonth) : ''
   const displayLunar = isMonth && formattedLunar ? `(${formattedLunar})` : formattedLunar
 
+  // Ở mobile (< sm), Tháng & Tuần xếp dọc để không tràn ô; từ sm trở lên xếp ngang gọn.
+  const layoutClass = isAlwaysStacked
+    ? 'flex-col gap-0.5'
+    : 'flex-col gap-0 sm:flex-row sm:gap-1'
+
   return (
-    <span
-      className={`inline-flex min-w-0 items-center ${
-        isStacked ? 'flex-col gap-0.5' : 'gap-1'
-      }`}
-    >
+    <span className={`inline-flex max-w-full min-w-0 items-center ${layoutClass}`}>
       <span
         className={`grid shrink-0 place-items-center rounded-full font-semibold ${solarSize} ${solarStyle}`}
       >
@@ -69,7 +71,7 @@ export function CalendarDateLabel({
       {showLunarCalendar && lunarDate && (
         <span
           aria-label={getLunarDateTooltip(lunarDate)}
-          className={`${lunarSize} shrink-0 font-semibold ${
+          className={`${lunarSize} max-w-full truncate font-semibold ${
             isMuted ? 'text-[#548383]/60 dark:text-[#C1E8FF]/50' : 'text-[#548383] dark:text-[#C1E8FF]'
           }`}
           title={getLunarDateTooltip(lunarDate)}

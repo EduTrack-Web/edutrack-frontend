@@ -58,82 +58,84 @@ export function CalendarSidebar({
     currentDate.getDate() === d && currentDate.getMonth() === month && currentDate.getFullYear() === year
 
   return (
-    <aside className="w-full shrink-0 space-y-5 md:w-64">
-      <button
-        className="flex w-full items-center justify-center gap-3 rounded-full border border-slate-200/90 bg-white py-3.5 pr-6 pl-4 text-sm font-bold text-slate-800 shadow-md transition-all hover:bg-slate-50 hover:shadow-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 active:scale-[0.99] dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
-        onClick={onOpenCreateEvent}
-        type="button"
-      >
-        <span className="grid size-7 place-items-center rounded-full bg-blue-50 text-blue-600 dark:bg-white/10 dark:text-blue-400">
-          <Icon className="size-4" name="plus" />
-        </span>
-        <span>Tạo mới sự kiện</span>
-      </button>
-
-      <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3.5 shadow-2xs backdrop-blur-xs dark:border-white/10 dark:bg-white/5">
-        <div className="flex items-center justify-between pb-2">
-          <span className="text-xs font-bold text-slate-800 capitalize dark:text-white">
-            {miniCalMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
+    <aside className="grid w-full shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start lg:flex lg:w-48 lg:flex-col lg:items-stretch lg:gap-4 xl:w-52 2xl:w-64">
+      <div className="space-y-3 lg:space-y-4">
+        <button
+          className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-full border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-md transition-all hover:bg-slate-50 hover:shadow-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 active:scale-[0.99] sm:py-3 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+          onClick={onOpenCreateEvent}
+          type="button"
+        >
+          <span className="grid size-7 place-items-center rounded-full bg-blue-50 text-blue-600 dark:bg-white/10 dark:text-blue-400">
+            <Icon className="size-4" name="plus" />
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              aria-label="Tháng trước"
-              className="grid size-6 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
-              onClick={() => setMiniCalMonth(new Date(year, month - 1, 1))}
-              type="button"
-            >
-              <Icon className="size-3.5" name="arrowLeft" />
-            </button>
-            <button
-              aria-label="Tháng sau"
-              className="grid size-6 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
-              onClick={() => setMiniCalMonth(new Date(year, month + 1, 1))}
-              type="button"
-            >
-              <Icon className="size-3.5" name="arrowRight" />
-            </button>
-          </div>
-        </div>
+          <span>Tạo mới sự kiện</span>
+        </button>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-400">
-          {WEEKDAYS.map((wd) => (
-            <div key={wd}>{wd}</div>
-          ))}
-        </div>
-
-        <div className="mt-1 grid grid-cols-7 gap-1 text-center text-xs">
-          {Array.from({ length: totalSlots }).map((_, idx) => {
-            const dayNum = idx - startDayOfWeek + 1
-            const isCurrentMonth = dayNum > 0 && dayNum <= daysInMonth
-
-            if (!isCurrentMonth) {
-              return <div className="size-7" key={idx} />
-            }
-
-            const todayActive = isToday(dayNum)
-            const selectedActive = isSelected(dayNum)
-
-            return (
+        <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-2xs backdrop-blur-xs sm:p-3.5 dark:border-white/10 dark:bg-white/5">
+          <div className="flex items-center justify-between pb-2">
+            <span className="text-xs font-bold text-slate-800 capitalize dark:text-white">
+              {miniCalMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
+            </span>
+            <div className="flex items-center gap-1">
               <button
-                className={`grid size-7 place-items-center rounded-full text-xs font-medium transition-colors ${
-                  todayActive
-                    ? 'bg-blue-600 font-bold text-white shadow-xs'
-                    : selectedActive
-                      ? 'border border-blue-600 bg-blue-50 font-bold text-blue-700 dark:bg-white/15 dark:text-white'
-                      : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
-                }`}
-                key={idx}
-                onClick={() => onSelectDate(new Date(year, month, dayNum))}
+                aria-label="Tháng trước"
+                className="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
+                onClick={() => setMiniCalMonth(new Date(year, month - 1, 1))}
                 type="button"
               >
-                {dayNum}
+                <Icon className="size-3.5" name="arrowLeft" />
               </button>
-            )
-          })}
+              <button
+                aria-label="Tháng sau"
+                className="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"
+                onClick={() => setMiniCalMonth(new Date(year, month + 1, 1))}
+                type="button"
+              >
+                <Icon className="size-3.5" name="arrowRight" />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-slate-400">
+            {WEEKDAYS.map((wd) => (
+              <div key={wd}>{wd}</div>
+            ))}
+          </div>
+
+          <div className="mt-1 grid grid-cols-7 gap-1 text-center text-xs">
+            {Array.from({ length: totalSlots }).map((_, idx) => {
+              const dayNum = idx - startDayOfWeek + 1
+              const isCurrentMonth = dayNum > 0 && dayNum <= daysInMonth
+
+              if (!isCurrentMonth) {
+                return <div className="mx-auto size-7" key={idx} />
+              }
+
+              const todayActive = isToday(dayNum)
+              const selectedActive = isSelected(dayNum)
+
+              return (
+                <button
+                  className={`mx-auto grid size-7 place-items-center rounded-full text-xs font-medium transition-colors ${
+                    todayActive
+                      ? 'bg-blue-600 font-bold text-white shadow-xs'
+                      : selectedActive
+                        ? 'border border-blue-600 bg-blue-50 font-bold text-blue-700 dark:bg-white/15 dark:text-white'
+                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'
+                  }`}
+                  key={idx}
+                  onClick={() => onSelectDate(new Date(year, month, dayNum))}
+                  type="button"
+                >
+                  {dayNum}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3.5 shadow-2xs backdrop-blur-xs dark:border-white/10 dark:bg-white/5">
+      <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-2xs backdrop-blur-xs sm:p-3.5 dark:border-white/10 dark:bg-white/5">
         <div className="flex items-center justify-between pb-2.5">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">

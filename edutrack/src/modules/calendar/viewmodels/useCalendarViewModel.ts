@@ -454,7 +454,6 @@ export function useCalendarViewModel() {
   const getDateTitleLabel = (): string => {
     if (viewMode === 'day') {
       return currentDate.toLocaleDateString('vi-VN', {
-        weekday: 'long',
         day: 'numeric',
         month: 'long',
         year: 'numeric',

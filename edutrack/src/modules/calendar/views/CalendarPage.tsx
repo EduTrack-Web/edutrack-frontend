@@ -542,8 +542,8 @@ export function CalendarPage() {
   const sortedListDates = Object.keys(eventsByDate).sort()
 
   return (
-    <div className="mx-auto max-w-(--breakpoint-2xl) space-y-4">
-      <div className="flex flex-col gap-5 lg:flex-row">
+    <div className="mx-auto max-w-(--breakpoint-2xl) space-y-3 sm:space-y-4">
+      <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:gap-5">
         <CalendarSidebar
           categories={vm.categories}
           currentDate={vm.currentDate}
@@ -559,21 +559,21 @@ export function CalendarPage() {
           selectedCategoryIds={vm.selectedCategoryIds}
         />
 
-        <main className="min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5 dark:border-white/10 dark:bg-white/5">
-          <div className="flex flex-col justify-between gap-4 border-b border-slate-100 pb-4 xl:flex-row xl:items-center dark:border-white/10">
-            <div className="flex flex-wrap items-center gap-2.5">
+        <main className="min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-xs sm:p-4 lg:p-5 dark:border-white/10 dark:bg-white/5">
+          <div className="flex flex-col gap-2.5 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between sm:pb-4 dark:border-white/10">
+            <div className="flex min-w-0 items-center gap-1.5 2xl:gap-2.5">
               <button
-                className="rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+                className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 2xl:px-3.5 2xl:py-1.5 2xl:text-xs dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
                 onClick={vm.handleToday}
                 type="button"
               >
                 Hôm nay
               </button>
 
-              <div className="flex items-center gap-1">
+              <div className="flex shrink-0 items-center gap-0.5">
                 <button
                   aria-label="Trước"
-                  className="grid size-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
+                  className="grid size-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100 2xl:size-8 dark:text-slate-400 dark:hover:bg-white/10"
                   onClick={vm.handlePrev}
                   type="button"
                 >
@@ -581,7 +581,7 @@ export function CalendarPage() {
                 </button>
                 <button
                   aria-label="Sau"
-                  className="grid size-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
+                  className="grid size-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100 2xl:size-8 dark:text-slate-400 dark:hover:bg-white/10"
                   onClick={vm.handleNext}
                   type="button"
                 >
@@ -589,74 +589,104 @@ export function CalendarPage() {
                 </button>
               </div>
 
-              <h2 className="text-base font-bold capitalize text-slate-900 sm:text-lg dark:text-white">
+              <h2 className="min-w-0 truncate text-sm font-bold capitalize text-slate-900 2xl:text-lg dark:text-white">
                 {vm.dateTitleLabel}
               </h2>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-white/10">
-                {VIEW_OPTIONS.map((opt) => (
-                  <button
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                      vm.viewMode === opt.mode
-                        ? 'bg-white text-blue-600 shadow-xs dark:bg-slate-800 dark:text-blue-400'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                    }`}
-                    key={opt.mode}
-                    onClick={() => vm.setViewMode(opt.mode)}
-                    type="button"
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+            <div className="flex shrink-0 items-center justify-between gap-1.5 sm:justify-end 2xl:gap-2.5">
+              {/* Mobile, foldable & iPad (< xl): dropdown gọn để giữ 1 dòng duy nhất */}
+              <div className="flex items-center gap-1.5 xl:hidden">
+                <select
+                  aria-label="Chế độ xem lịch"
+                  className="h-8 rounded-lg border border-slate-200 bg-slate-100 px-2 text-xs font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                  onChange={(event) => vm.setViewMode(event.target.value as CalendarViewMode)}
+                  value={vm.viewMode}
+                >
+                  {VIEW_OPTIONS.map((opt) => (
+                    <option key={opt.mode} value={opt.mode}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  aria-label="Lọc loại mục"
+                  className="h-8 rounded-lg border border-slate-200 bg-slate-100 px-2 text-xs font-semibold text-slate-700 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+                  onChange={(event) => vm.setActiveFilterTab(event.target.value as 'all' | 'event' | 'task')}
+                  value={vm.activeFilterTab}
+                >
+                  <option value="all">Tất cả</option>
+                  <option value="event">Sự kiện</option>
+                  <option value="task">Nhiệm vụ</option>
+                </select>
               </div>
 
-              <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-white/10">
-                <button
-                  className={`rounded-lg px-2 py-1 text-xs font-semibold transition-all ${
-                    vm.activeFilterTab === 'all'
-                      ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                  onClick={() => vm.setActiveFilterTab('all')}
-                  type="button"
-                >
-                  Tất cả
-                </button>
-                <button
-                  className={`rounded-lg px-2 py-1 text-xs font-semibold transition-all ${
-                    vm.activeFilterTab === 'event'
-                      ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                  onClick={() => vm.setActiveFilterTab('event')}
-                  type="button"
-                >
-                  Sự kiện
-                </button>
-                <button
-                  className={`rounded-lg px-2 py-1 text-xs font-semibold transition-all ${
-                    vm.activeFilterTab === 'task'
-                      ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                  onClick={() => vm.setActiveFilterTab('task')}
-                  type="button"
-                >
-                  Nhiệm vụ
-                </button>
+              {/* Laptop & màn hình lớn (xl+): nhóm nút đầy đủ trên cùng 1 dòng */}
+              <div className="hidden items-center gap-1.5 xl:flex 2xl:gap-2.5">
+                <div className="flex rounded-xl bg-slate-100 p-0.5 2xl:p-1 dark:bg-white/10">
+                  {VIEW_OPTIONS.map((opt) => (
+                    <button
+                      className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-bold transition-all 2xl:px-2.5 2xl:text-xs ${
+                        vm.viewMode === opt.mode
+                          ? 'bg-white text-blue-600 shadow-xs dark:bg-slate-800 dark:text-blue-400'
+                          : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                      }`}
+                      key={opt.mode}
+                      onClick={() => vm.setViewMode(opt.mode)}
+                      type="button"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex rounded-xl bg-slate-100 p-0.5 2xl:p-1 dark:bg-white/10">
+                  <button
+                    className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-semibold transition-all 2xl:px-2 2xl:text-xs ${
+                      vm.activeFilterTab === 'all'
+                        ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                    onClick={() => vm.setActiveFilterTab('all')}
+                    type="button"
+                  >
+                    Tất cả
+                  </button>
+                  <button
+                    className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-semibold transition-all 2xl:px-2 2xl:text-xs ${
+                      vm.activeFilterTab === 'event'
+                        ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                    onClick={() => vm.setActiveFilterTab('event')}
+                    type="button"
+                  >
+                    Sự kiện
+                  </button>
+                  <button
+                    className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-semibold transition-all 2xl:px-2 2xl:text-xs ${
+                      vm.activeFilterTab === 'task'
+                        ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                    onClick={() => vm.setActiveFilterTab('task')}
+                    type="button"
+                  >
+                    Nhiệm vụ
+                  </button>
+                </div>
               </div>
 
               <button
                 aria-label="Cài đặt lịch"
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                className="inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 2xl:w-auto 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                 onClick={() => setIsCalendarSettingsOpen(true)}
                 title="Cài đặt lịch"
                 type="button"
               >
                 <Settings aria-hidden="true" className="size-4" />
-                <span className="hidden sm:inline">Cài đặt</span>
+                <span className="hidden 2xl:inline">Cài đặt</span>
               </button>
 
             </div>
@@ -670,7 +700,7 @@ export function CalendarPage() {
           ) : vm.viewMode === 'day' ? (
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
               
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/60 p-3 sm:px-4 dark:border-white/10 dark:bg-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/60 p-2.5 sm:px-4 dark:border-white/10 dark:bg-white/5">
                 <div className="flex flex-wrap items-center gap-2">
                   <CalendarDateLabel
                     isToday={isSelectedDateToday}
@@ -719,7 +749,7 @@ export function CalendarPage() {
                   }}
                   onDrop={(e) => handleDropOnAllDaySlot(e, vm.currentDate)}
                 >
-                  <span className="w-14 sm:w-16 shrink-0 pr-2 text-right text-[10px] font-semibold text-slate-400">
+                  <span className="w-11 sm:w-16 shrink-0 pr-1.5 sm:pr-2 text-right text-[10px] font-semibold text-slate-400">
                     Cả ngày
                   </span>
                   <div className="flex flex-1 flex-wrap items-center gap-1.5 min-h-[28px]">
@@ -775,11 +805,11 @@ export function CalendarPage() {
                 ref={dayGridRef}
               >
                 
-                <div className="w-14 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
+                <div className="w-11 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
                   {HOURS_24.map((h, i) => (
                     <div className="relative h-[48px]" key={h.hour}>
                       {i > 0 && (
-                        <span className="absolute -top-2.5 right-2 select-none text-[10px] font-medium text-slate-400">
+                        <span className="absolute -top-2.5 right-1.5 sm:right-2 select-none text-[10px] font-medium text-slate-400">
                           {h.label}
                         </span>
                       )}
@@ -949,16 +979,17 @@ export function CalendarPage() {
               </div>
             </div>
           ) : vm.viewMode === 'week' ? (
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
+            <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
+              <div className="min-w-[520px] sm:min-w-0">
               
               <div className="flex border-b border-slate-200 bg-slate-50/50 dark:border-white/10 dark:bg-white/5">
                 
-                <div className="flex w-14 sm:w-16 shrink-0 select-none items-end justify-center border-r border-slate-200/70 pb-2 text-[11px] font-semibold text-slate-400 dark:border-white/10">
+                <div className="flex w-11 sm:w-16 shrink-0 select-none items-end justify-center border-r border-slate-200/70 pb-2 text-[10px] sm:text-[11px] font-semibold text-slate-400 dark:border-white/10">
                   {timeZoneHeaderLabel}
                 </div>
 
                 
-                <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 py-2.5 text-center dark:divide-white/10">
+                <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 py-2 sm:py-2.5 text-center dark:divide-white/10">
                   {weekDays.map((wd, weekIndex) => {
                     const isCurrentDay =
                       today.getDate() === wd.dayNum &&
@@ -966,15 +997,16 @@ export function CalendarPage() {
                       today.getFullYear() === wd.date.getFullYear()
 
                     return (
-                      <div className="px-1" key={wd.dateKey}>
+                      <div className="px-0.5 sm:px-1" key={wd.dateKey}>
                         <span
-                          className={`block text-[11px] font-semibold uppercase tracking-wider ${
+                          className={`block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider ${
                             isCurrentDay
                               ? 'font-bold text-blue-600 dark:text-blue-400'
                               : 'text-slate-500 dark:text-slate-400'
                           }`}
                         >
-                          {wd.weekdayLabel}
+                          <span className="sm:hidden">{shortWeekdays[weekIndex]}</span>
+                          <span className="hidden sm:inline">{wd.weekdayLabel}</span>
                         </span>
                         <span className="mt-0.5 inline-flex justify-center">
                           <CalendarDateLabel
@@ -995,7 +1027,7 @@ export function CalendarPage() {
               
               {(hasAnyWeekAllDay || Boolean(draggedEvent)) && (
                 <div className="flex border-b border-slate-200 bg-slate-50/30 py-1 dark:border-white/10 dark:bg-white/2">
-                  <div className="flex w-14 sm:w-16 shrink-0 items-center justify-end border-r border-slate-200/70 pr-2 text-[10px] font-medium text-slate-400 dark:border-white/10">
+                  <div className="flex w-11 sm:w-16 shrink-0 items-center justify-end border-r border-slate-200/70 pr-1.5 sm:pr-2 text-[10px] font-medium text-slate-400 dark:border-white/10">
                     Cả ngày
                   </div>
                   <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 px-0.5 dark:divide-white/10">
@@ -1074,11 +1106,11 @@ export function CalendarPage() {
                 ref={timeGridRef}
               >
                 
-                <div className="w-14 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
+                <div className="w-11 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
                   {HOURS_24.map((h, i) => (
                     <div className="relative h-[48px]" key={h.hour}>
                       {i > 0 && (
-                        <span className="absolute -top-2.5 right-2 select-none text-[10px] font-medium text-slate-400">
+                        <span className="absolute -top-2.5 right-1.5 sm:right-2 select-none text-[10px] font-medium text-slate-400">
                           {h.label}
                         </span>
                       )}
@@ -1262,12 +1294,16 @@ export function CalendarPage() {
                   })}
                 </div>
               </div>
+              </div>
             </div>
           ) : vm.viewMode === 'month' ? (
             <div className="mt-3">
-              <div className="grid grid-cols-7 border-b border-slate-200 pb-2 text-center text-xs font-bold text-slate-600 dark:border-white/10 dark:text-slate-400">
-                {weekdays.map((wd) => (
-                  <div key={wd}>{wd}</div>
+              <div className="grid grid-cols-7 border-b border-slate-200 pb-2 text-center text-[11px] font-bold text-slate-600 sm:text-xs dark:border-white/10 dark:text-slate-400">
+                {weekdays.map((wd, idx) => (
+                  <div key={wd}>
+                    <span className="sm:hidden">{shortWeekdays[idx]}</span>
+                    <span className="hidden sm:inline">{wd}</span>
+                  </div>
                 ))}
               </div>
 
@@ -1305,7 +1341,7 @@ export function CalendarPage() {
                   const isDragTarget = dragOverTarget === dateKey
                   return (
                     <div
-                      className={`group relative flex min-h-[115px] flex-col p-1.5 transition-colors sm:p-2 ${
+                      className={`group relative flex min-h-[76px] min-w-0 flex-col p-1 transition-colors sm:min-h-[115px] sm:p-2 ${
                         isDragTarget
                           ? 'bg-blue-50/80 ring-2 ring-inset ring-blue-500 dark:bg-blue-950/40'
                           : isCurrentMonth
@@ -1363,7 +1399,7 @@ export function CalendarPage() {
 
                           return (
                             <div
-                              className={`group/chip flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-2xs transition-all hover:scale-[1.02] ${
+                              className={`group/chip flex w-full items-center gap-1 rounded-md px-1 py-0.5 text-left text-[10px] font-semibold text-white shadow-2xs transition-all hover:scale-[1.02] sm:gap-1.5 sm:px-1.5 sm:text-[11px] ${
                                 event.isCompleted ? 'opacity-55' : ''
                               } ${
                                 isBeingDragged
@@ -1418,7 +1454,7 @@ export function CalendarPage() {
               </div>
             </div>
           ) : vm.viewMode === 'year' ? (
-            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {Array.from({ length: 12 }).map((_, mIdx) => {
                 const monthDate = new Date(currentYear, mIdx, 1)
                 const monthName = monthDate.toLocaleDateString('vi-VN', { month: 'long' })
