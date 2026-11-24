@@ -5,6 +5,25 @@ export type EventVisibility = 'default' | 'public' | 'private'
 export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'weekdays' | 'custom'
 export type ReminderMethod = 'in-app' | 'email'
 
+export interface CalendarPreferences {
+  showLunarCalendar: boolean
+}
+
+export interface VietnameseLunarDate {
+  solarDate: string
+  lunarDay: number
+  lunarMonth: number
+  lunarYear: number
+  isLeapMonth: boolean
+  alternateLunar?: {
+    label: string
+    lunarDay: number
+    lunarMonth: number
+    lunarYear: number
+    isLeapMonth: boolean
+  }
+}
+
 export interface EventGuest {
   email: string
   role?: 'viewer' | 'editor'
