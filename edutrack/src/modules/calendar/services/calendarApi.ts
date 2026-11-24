@@ -94,11 +94,16 @@ export const calendarApi = {
       body: JSON.stringify(payload),
     }),
 
-  updateEvent: (eventId: string, payload: UpdateEventInput) =>
-    request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}`, {
+  updateEvent: (eventId: string, payload: UpdateEventInput) => {
+    const search = new URLSearchParams()
+    if (payload.mode) search.set('mode', payload.mode)
+    if (payload.targetDate) search.set('targetDate', payload.targetDate)
+    const suffix = search.size > 0 ? `?${search.toString()}` : ''
+    return request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}${suffix}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
-    }),
+    })
+  },
 
   deleteEvent: (eventId: string, mode?: 'this' | 'following' | 'all', date?: string) => {
     const params = new URLSearchParams()

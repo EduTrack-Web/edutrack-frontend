@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/shared/components/Icon'
-import type { CalendarEvent } from '@/modules/calendar/models/calendar.types'
+import type { CalendarEvent, RecurringUpdateMode } from '@/modules/calendar/models/calendar.types'
 import { useCalendarViewModel, type CalendarViewMode } from '@/modules/calendar/viewmodels/useCalendarViewModel'
 import { CalendarSidebar } from './components/CalendarSidebar'
 import { CategoryModal } from './components/CategoryModal'
 import { EventModal } from './components/EventModal'
+import { TaskTickButton } from './components/TaskTickButton'
+import { RecurringConfirmationDialog } from './components/RecurringConfirmationDialog'
 
 const GOOGLE_WEEKDAYS = ['CN', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']
 const GOOGLE_SHORT_WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
@@ -30,6 +32,9 @@ function formatEventTime(startStr: string, endStr: string, isAllDay: boolean): s
     if (isAllDay) return 'Cả ngày'
     const timeStart = start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })
     const timeEnd = end.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    if (timeStart === timeEnd && start.toDateString() === end.toDateString()) {
+      return timeStart
+    }
     return `${timeStart} – ${timeEnd}`
   } catch {
     return `${startStr} – ${endStr}`
@@ -50,6 +55,91 @@ function getTimeZoneOffsetLabel(tz?: string): string {
   }
 }
 
+interface RecurringScopeOption {
+  value: RecurringUpdateMode
+  label: string
+  description: string
+}
+
+function getScopeOptions(
+  event: CalendarEvent,
+  isSameDay: boolean,
+  isResize: boolean,
+  targetDate: Date,
+): RecurringScopeOption[] {
+  const freq = event.recurrence?.frequency || 'daily'
+  const isMultiDayWeekly =
+    (freq === 'weekly' || freq === 'custom' || freq === 'weekdays') &&
+    ((event.recurrence?.daysOfWeek && event.recurrence.daysOfWeek.length > 1) || freq === 'weekdays')
+
+  const formattedDate = targetDate.toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+
+  const weekdayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
+  const weekdayName = weekdayNames[targetDate.getDay()]
+
+  if (isSameDay || isResize) {
+    if (isMultiDayWeekly) {
+      return [
+        {
+          value: 'this',
+          label: 'Chỉ lần này',
+          description: `Chỉ cập nhật cho lần diễn ra vào ${weekdayName}, ngày ${formattedDate}`,
+        },
+        {
+          value: 'following',
+          label: 'Lần này và các lần tiếp theo',
+          description: `Cập nhật từ ngày ${formattedDate} trở đi trong chuỗi lặp`,
+        },
+        {
+          value: 'all_this_weekday',
+          label: `Tất cả các lần vào ${weekdayName}`,
+          description: `Cập nhật toàn bộ các lần xuất hiện vào ${weekdayName} trong chuỗi lặp`,
+        },
+        {
+          value: 'all',
+          label: 'Tất cả các lần trong chuỗi',
+          description: 'Cập nhật cho toàn bộ các lần xuất hiện trong chuỗi lặp',
+        },
+      ]
+    }
+
+    return [
+      {
+        value: 'this',
+        label: 'Chỉ lần này',
+        description: `Chỉ cập nhật cho lần diễn ra vào ngày ${formattedDate}`,
+      },
+      {
+        value: 'following',
+        label: 'Lần này và các lần tiếp theo',
+        description: `Cập nhật từ ngày ${formattedDate} trở đi trong chuỗi lặp`,
+      },
+      {
+        value: 'all',
+        label: 'Tất cả các lần trong chuỗi',
+        description: 'Cập nhật cho toàn bộ các lần xuất hiện trong chuỗi lặp',
+      },
+    ]
+  }
+
+  return [
+    {
+      value: 'this',
+      label: 'Chỉ lần này',
+      description: `Chỉ dời lần diễn ra vào ngày ${formattedDate} sang ngày mới`,
+    },
+    {
+      value: 'following',
+      label: 'Lần này và các lần tiếp theo',
+      description: `Bắt đầu lịch trình lặp mới từ ngày đã chọn trở đi`,
+    },
+  ]
+}
+
 function formatDayHeader(dateStr: string): string {
   try {
     const d = new Date(dateStr)
@@ -64,6 +154,309 @@ export function CalendarPage() {
   const timeGridRef = useRef<HTMLDivElement>(null)
   const dayGridRef = useRef<HTMLDivElement>(null)
   const [hoveredDateCell, setHoveredDateCell] = useState<string | null>(null)
+  const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null)
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null)
+  const isSuppressClickRef = useRef(false)
+
+  const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null)
+  const [deleteRecurringMode, setDeleteRecurringMode] = useState<'this' | 'following' | 'all'>('this')
+  const [isDeletingEvent, setIsDeletingEvent] = useState(false)
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
+
+  const [pendingRecurringAction, setPendingRecurringAction] = useState<{
+    event: CalendarEvent
+    newStartDate: string
+    newEndDate: string
+    isAllDay?: boolean
+    isSameDay: boolean
+    isResize: boolean
+    targetDate: string
+  } | null>(null)
+  const [selectedRecurringMode, setSelectedRecurringMode] = useState<RecurringUpdateMode>('this')
+
+  const [resizingEvent, setResizingEvent] = useState<{
+    event: CalendarEvent
+    initialY: number
+    initialHeight: number
+    currentHeight: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!resizingEvent) return
+
+    const handlePointerMove = (e: PointerEvent) => {
+      isSuppressClickRef.current = true
+      const deltaY = e.clientY - resizingEvent.initialY
+      const snappedDelta = Math.round(deltaY / 12) * 12
+      const newHeight = Math.max(12, resizingEvent.initialHeight + snappedDelta)
+      setResizingEvent((prev) => (prev ? { ...prev, currentHeight: newHeight } : null))
+    }
+
+    const handlePointerUp = async (e: PointerEvent) => {
+      isSuppressClickRef.current = true
+      window.setTimeout(() => {
+        isSuppressClickRef.current = false
+      }, 350)
+
+      const deltaY = e.clientY - resizingEvent.initialY
+      const snappedDelta = Math.round(deltaY / 12) * 12
+      const addedMinutes = Math.round(snappedDelta / 12) * 15
+
+      const event = resizingEvent.event
+      setResizingEvent(null)
+
+      if (addedMinutes === 0) return
+
+      const origStart = new Date(event.startDate)
+      const origEnd = new Date(event.endDate)
+      const origDurationMs = Math.max(15 * 60000, origEnd.getTime() - origStart.getTime())
+      const newDurationMs = Math.max(15 * 60000, origDurationMs + addedMinutes * 60000)
+      const newEnd = new Date(origStart.getTime() + newDurationMs)
+
+      const isRecurring = Boolean(
+        (event.recurrence && event.recurrence.frequency !== 'none') ||
+        (event as unknown as { _isOccurrence?: boolean })?._isOccurrence,
+      )
+
+      if (isRecurring) {
+        setSelectedRecurringMode('this')
+        setPendingRecurringAction({
+          event,
+          newStartDate: event.startDate,
+          newEndDate: newEnd.toISOString(),
+          isAllDay: false,
+          isSameDay: true,
+          isResize: true,
+          targetDate: event.startDate,
+        })
+      } else {
+        await vm.handleMoveEvent(event.id, event.startDate, newEnd.toISOString(), false)
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [resizingEvent, vm])
+
+  const handleResizeStart = (e: React.PointerEvent, event: CalendarEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    isSuppressClickRef.current = true
+    const startD = new Date(event.startDate)
+    const endD = new Date(event.endDate)
+    const rawDuration = (endD.getTime() - startD.getTime()) / 60000
+    const durationMin = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 30
+    const initialH = Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
+
+    setResizingEvent({
+      event,
+      initialY: e.clientY,
+      initialHeight: initialH,
+      currentHeight: initialH,
+    })
+  }
+
+  const handleConfirmRecurringMove = async () => {
+    if (!pendingRecurringAction) return
+    const action = pendingRecurringAction
+    setPendingRecurringAction(null)
+    await vm.handleMoveEvent(
+      action.event.id,
+      action.newStartDate,
+      action.newEndDate,
+      action.isAllDay,
+      selectedRecurringMode,
+      action.targetDate,
+    )
+  }
+
+  const handleDragStart = (e: React.DragEvent, event: CalendarEvent) => {
+    e.stopPropagation()
+    isSuppressClickRef.current = true
+    setDraggedEvent(event)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', event.id)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedEvent(null)
+    setDragOverTarget(null)
+    window.setTimeout(() => {
+      isSuppressClickRef.current = false
+    }, 350)
+  }
+
+  const handleDropOnMonthDay = async (e: React.DragEvent, targetDate: Date) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverTarget(null)
+    if (!draggedEvent) return
+
+    isSuppressClickRef.current = true
+    window.setTimeout(() => {
+      isSuppressClickRef.current = false
+    }, 350)
+
+    const origStart = new Date(draggedEvent.startDate)
+    const origEnd = new Date(draggedEvent.endDate)
+    const durationMs = Math.max(0, origEnd.getTime() - origStart.getTime())
+
+    let newStart: Date
+    let newEnd: Date
+
+    if (draggedEvent.isAllDay) {
+      newStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0)
+      newEnd = new Date(newStart.getTime() + durationMs)
+    } else {
+      newStart = new Date(
+        targetDate.getFullYear(),
+        targetDate.getMonth(),
+        targetDate.getDate(),
+        origStart.getHours(),
+        origStart.getMinutes(),
+        0,
+      )
+      newEnd = new Date(newStart.getTime() + durationMs)
+    }
+
+    const isRecurring = Boolean(
+      (draggedEvent.recurrence && draggedEvent.recurrence.frequency !== 'none') ||
+      (draggedEvent as unknown as { _isOccurrence?: boolean })?._isOccurrence,
+    )
+
+    const isSameDay =
+      origStart.getFullYear() === newStart.getFullYear() &&
+      origStart.getMonth() === newStart.getMonth() &&
+      origStart.getDate() === newStart.getDate()
+
+    if (isRecurring) {
+      setSelectedRecurringMode('this')
+      setPendingRecurringAction({
+        event: draggedEvent,
+        newStartDate: newStart.toISOString(),
+        newEndDate: newEnd.toISOString(),
+        isAllDay: draggedEvent.isAllDay,
+        isSameDay,
+        isResize: false,
+        targetDate: draggedEvent.startDate,
+      })
+      setDraggedEvent(null)
+    } else {
+      const targetId = draggedEvent.id
+      setDraggedEvent(null)
+      await vm.handleMoveEvent(targetId, newStart.toISOString(), newEnd.toISOString(), draggedEvent.isAllDay)
+    }
+  }
+
+  const handleDropOnTimedSlot = async (e: React.DragEvent, targetDate: Date, hour: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverTarget(null)
+    if (!draggedEvent) return
+
+    isSuppressClickRef.current = true
+    window.setTimeout(() => {
+      isSuppressClickRef.current = false
+    }, 350)
+
+    const origStart = new Date(draggedEvent.startDate)
+    const origEnd = new Date(draggedEvent.endDate)
+    const durationMs = Math.max(0, origEnd.getTime() - origStart.getTime())
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const relY = Math.max(0, Math.min(47, e.clientY - rect.top))
+    const quarter = Math.min(3, Math.max(0, Math.floor((relY / 48) * 4)))
+    const targetMinute = quarter * 15
+
+    const newStart = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth(),
+      targetDate.getDate(),
+      hour,
+      targetMinute,
+      0,
+    )
+    const newEnd = new Date(newStart.getTime() + durationMs)
+
+    const isRecurring = Boolean(
+      (draggedEvent.recurrence && draggedEvent.recurrence.frequency !== 'none') ||
+      (draggedEvent as unknown as { _isOccurrence?: boolean })?._isOccurrence,
+    )
+
+    const isSameDay =
+      origStart.getFullYear() === newStart.getFullYear() &&
+      origStart.getMonth() === newStart.getMonth() &&
+      origStart.getDate() === newStart.getDate()
+
+    if (isRecurring) {
+      setSelectedRecurringMode('this')
+      setPendingRecurringAction({
+        event: draggedEvent,
+        newStartDate: newStart.toISOString(),
+        newEndDate: newEnd.toISOString(),
+        isAllDay: false,
+        isSameDay,
+        isResize: false,
+        targetDate: draggedEvent.startDate,
+      })
+      setDraggedEvent(null)
+    } else {
+      const targetId = draggedEvent.id
+      setDraggedEvent(null)
+      await vm.handleMoveEvent(targetId, newStart.toISOString(), newEnd.toISOString(), false)
+    }
+  }
+
+  const handleDropOnAllDaySlot = async (e: React.DragEvent, targetDate: Date) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverTarget(null)
+    if (!draggedEvent) return
+
+    isSuppressClickRef.current = true
+    window.setTimeout(() => {
+      isSuppressClickRef.current = false
+    }, 350)
+
+    const origStart = new Date(draggedEvent.startDate)
+    const origEnd = new Date(draggedEvent.endDate)
+    const durationMs = Math.max(0, origEnd.getTime() - origStart.getTime())
+
+    const newStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0)
+    const newEnd = new Date(newStart.getTime() + durationMs)
+
+    const isRecurring = Boolean(
+      (draggedEvent.recurrence && draggedEvent.recurrence.frequency !== 'none') ||
+      (draggedEvent as unknown as { _isOccurrence?: boolean })?._isOccurrence,
+    )
+
+    const isSameDay =
+      origStart.getFullYear() === newStart.getFullYear() &&
+      origStart.getMonth() === newStart.getMonth() &&
+      origStart.getDate() === newStart.getDate()
+
+    if (isRecurring) {
+      setSelectedRecurringMode('this')
+      setPendingRecurringAction({
+        event: draggedEvent,
+        newStartDate: newStart.toISOString(),
+        newEndDate: newEnd.toISOString(),
+        isAllDay: true,
+        isSameDay,
+        isResize: false,
+        targetDate: draggedEvent.startDate,
+      })
+      setDraggedEvent(null)
+    } else {
+      const targetId = draggedEvent.id
+      setDraggedEvent(null)
+      await vm.handleMoveEvent(targetId, newStart.toISOString(), newEnd.toISOString(), true)
+    }
+  }
   const currentYear = vm.currentDate.getFullYear()
   const currentMonth = vm.currentDate.getMonth()
   const today = new Date()
@@ -72,13 +465,11 @@ export function CalendarPage() {
     ? vm.categories.find((category) => category.id === selectedCalendarId)?.settings
     : undefined
 
-  // Tuần bắt đầu từ Chủ Nhật (0) chuẩn theo ảnh Google Calendar
   const weekStartsOn = 0
   const weekdays = GOOGLE_WEEKDAYS
   const shortWeekdays = GOOGLE_SHORT_WEEKDAYS
   const timeZoneHeaderLabel = getTimeZoneOffsetLabel(selectedSettings?.timeZone)
 
-  // Tự động cuộn đến 7:00 AM hoặc giờ hiện tại khi mở view Tuần/Ngày
   useEffect(() => {
     if (vm.viewMode === 'week' || vm.viewMode === 'day') {
       const scrollTimer = window.setTimeout(() => {
@@ -94,6 +485,9 @@ export function CalendarPage() {
 
   const eventsByDate: Record<string, CalendarEvent[]> = {}
   for (const event of vm.events) {
+    if (event.calendarId && !vm.selectedCategoryIds.includes(event.calendarId)) {
+      continue
+    }
     const start = new Date(event.startDate)
     const month = String(start.getMonth() + 1).padStart(2, '0')
     const day = String(start.getDate()).padStart(2, '0')
@@ -148,7 +542,7 @@ export function CalendarPage() {
         <CalendarSidebar
           categories={vm.categories}
           currentDate={vm.currentDate}
-          onDeleteCategory={vm.handleDeleteCategory}
+          onDeleteCategory={(catId) => setCategoryToDelete(catId)}
           onOpenCreateCategory={vm.handleOpenCreateCategory}
           onOpenCreateEvent={() => vm.handleOpenCreateEvent()}
           onOpenEditCategory={vm.handleOpenEditCategory}
@@ -259,7 +653,7 @@ export function CalendarPage() {
             </div>
           ) : vm.viewMode === 'day' ? (
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
-              {/* Header ngày */}
+              
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/60 p-3 sm:px-4 dark:border-white/10 dark:bg-white/5">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold capitalize text-slate-900 sm:text-base dark:text-white">
@@ -288,37 +682,80 @@ export function CalendarPage() {
                 </button>
               </div>
 
-              {/* Hàng sự kiện Cả ngày */}
-              {selectedDayAllDayEvents.length > 0 && (
-                <div className="flex items-center border-b border-slate-200 bg-slate-50/30 p-2 sm:px-3 dark:border-white/10 dark:bg-white/2">
+              
+              {(selectedDayAllDayEvents.length > 0 || Boolean(draggedEvent)) && (
+                <div
+                  className={`flex items-center border-b border-slate-200 bg-slate-50/30 p-2 sm:px-3 transition-colors dark:border-white/10 dark:bg-white/2 ${
+                    dragOverTarget === 'day-allday'
+                      ? 'bg-blue-100/60 ring-2 ring-inset ring-blue-500 dark:bg-blue-950/40'
+                      : ''
+                  }`}
+                  onDragLeave={() => {
+                    if (dragOverTarget === 'day-allday') setDragOverTarget(null)
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverTarget('day-allday')
+                  }}
+                  onDrop={(e) => handleDropOnAllDaySlot(e, vm.currentDate)}
+                >
                   <span className="w-14 sm:w-16 shrink-0 pr-2 text-right text-[10px] font-semibold text-slate-400">
                     Cả ngày
                   </span>
-                  <div className="flex flex-1 flex-wrap gap-1.5">
+                  <div className="flex flex-1 flex-wrap items-center gap-1.5 min-h-[28px]">
                     {selectedDayAllDayEvents.map((event) => {
                       const eventColor = event.color || event.calendar?.color || '#2563EB'
+                      const isTaskItem = event.entryType === 'task'
+                      const isBeingDragged = draggedEvent?.id === event.id
                       return (
-                        <button
-                          className="rounded-md px-2.5 py-1 text-left text-xs font-semibold text-white shadow-2xs transition-transform hover:scale-[1.01]"
+                        <div
+                          className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-white shadow-2xs transition-all hover:scale-[1.01] ${
+                            event.isCompleted ? 'opacity-55' : ''
+                          } ${
+                            isBeingDragged
+                              ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                              : 'cursor-grab active:cursor-grabbing'
+                          }`}
+                          draggable={true}
                           key={event.id}
-                          onClick={() => vm.handleOpenEditEvent(event)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
+                            vm.handleOpenEditEvent(event)
+                          }}
+                          onDragEnd={handleDragEnd}
+                          onDragStart={(e) => handleDragStart(e, event)}
                           style={{ backgroundColor: eventColor }}
-                          type="button"
                         >
-                          {event.title}
-                        </button>
+                          {isTaskItem && (
+                            <TaskTickButton
+                              isCompleted={event.isCompleted}
+                              onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                              size="sm"
+                            />
+                          )}
+                          <span className={`min-w-0 flex-1 truncate text-left ${event.isCompleted ? 'line-through' : ''}`}>
+                            {event.title}
+                          </span>
+                        </div>
                       )
                     })}
+                    {dragOverTarget === 'day-allday' && (
+                      <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 animate-pulse">
+                        + Thả vào đây để chuyển thành Cả ngày
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Lưới 24 giờ dọc */}
+              
               <div
                 className="relative flex max-h-[620px] select-none overflow-y-auto"
                 ref={dayGridRef}
               >
-                {/* Trục giờ dọc bên trái */}
+                
                 <div className="w-14 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
                   {HOURS_24.map((h, i) => (
                     <div className="relative h-[48px]" key={h.hour}>
@@ -331,29 +768,50 @@ export function CalendarPage() {
                   ))}
                 </div>
 
-                {/* Cột nội dung ngày */}
+                
                 <div className="relative flex-1">
-                  {/* Các ô giờ nền */}
-                  {HOURS_24.map((h) => (
-                    <div
-                      className="h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5"
-                      key={h.hour}
-                      onClick={() => {
-                        const clickD = new Date(
-                          vm.currentDate.getFullYear(),
-                          vm.currentDate.getMonth(),
-                          vm.currentDate.getDate(),
-                          h.hour,
-                          0,
-                          0,
-                        )
-                        vm.handleOpenCreateEvent(clickD)
-                      }}
-                      title={`Thêm lịch trình lúc ${h.label}`}
-                    />
-                  ))}
+                  
+                  {HOURS_24.map((h) => {
+                    const slotKey = `day-slot-${h.hour}`
+                    const isOver = dragOverTarget === slotKey
+                    return (
+                      <div
+                        className={`relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5 ${
+                          isOver ? 'bg-blue-100/70 border-blue-400 border-dashed dark:bg-blue-900/40' : ''
+                        }`}
+                        key={h.hour}
+                        onClick={() => {
+                          const clickD = new Date(
+                            vm.currentDate.getFullYear(),
+                            vm.currentDate.getMonth(),
+                            vm.currentDate.getDate(),
+                            h.hour,
+                            0,
+                            0,
+                          )
+                          vm.handleOpenCreateEvent(clickD)
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverTarget === slotKey) setDragOverTarget(null)
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                          setDragOverTarget(slotKey)
+                        }}
+                        onDrop={(e) => handleDropOnTimedSlot(e, vm.currentDate, h.hour)}
+                        title={`Thêm lịch trình lúc ${h.label}`}
+                      >
+                        {isOver && draggedEvent && (
+                          <div className="pointer-events-none absolute inset-x-2 top-1 z-20 flex h-6 items-center rounded-lg border border-blue-500 bg-blue-600/30 px-2 text-[10px] font-bold text-blue-900 dark:text-blue-200 truncate shadow-xs">
+                            Di chuyển đến {h.label}: {draggedEvent.title}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
 
-                  {/* Vạch đỏ chỉ giờ thực tế */}
+                  
                   {isSelectedDateToday && (
                     <div
                       className="pointer-events-none absolute inset-x-0 z-30 flex items-center"
@@ -364,50 +822,71 @@ export function CalendarPage() {
                     </div>
                   )}
 
-                  {/* Danh sách sự kiện theo giờ */}
+                  
                   {selectedDayTimedEvents.map((event) => {
                     const startD = new Date(event.startDate)
                     const endD = new Date(event.endDate)
                     const startMin = startD.getHours() * 60 + startD.getMinutes()
                     const rawDuration = (endD.getTime() - startD.getTime()) / 60000
-                    const durationMin = Math.max(
-                      30,
-                      Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 60,
-                    )
+                    const isZeroDuration = Number.isFinite(rawDuration) && rawDuration === 0
+                    const durationMin = Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : 30
                     const top = (startMin / 60) * HOUR_HEIGHT
-                    const height = Math.max(34, (durationMin / 60) * HOUR_HEIGHT)
+                    const height = isZeroDuration ? 26 : Math.max(26, (durationMin / 60) * HOUR_HEIGHT)
+                    const cardHeight = resizingEvent?.event.id === event.id ? resizingEvent.currentHeight : height
                     const eventColor = event.color || event.calendar?.color || '#2563EB'
                     const isTask = event.entryType === 'task'
+                    const isBeingDragged = draggedEvent?.id === event.id
 
                     return (
                       <div
-                        className={`group/item absolute left-2 right-4 z-10 cursor-pointer overflow-hidden rounded-xl border border-white/20 p-2.5 text-white shadow-xs transition-all hover:z-20 hover:scale-[1.005] hover:shadow-md ${
+                        className={`group/item absolute left-2 right-4 z-10 overflow-hidden rounded-xl border border-white/20 px-2.5 py-1 text-white shadow-xs transition-all hover:z-20 hover:scale-[1.005] hover:shadow-md ${
                           event.isCompleted ? 'line-through opacity-50' : ''
+                        } ${
+                          isBeingDragged
+                            ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                            : 'cursor-grab active:cursor-grabbing'
                         }`}
+                        draggable={true}
                         key={event.id}
                         onClick={(e) => {
                           e.stopPropagation()
+                          if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
                           vm.handleOpenEditEvent(event)
                         }}
+                        onDragEnd={handleDragEnd}
+                        onDragStart={(e) => handleDragStart(e, event)}
                         style={{
                           top: `${top}px`,
-                          height: `${height}px`,
+                          height: `${cardHeight}px`,
                           backgroundColor: eventColor,
                         }}
                         title={`${event.title} (${formatEventTime(event.startDate, event.endDate, false)})`}
                       >
-                        <div className="flex items-center justify-between text-xs font-semibold leading-tight opacity-90">
-                          <span className="flex items-center gap-1.5">
+                        <div className="flex h-full items-center justify-between text-xs font-semibold leading-tight opacity-90">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {isTask && (
+                              <TaskTickButton
+                                isCompleted={event.isCompleted}
+                                onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                              />
+                            )}
                             <Icon className="size-3 text-white/80 shrink-0" name="clock" />
-                            {formatEventTime(event.startDate, event.endDate, false)}
+                            <span className="font-bold opacity-90 shrink-0">
+                              {formatEventTime(event.startDate, event.endDate, false)}
+                            </span>
+                            <span className="truncate">{event.title}</span>
                           </span>
                           <div className="flex items-center gap-1.5">
-                            {event.calendar && (
+                            {event.calendar ? (
                               <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-bold">
                                 {event.calendar.name}
                               </span>
-                            )}
-                            {isTask && (
+                            ) : isTask ? (
+                              <span className="rounded-sm bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">
+                                Độc lập
+                              </span>
+                            ) : null}
+                            {isTask && event.calendar && (
                               <span className="rounded-sm bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">
                                 Nhiệm vụ
                               </span>
@@ -431,6 +910,19 @@ export function CalendarPage() {
                             {event.description}
                           </p>
                         )}
+
+                        <div
+                          aria-label="Kéo đổi thời lượng"
+                          className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            e.preventDefault()
+                          }}
+                          onPointerDown={(e) => handleResizeStart(e, event)}
+                          title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
+                        >
+                          <div className="h-0.5 w-6 rounded-full bg-white/80 pointer-events-none" />
+                        </div>
                       </div>
                     )
                   })}
@@ -439,14 +931,14 @@ export function CalendarPage() {
             </div>
           ) : vm.viewMode === 'week' ? (
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
-              {/* Header 7 cột ngày */}
+              
               <div className="flex border-b border-slate-200 bg-slate-50/50 dark:border-white/10 dark:bg-white/5">
-                {/* Múi giờ bên trái */}
+                
                 <div className="flex w-14 sm:w-16 shrink-0 select-none items-end justify-center border-r border-slate-200/70 pb-2 text-[11px] font-semibold text-slate-400 dark:border-white/10">
                   {timeZoneHeaderLabel}
                 </div>
 
-                {/* 7 cột ngày */}
+                
                 <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 py-2.5 text-center dark:divide-white/10">
                   {weekDays.map((wd) => {
                     const isCurrentDay =
@@ -480,8 +972,8 @@ export function CalendarPage() {
                 </div>
               </div>
 
-              {/* Hàng sự kiện Cả ngày */}
-              {hasAnyWeekAllDay && (
+              
+              {(hasAnyWeekAllDay || Boolean(draggedEvent)) && (
                 <div className="flex border-b border-slate-200 bg-slate-50/30 py-1 dark:border-white/10 dark:bg-white/2">
                   <div className="flex w-14 sm:w-16 shrink-0 items-center justify-end border-r border-slate-200/70 pr-2 text-[10px] font-medium text-slate-400 dark:border-white/10">
                     Cả ngày
@@ -489,23 +981,66 @@ export function CalendarPage() {
                   <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 px-0.5 dark:divide-white/10">
                     {weekDays.map((wd) => {
                       const dayAllDays = (eventsByDate[wd.dateKey] ?? []).filter((e) => e.isAllDay)
+                      const allDayKey = `week-allday-${wd.dateKey}`
+                      const isOver = dragOverTarget === allDayKey
                       return (
-                        <div className="space-y-1 px-1" key={`allday-${wd.dateKey}`}>
+                        <div
+                          className={`min-h-[26px] space-y-1 rounded px-1 transition-colors ${
+                            isOver ? 'bg-blue-100/70 ring-1 ring-blue-500 dark:bg-blue-900/40' : ''
+                          }`}
+                          key={`allday-${wd.dateKey}`}
+                          onDragLeave={() => {
+                            if (dragOverTarget === allDayKey) setDragOverTarget(null)
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            setDragOverTarget(allDayKey)
+                          }}
+                          onDrop={(e) => handleDropOnAllDaySlot(e, wd.date)}
+                        >
                           {dayAllDays.map((event) => {
                             const eventColor = event.color || event.calendar?.color || '#2563EB'
+                            const isTaskItem = event.entryType === 'task'
+                            const isBeingDragged = draggedEvent?.id === event.id
                             return (
-                              <button
-                                className="block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-2xs hover:brightness-105"
+                              <div
+                                className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-2xs hover:brightness-105 ${
+                                  event.isCompleted ? 'opacity-55' : ''
+                                } ${
+                                  isBeingDragged
+                                    ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                                    : 'cursor-grab active:cursor-grabbing'
+                                }`}
+                                draggable={true}
                                 key={event.id}
-                                onClick={() => vm.handleOpenEditEvent(event)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
+                                  vm.handleOpenEditEvent(event)
+                                }}
+                                onDragEnd={handleDragEnd}
+                                onDragStart={(e) => handleDragStart(e, event)}
                                 style={{ backgroundColor: eventColor }}
-                                title={event.title}
-                                type="button"
                               >
-                                {event.title}
-                              </button>
+                                {isTaskItem && (
+                                  <TaskTickButton
+                                    isCompleted={event.isCompleted}
+                                    onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                    size="sm"
+                                  />
+                                )}
+                                <span className={`min-w-0 flex-1 truncate text-left ${event.isCompleted ? 'line-through' : ''}`}>
+                                  {event.title}
+                                </span>
+                              </div>
                             )
                           })}
+                          {isOver && dayAllDays.length === 0 && (
+                            <span className="block text-center text-[9px] font-bold text-blue-600 dark:text-blue-400">
+                              + Cả ngày
+                            </span>
+                          )}
                         </div>
                       )
                     })}
@@ -513,12 +1048,12 @@ export function CalendarPage() {
                 </div>
               )}
 
-              {/* Lưới 24 giờ dọc */}
+              
               <div
                 className="relative flex max-h-[620px] select-none overflow-y-auto"
                 ref={timeGridRef}
               >
-                {/* Trục 24 giờ bên trái */}
+                
                 <div className="w-14 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
                   {HOURS_24.map((h, i) => (
                     <div className="relative h-[48px]" key={h.hour}>
@@ -531,7 +1066,7 @@ export function CalendarPage() {
                   ))}
                 </div>
 
-                {/* 7 cột theo ngày */}
+                
                 <div className="relative grid flex-1 grid-cols-7 divide-x divide-slate-100 dark:divide-white/5">
                   {weekDays.map((wd) => {
                     const isCurrentDay =
@@ -543,27 +1078,48 @@ export function CalendarPage() {
 
                     return (
                       <div className="relative" key={wd.dateKey}>
-                        {/* 24 ô giờ nền */}
-                        {HOURS_24.map((h) => (
-                          <div
-                            className="h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5"
-                            key={h.hour}
-                            onClick={() => {
-                              const clickD = new Date(
-                                wd.date.getFullYear(),
-                                wd.date.getMonth(),
-                                wd.date.getDate(),
-                                h.hour,
-                                0,
-                                0,
-                              )
-                              vm.handleOpenCreateEvent(clickD)
-                            }}
-                            title={`Thêm lịch trình lúc ${h.label}`}
-                          />
-                        ))}
+                        
+                        {HOURS_24.map((h) => {
+                          const slotKey = `week-slot-${wd.dateKey}-${h.hour}`
+                          const isOver = dragOverTarget === slotKey
+                          return (
+                            <div
+                              className={`relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5 ${
+                                isOver ? 'bg-blue-100/70 border-blue-400 border-dashed dark:bg-blue-900/40' : ''
+                              }`}
+                              key={h.hour}
+                              onClick={() => {
+                                const clickD = new Date(
+                                  wd.date.getFullYear(),
+                                  wd.date.getMonth(),
+                                  wd.date.getDate(),
+                                  h.hour,
+                                  0,
+                                  0,
+                                )
+                                vm.handleOpenCreateEvent(clickD)
+                              }}
+                              onDragLeave={() => {
+                                if (dragOverTarget === slotKey) setDragOverTarget(null)
+                              }}
+                              onDragOver={(e) => {
+                                e.preventDefault()
+                                e.dataTransfer.dropEffect = 'move'
+                                setDragOverTarget(slotKey)
+                              }}
+                              onDrop={(e) => handleDropOnTimedSlot(e, wd.date, h.hour)}
+                              title={`Thêm lịch trình lúc ${h.label}`}
+                            >
+                              {isOver && draggedEvent && (
+                                <div className="pointer-events-none absolute inset-x-0.5 top-1 z-20 flex h-5 items-center rounded border border-blue-500 bg-blue-600/30 px-1 text-[9px] font-bold text-blue-900 dark:text-blue-200 truncate shadow-xs">
+                                  {draggedEvent.title}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
 
-                        {/* Vạch đỏ chỉ giờ thực tế */}
+                        
                         {isCurrentDay && (
                           <div
                             className="pointer-events-none absolute inset-x-0 z-30 flex items-center"
@@ -574,52 +1130,109 @@ export function CalendarPage() {
                           </div>
                         )}
 
-                        {/* Thẻ sự kiện có giờ */}
+                        
                         {timedEvents.map((event) => {
                           const startD = new Date(event.startDate)
                           const endD = new Date(event.endDate)
                           const startMin = startD.getHours() * 60 + startD.getMinutes()
                           const rawDuration = (endD.getTime() - startD.getTime()) / 60000
-                          const durationMin = Math.max(
-                            25,
-                            Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 60,
-                          )
+                          const isZeroDuration = Number.isFinite(rawDuration) && rawDuration === 0
+                          const durationMin = Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : 30
                           const top = (startMin / 60) * HOUR_HEIGHT
-                          const height = Math.max(22, (durationMin / 60) * HOUR_HEIGHT)
+                          const height = isZeroDuration ? 20 : Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
+                          const cardHeight = resizingEvent?.event.id === event.id ? resizingEvent.currentHeight : height
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
                           const isTask = event.entryType === 'task'
+                          const isBeingDragged = draggedEvent?.id === event.id
 
                           return (
                             <div
-                              className={`group/item absolute inset-x-0.5 z-10 cursor-pointer overflow-hidden rounded-md px-1.5 py-1 text-white shadow-2xs transition-all hover:z-20 hover:scale-[1.01] hover:shadow-md ${
+                              className={`group/item absolute inset-x-0.5 z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-white shadow-2xs transition-all hover:z-20 hover:scale-[1.01] hover:shadow-md ${
                                 event.isCompleted ? 'line-through opacity-50' : ''
+                              } ${
+                                isBeingDragged
+                                  ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                                  : 'cursor-grab active:cursor-grabbing'
                               }`}
+                              draggable={true}
                               key={event.id}
                               onClick={(e) => {
                                 e.stopPropagation()
+                                if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
                                 vm.handleOpenEditEvent(event)
                               }}
+                              onDragEnd={handleDragEnd}
+                              onDragStart={(e) => handleDragStart(e, event)}
                               style={{
                                 top: `${top}px`,
-                                height: `${height}px`,
+                                height: `${cardHeight}px`,
                                 backgroundColor: eventColor,
                               }}
                               title={`${event.title} (${formatEventTime(event.startDate, event.endDate, event.isAllDay)})`}
                             >
-                              <div className="flex items-center justify-between text-[10px] font-semibold leading-tight opacity-90">
-                                <span className="truncate">
-                                  {startD.toLocaleTimeString('vi-VN', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    hour12: false,
-                                  })}
-                                </span>
-                                {isTask && (
-                                  <span className="ml-1 size-1.5 shrink-0 rounded-xs bg-white/90" />
-                                )}
-                              </div>
-                              <div className="mt-0.5 truncate text-xs font-bold leading-tight">
-                                {event.title}
+                              {height < 32 ? (
+                                <div className="flex h-full items-center justify-between text-[10px] font-semibold leading-tight opacity-90">
+                                  <span className="flex min-w-0 items-center gap-1">
+                                    {isTask && (
+                                      <TaskTickButton
+                                        isCompleted={event.isCompleted}
+                                        onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                        size="sm"
+                                      />
+                                    )}
+                                    <span className="font-bold opacity-80 shrink-0">
+                                      {startD.toLocaleTimeString('vi-VN', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: false,
+                                      })}
+                                    </span>
+                                    <span className="truncate font-medium">{event.title}</span>
+                                  </span>
+                                  {isTask && (
+                                    <span className={`ml-1 size-1.5 shrink-0 rounded-xs ${event.deadline ? 'bg-amber-300' : 'bg-white/90'}`} />
+                                  )}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex items-center justify-between text-[10px] font-semibold leading-tight opacity-90">
+                                    <span className="flex min-w-0 items-center gap-1">
+                                      {isTask && (
+                                        <TaskTickButton
+                                          isCompleted={event.isCompleted}
+                                          onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                          size="sm"
+                                        />
+                                      )}
+                                      <span className="truncate">
+                                        {startD.toLocaleTimeString('vi-VN', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          hour12: false,
+                                        })}
+                                      </span>
+                                    </span>
+                                    {isTask && (
+                                      <span className={`ml-1 size-1.5 shrink-0 rounded-xs ${event.deadline ? 'bg-amber-300' : 'bg-white/90'}`} />
+                                    )}
+                                  </div>
+                                  <div className="mt-0.5 truncate text-xs font-bold leading-tight">
+                                    {event.title}
+                                  </div>
+                                </>
+                              )}
+
+                              <div
+                                aria-label="Kéo đổi thời lượng"
+                                className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  e.preventDefault()
+                                }}
+                                onPointerDown={(e) => handleResizeStart(e, event)}
+                                title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
+                              >
+                                <div className="h-0.5 w-4 rounded-full bg-white/80 pointer-events-none" />
                               </div>
                             </div>
                           )
@@ -669,14 +1282,26 @@ export function CalendarPage() {
                   const dayEvents = eventsByDate[dateKey] ?? []
                   const isHovered = hoveredDateCell === dateKey
 
+                  const isDragTarget = dragOverTarget === dateKey
                   return (
                     <div
                       className={`group relative flex min-h-[115px] flex-col p-1.5 transition-colors sm:p-2 ${
-                        isCurrentMonth
-                          ? 'bg-white hover:bg-slate-50/70 dark:bg-transparent dark:hover:bg-white/5'
-                          : 'bg-slate-50/40 text-slate-300 dark:bg-white/2 dark:text-slate-600'
+                        isDragTarget
+                          ? 'bg-blue-50/80 ring-2 ring-inset ring-blue-500 dark:bg-blue-950/40'
+                          : isCurrentMonth
+                            ? 'bg-white hover:bg-slate-50/70 dark:bg-transparent dark:hover:bg-white/5'
+                            : 'bg-slate-50/40 text-slate-300 dark:bg-white/2 dark:text-slate-600'
                       }`}
                       key={dateKey}
+                      onDragLeave={() => {
+                        if (dragOverTarget === dateKey) setDragOverTarget(null)
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
+                        setDragOverTarget(dateKey)
+                      }}
+                      onDrop={(e) => handleDropOnMonthDay(e, cellDate)}
                       onMouseEnter={() => setHoveredDateCell(dateKey)}
                       onMouseLeave={() => setHoveredDateCell(null)}
                     >
@@ -693,7 +1318,13 @@ export function CalendarPage() {
                           {d}
                         </span>
 
-                        {isHovered && isCurrentMonth && (
+                        {isDragTarget && draggedEvent && (
+                          <span className="rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">
+                            Thả vào đây
+                          </span>
+                        )}
+
+                        {isHovered && isCurrentMonth && !isDragTarget && (
                           <button
                             aria-label={`Thêm sự kiện ngày ${d}`}
                             className="grid size-5 place-items-center rounded-full bg-slate-200/80 text-slate-700 hover:bg-blue-600 hover:text-white dark:bg-white/10 dark:text-white dark:hover:bg-blue-600"
@@ -710,22 +1341,38 @@ export function CalendarPage() {
                         {dayEvents.slice(0, 3).map((event) => {
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
                           const isTask = event.entryType === 'task'
+                          const isBeingDragged = draggedEvent?.id === event.id
 
                           return (
-                            <button
-                              className="group/chip flex w-full items-center gap-1.5 truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-2xs transition-transform hover:scale-[1.02]"
+                            <div
+                              className={`group/chip flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-2xs transition-all hover:scale-[1.02] ${
+                                event.isCompleted ? 'opacity-55' : ''
+                              } ${
+                                isBeingDragged
+                                  ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                                  : 'cursor-grab active:cursor-grabbing'
+                              }`}
+                              draggable={true}
                               key={event.id}
-                              onClick={() => vm.handleOpenEditEvent(event)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
+                                vm.handleOpenEditEvent(event)
+                              }}
+                              onDragEnd={handleDragEnd}
+                              onDragStart={(e) => handleDragStart(e, event)}
                               style={{ backgroundColor: eventColor }}
-                              title={`${event.title} (${formatEventTime(event.startDate, event.endDate, event.isAllDay)})`}
-                              type="button"
                             >
                               {isTask ? (
-                                <span className="size-1.5 shrink-0 rounded-xs bg-white/90" />
+                                <TaskTickButton
+                                  isCompleted={event.isCompleted}
+                                  onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                  size="sm"
+                                />
                               ) : (
                                 <span className="size-1.5 shrink-0 rounded-full bg-white/90" />
                               )}
-                              <span className="truncate">
+                              <span className={`min-w-0 flex-1 truncate text-left ${event.isCompleted ? 'line-through' : ''}`}>
                                 {!event.isAllDay && (
                                   <span className="mr-1 opacity-80">
                                     {new Date(event.startDate).toLocaleTimeString('vi-VN', {
@@ -737,7 +1384,7 @@ export function CalendarPage() {
                                 )}
                                 {event.title}
                               </span>
-                            </button>
+                            </div>
                           )
                         })}
 
@@ -788,13 +1435,17 @@ export function CalendarPage() {
                         const mStr = mIdx + 1 < 10 ? `0${mIdx + 1}` : mIdx + 1
                         const dStr = dNum < 10 ? `0${dNum}` : dNum
                         const key = `${currentYear}-${mStr}-${dStr}`
-                        const hasEvents = (eventsByDate[key] ?? []).length > 0
+                        const dayItems = eventsByDate[key] ?? []
+                        const hasEvents = dayItems.length > 0
+                        const dayTasks = dayItems.filter((item) => item.entryType === 'task')
+                        const allTasksDone = dayTasks.length > 0 && dayTasks.every((item) => item.isCompleted)
+                        const hasPendingTask = dayTasks.some((item) => !item.isCompleted)
                         const isCurrentDay =
                           today.getDate() === dNum && today.getMonth() === mIdx && today.getFullYear() === currentYear
 
                         return (
                           <div
-                            className={`mx-auto grid size-5 place-items-center rounded-full font-medium ${
+                            className={`relative mx-auto grid size-5 place-items-center rounded-full font-medium ${
                               isCurrentDay
                                 ? 'bg-blue-600 font-bold text-white'
                                 : hasEvents
@@ -802,8 +1453,23 @@ export function CalendarPage() {
                                   : 'text-slate-700 dark:text-slate-300'
                             }`}
                             key={dNum}
+                            title={
+                              dayTasks.length > 0
+                                ? allTasksDone
+                                  ? 'Đã hoàn thành tất cả nhiệm vụ'
+                                  : 'Còn nhiệm vụ chưa hoàn thành'
+                                : undefined
+                            }
                           >
                             {dNum}
+                            {allTasksDone && (
+                              <span className="absolute -right-0.5 -top-0.5 grid size-2.5 place-items-center rounded-full bg-emerald-500 text-white">
+                                <Icon className="size-2" name="check" />
+                              </span>
+                            )}
+                            {hasPendingTask && (
+                              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500" />
+                            )}
                           </div>
                         )
                       })}
@@ -874,12 +1540,46 @@ export function CalendarPage() {
                                       {event.title}
                                     </span>
 
-                                    {event.calendar && (
+                                    {event.calendar ? (
                                       <span
                                         className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white"
                                         style={{ backgroundColor: event.calendar.color }}
                                       >
                                         {event.calendar.name}
+                                      </span>
+                                    ) : isTask ? (
+                                      <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-white/10 dark:text-slate-300">
+                                        Nhiệm vụ độc lập
+                                      </span>
+                                    ) : null}
+
+                                    {event.priority && (
+                                      <span
+                                        className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
+                                        style={{
+                                          backgroundColor:
+                                            event.priority === 'urgent'
+                                              ? '#EF4444'
+                                              : event.priority === 'high'
+                                              ? '#F59E0B'
+                                              : event.priority === 'medium'
+                                              ? '#3B82F6'
+                                              : '#64748B',
+                                        }}
+                                      >
+                                        {event.priority === 'urgent'
+                                          ? 'Khẩn cấp'
+                                          : event.priority === 'high'
+                                          ? 'Ưu tiên cao'
+                                          : event.priority === 'medium'
+                                          ? 'Trung bình'
+                                          : 'Thấp'}
+                                      </span>
+                                    )}
+
+                                    {event.deadline && (
+                                      <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                                        ⏳ Hạn chót: {new Date(event.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}{!event.isAllDay ? ` ${new Date(event.deadline).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
                                       </span>
                                     )}
 
@@ -931,7 +1631,10 @@ export function CalendarPage() {
                                 <button
                                   aria-label="Xóa"
                                   className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
-                                  onClick={() => vm.handleDeleteEvent(event.id)}
+                                  onClick={() => {
+                                    setDeleteRecurringMode('this')
+                                    setEventToDelete(event)
+                                  }}
                                   type="button"
                                 >
                                   <Icon className="size-4" name="trash" />
@@ -950,6 +1653,7 @@ export function CalendarPage() {
         </main>
       </div>
 
+      {vm.confirmation && <RecurringConfirmationDialog confirmation={vm.confirmation} />}
       <EventModal
         categories={vm.categories.filter((category) => !category.settings?.archived || category.id === vm.editingEvent?.calendarId)}
         initialDate={vm.selectedModalDate}
@@ -966,6 +1670,277 @@ export function CalendarPage() {
         onClose={() => vm.setIsCategoryModalOpen(false)}
         onSaved={vm.refreshData}
       />
+
+      {categoryToDelete && (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+          role="dialog"
+        >
+          <div
+            className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#021024]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                <Icon className="size-5" name="trash" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  Xóa danh mục lịch?
+                </h4>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Bạn có chắc chắn muốn xóa lịch này không? Các sự kiện thuộc lịch sẽ được tách ra độc lập.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-3 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => setCategoryToDelete(null)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const id = categoryToDelete
+                  setCategoryToDelete(null)
+                  await vm.handleDeleteCategory(id)
+                }}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition-colors"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {eventToDelete && (() => {
+        const isEventToDeleteRecurring = Boolean(
+          (eventToDelete.recurrence && eventToDelete.recurrence.frequency !== 'none') ||
+          (eventToDelete as unknown as { _isOccurrence?: boolean })?._isOccurrence,
+        )
+        return (
+          <div
+            aria-modal="true"
+            className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+            role="dialog"
+          >
+            <div
+              className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#021024]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                  <Icon className="size-5" name="trash" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                    {eventToDelete.entryType === 'task' ? 'Xóa nhiệm vụ?' : 'Xóa sự kiện?'}
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {isEventToDeleteRecurring
+                      ? `Mục "${eventToDelete.title}" là một chuỗi lặp lại. Vui lòng chọn phạm vi xóa:`
+                      : `Bạn có chắc chắn muốn xóa "${eventToDelete.title}" không? Thao tác này không thể hoàn tác.`}
+                  </p>
+                </div>
+              </div>
+
+              {isEventToDeleteRecurring && (
+                <div className="space-y-2 pt-1">
+                  <label
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
+                      deleteRecurringMode === 'this'
+                        ? 'border-rose-600 bg-rose-50/50 dark:border-rose-500 dark:bg-rose-950/30'
+                        : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="deleteRecurringMode"
+                      value="this"
+                      checked={deleteRecurringMode === 'this'}
+                      onChange={() => setDeleteRecurringMode('this')}
+                      className="mt-0.5 size-4 text-rose-600 focus:ring-rose-500"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-slate-800 dark:text-white">
+                        Chỉ lần này
+                      </span>
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                        Chỉ xóa lần diễn ra vào ngày {new Date(eventToDelete.startDate).toLocaleDateString('vi-VN')}.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
+                      deleteRecurringMode === 'following'
+                        ? 'border-rose-600 bg-rose-50/50 dark:border-rose-500 dark:bg-rose-950/30'
+                        : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="deleteRecurringMode"
+                      value="following"
+                      checked={deleteRecurringMode === 'following'}
+                      onChange={() => setDeleteRecurringMode('following')}
+                      className="mt-0.5 size-4 text-rose-600 focus:ring-rose-500"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-slate-800 dark:text-white">
+                        Lần này và các lần tiếp theo
+                      </span>
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                        Xóa từ lần đang chọn đến hết chuỗi.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
+                      deleteRecurringMode === 'all'
+                        ? 'border-rose-600 bg-rose-50/50 dark:border-rose-500 dark:bg-rose-950/30'
+                        : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="deleteRecurringMode"
+                      value="all"
+                      checked={deleteRecurringMode === 'all'}
+                      onChange={() => setDeleteRecurringMode('all')}
+                      className="mt-0.5 size-4 text-rose-600 focus:ring-rose-500"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-slate-800 dark:text-white">
+                        Tất cả các lần trong chuỗi
+                      </span>
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                        Xóa cả các lần trước và sau lần đang chọn.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-3 dark:border-white/10">
+                <button
+                  type="button"
+                  disabled={isDeletingEvent}
+                  onClick={() => setEventToDelete(null)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingEvent}
+                  onClick={async () => {
+                    if (!eventToDelete) return
+                    setIsDeletingEvent(true)
+                    await vm.handleDeleteEvent(
+                      eventToDelete.id,
+                      isEventToDeleteRecurring ? deleteRecurringMode : undefined,
+                      eventToDelete.startDate,
+                    )
+                    setIsDeletingEvent(false)
+                    setEventToDelete(null)
+                  }}
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                >
+                  {isDeletingEvent ? 'Đang xóa...' : 'Xác nhận xóa'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {pendingRecurringAction && (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+          role="dialog"
+        >
+          <div
+            className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#021024]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                {pendingRecurringAction.event.entryType === 'task'
+                  ? 'Thay đổi nhiệm vụ định kỳ'
+                  : 'Thay đổi sự kiện định kỳ'}
+              </h4>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {pendingRecurringAction.isResize
+                  ? 'Bạn đang thay đổi thời lượng của một mục lặp lại. Vui lòng chọn phạm vi áp dụng:'
+                  : pendingRecurringAction.isSameDay
+                    ? 'Bạn đang thay đổi giờ của một mục lặp lại. Vui lòng chọn phạm vi áp dụng:'
+                    : 'Bạn đang chuyển ngày của một mục lặp lại. Vui lòng chọn phạm vi áp dụng:'}
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              {getScopeOptions(
+                pendingRecurringAction.event,
+                pendingRecurringAction.isSameDay,
+                pendingRecurringAction.isResize,
+                new Date(pendingRecurringAction.targetDate),
+              ).map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
+                    selectedRecurringMode === opt.value
+                      ? 'border-blue-600 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/30'
+                      : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="recurring_scope"
+                    value={opt.value}
+                    checked={selectedRecurringMode === opt.value}
+                    onChange={() => setSelectedRecurringMode(opt.value)}
+                    className="mt-0.5 size-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-xs font-bold text-slate-800 dark:text-white">
+                      {opt.label}
+                    </span>
+                    <span className="block mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      {opt.description}
+                    </span>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-3 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => setPendingRecurringAction(null)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRecurringMove}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition-colors"
+              >
+                Lưu thay đổi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

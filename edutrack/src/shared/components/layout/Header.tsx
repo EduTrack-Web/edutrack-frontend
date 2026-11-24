@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '@/modules/auth/viewmodels/useAuth'
 import { useNotifications } from '@/modules/notifications/viewmodels/useNotifications'
+import { RecurringConfirmationDialog } from '@/modules/calendar/views/components/RecurringConfirmationDialog'
 import { formatAvatarUrl } from '@/shared/api/httpClient'
 import { useToast } from '@/shared/viewmodels/useToast'
 import { ConfirmLogoutModal } from '@/shared/components/ConfirmLogoutModal'
@@ -52,7 +53,7 @@ interface HeaderProps {
 
 export function Header({ onOpenSidebar }: HeaderProps) {
   const { user, logout } = useAuth()
-  const { notifications, unreadCount, refresh, markAsRead, markAllAsRead, respondInvitation } =
+  const { confirmation, notifications, unreadCount, refresh, markAsRead, markAllAsRead, respondInvitation } =
     useNotifications()
   const { showToast } = useToast()
   const navigate = useNavigate()
@@ -350,6 +351,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         </div>
       </header>
 
+      {confirmation && <RecurringConfirmationDialog confirmation={confirmation} />}
       <ConfirmLogoutModal
         isLoading={isLoggingOut}
         isOpen={isLogoutModalOpen}

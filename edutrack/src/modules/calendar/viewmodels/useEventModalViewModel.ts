@@ -14,8 +14,16 @@ import type {
   ReminderMethod,
   SubtaskItem,
 } from '../models/calendar.types'
-import { validateEventForm } from '../models/calendarValidation'
+import {
+  validateChecklistStep,
+  validateCustomRecurrence,
+  validateEventForm,
+  validateEventTitle,
+  validateGuestInput,
+} from '../models/calendarValidation'
+import { PRIORITY_CONFIG } from '../models/calendarConstants'
 import { calendarApi } from '../services/calendarApi'
+import { useRecurringConfirmation } from './useRecurringConfirmation'
 import { useAuth } from '@/modules/auth/viewmodels/useAuth'
 
 export const EXTENDED_CALENDAR_COLORS = [
@@ -153,6 +161,15 @@ function formatInstantToWallTime(isoString: string, timeZone: string): { date: s
   }
 }
 
+function serializeEventTime(
+  date: string, time: string, zone: string, original?: string | null, allDay = false,
+): string {
+  // The form has minute precision. Keep seconds and the original DST offset on unrelated edits.
+  const wall = original ? formatInstantToWallTime(original, zone) : null
+  if (original && wall?.date === date && (allDay || wall.time === time.slice(0, 5))) return original
+  return toCalendarInstant(`${date}T${time}`, zone)
+}
+
 export function useEventModalViewModel({
   isOpen,
   initialEvent,
@@ -161,6 +178,7 @@ export function useEventModalViewModel({
   onClose,
   onSaved,
 }: UseEventModalViewModelProps) {
+  const { confirmation, confirmRecurring } = useRecurringConfirmation()
   const { user } = useAuth()
   const defaults = getInitialDateStrings()
 
@@ -209,6 +227,11 @@ export function useEventModalViewModel({
 
   const [deadlineDate, setDeadlineDate] = useState(defaults.deadlineDate)
   const [deadlineTime, setDeadlineTime] = useState(defaults.deadlineTime)
+  const [hasDeadline, setHasDeadline] = useState(false)
+  const [pendingRecurrence, setPendingRecurrence] = useState<RecurrenceFrequency | null>(null)
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [showPriorityConfirmDialog, setShowPriorityConfirmDialog] = useState(false)
+  const [pendingPriority, setPendingPriority] = useState<EventPriority | null>(null)
   const [priority, setPriority] = useState<EventPriority>('medium')
   const [submissionUrl, setSubmissionUrl] = useState('')
   const [checklist, setChecklist] = useState<SubtaskItem[]>([])
@@ -218,6 +241,7 @@ export function useEventModalViewModel({
   const [guests, setGuests] = useState<EventGuest[]>([])
   const [newGuestEmail, setNewGuestEmail] = useState('')
   const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
+  const [customRecurrenceError, setCustomRecurrenceError] = useState<string | null>(null)
   const [guestCanModify, setGuestCanModify] = useState(false)
   const [guestCanInviteOthers, setGuestCanInviteOthers] = useState(true)
   const [guestCanSeeGuestList, setGuestCanSeeGuestList] = useState(true)
@@ -269,20 +293,21 @@ export function useEventModalViewModel({
       lastInitKeyRef.current = currentInitKey
 
       if (initialEvent) {
-        const start = new Date(initialEvent.startDate)
-        const end = new Date(initialEvent.endDate)
+        const initialCat = categories.find((c) => c.id === initialEvent.calendarId)
+        const zone = initialEvent.timeZone || initialCat?.settings?.timeZone || 'Asia/Ho_Chi_Minh'
+        const start = formatInstantToWallTime(initialEvent.startDate, zone)
+        const end = formatInstantToWallTime(initialEvent.endDate, zone)
 
         setEntryType(initialEvent.entryType)
         setTitle(initialEvent.title)
         setCalendarId(initialEvent.calendarId ?? '')
         setPriority(initialEvent.priority)
         setDescription(initialEvent.description ?? '')
-        setColor(initialEvent.color ?? '')
+        setColor(initialEvent.inheritsCalendarColor ? '' : initialEvent.color ?? '')
         setAvailability(initialEvent.availability ?? 'busy')
         setVisibility(initialEvent.visibility ?? 'default')
         setIsAllDay(initialEvent.isAllDay)
-        const initialCat = categories.find((c) => c.id === initialEvent.calendarId)
-        setTimeZone(initialEvent.timeZone || initialCat?.settings?.timeZone || 'Asia/Ho_Chi_Minh')
+        setTimeZone(zone)
         const initialGuests = initialEvent.guests ?? []
         setGuests(initialGuests)
         if (initialGuests.length > 0) {
@@ -301,13 +326,22 @@ export function useEventModalViewModel({
         setNewGuestEmail('')
         setGuestEmailError(null)
 
-        setStartDate(`${start.getFullYear()}-${padZero(start.getMonth() + 1)}-${padZero(start.getDate())}`)
-        setStartTime(`${padZero(start.getHours())}:${padZero(start.getMinutes())}`)
-        setEndDate(`${end.getFullYear()}-${padZero(end.getMonth() + 1)}-${padZero(end.getDate())}`)
-        setEndTime(`${padZero(end.getHours())}:${padZero(end.getMinutes())}`)
+        setStartDate(start?.date ?? '')
+        setStartTime(start?.time ?? '')
+        setEndDate(end?.date ?? '')
+        setEndTime(end?.time ?? '')
+        setIsCompleted(Boolean(initialEvent.isCompleted))
 
-        setDeadlineDate(`${end.getFullYear()}-${padZero(end.getMonth() + 1)}-${padZero(end.getDate())}`)
-        setDeadlineTime(`${padZero(end.getHours())}:${padZero(end.getMinutes())}`)
+        if (initialEvent.deadline) {
+          const dl = formatInstantToWallTime(initialEvent.deadline, zone)
+          setDeadlineDate(dl?.date ?? '')
+          setDeadlineTime(dl?.time ?? '')
+          setHasDeadline(true)
+        } else {
+          setDeadlineDate(end?.date ?? '')
+          setDeadlineTime(end?.time ?? '')
+          setHasDeadline(initialEvent.entryType === 'task')
+        }
 
         setLocation(initialEvent.location ?? '')
         setOnlineMeetingUrl(initialEvent.onlineMeetingUrl ?? '')
@@ -397,6 +431,10 @@ export function useEventModalViewModel({
         }
         setDeadlineDate(def.deadlineDate)
         setDeadlineTime(def.deadlineTime)
+        setHasDeadline(false)
+        setIsCompleted(false)
+        setShowPriorityConfirmDialog(false)
+        setPendingPriority(null)
         setIsAllDay(false)
         setLocation('')
         setOnlineMeetingUrl('')
@@ -449,18 +487,49 @@ export function useEventModalViewModel({
   const handleTabChange = (nextType: EntryType) => {
     setEntryType(nextType)
     clearError('entryType')
-    if (nextType === 'task' && reminders.length === 0) {
-      setReminders([{ id: 'rem-task-default', method: 'in-app', quantity: 1, unit: 'hours' }])
+    if (nextType === 'task') {
+      if (initialEvent) {
+        setHasDeadline(Boolean(initialEvent.deadline))
+      } else {
+        setHasDeadline(false)
+      }
+      setCalendarId('')
+      if (!initialEvent) {
+        const config = PRIORITY_CONFIG[priority]
+        if (config) {
+          setColor(config.color)
+          setReminders(
+            config.defaultReminders.map((r, idx) => ({
+              id: `rem-p-${idx}-${Date.now()}`,
+              method: r.method,
+              quantity: r.quantity,
+              unit: r.unit,
+            })),
+          )
+        }
+      }
+    } else {
+      if (!calendarId && categories.length > 0) {
+        const firstCat = categories[0]
+        if (firstCat) {
+          setCalendarId(firstCat.id)
+          setColor('')
+        }
+      }
     }
   }
 
   const handleCalendarSelect = (id: string) => {
     setCalendarId(id)
     clearError('calendarId')
-    const newCategory = categories.find((category) => category.id === id)
-    if (newCategory) {
-      setColor(newCategory.color || '')
+    if (!id) {
+      if (entryType === 'task') {
+        const config = PRIORITY_CONFIG[priority]
+        if (config) setColor(config.color)
+      }
+      return
     }
+    const newCategory = categories.find((category) => category.id === id)
     const settings = newCategory?.settings
     if (settings?.timeZone && !initialEvent) {
       setTimeZone(settings.timeZone)
@@ -519,30 +588,18 @@ export function useEventModalViewModel({
   }
 
   const handleAddGuest = () => {
+    const error = validateGuestInput(
+      newGuestEmail,
+      guests,
+      user?.email,
+      creatorEmail || initialEvent?.creator?.email,
+      true,
+    )
+    if (error) {
+      setGuestEmailError(error)
+      return
+    }
     const trimmed = newGuestEmail.trim().toLowerCase()
-    if (!trimmed) return
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    const usernameRegex = /^[a-zA-Z0-9._-]{3,40}$/
-    if (!emailRegex.test(trimmed) && !usernameRegex.test(trimmed)) {
-      setGuestEmailError('Vui lòng nhập email hoặc username hợp lệ')
-      return
-    }
-    if (user?.email && trimmed === user.email.toLowerCase()) {
-      setGuestEmailError('Bạn không thể tự mời chính mình')
-      return
-    }
-    if (creatorEmail && trimmed === creatorEmail.trim().toLowerCase()) {
-      setGuestEmailError('Không thể mời lại người tạo sự kiện')
-      return
-    }
-    if (!isOwner && initialEvent?.creator?.email && trimmed === initialEvent.creator.email.trim().toLowerCase()) {
-      setGuestEmailError('Không thể mời lại người tạo sự kiện')
-      return
-    }
-    if (guests.some((g) => g.email.trim().toLowerCase() === trimmed)) {
-      setGuestEmailError('Khách này đã được thêm vào danh sách')
-      return
-    }
     const newGuest: EventGuest = {
       email: trimmed,
       role: isOwner && guestCanModify ? 'editor' : 'viewer',
@@ -629,6 +686,7 @@ export function useEventModalViewModel({
 
   const handleRespondInvite = async (status: 'accepted' | 'declined') => {
     if (!initialEvent) return
+    if (isRecurring && !await confirmRecurring(status, initialEvent.entryType, initialEvent.title)) return
     try {
       setIsSubmitting(true)
       const realEventId =
@@ -669,9 +727,68 @@ export function useEventModalViewModel({
   }
 
   const selectedCategory = categories.find((c) => c.id === calendarId)
-  const activeColor = color || selectedCategory?.color || '#2563EB'
+  const activeColor =
+    color ||
+    (entryType === 'task'
+      ? PRIORITY_CONFIG[priority]?.color || '#3B82F6'
+      : selectedCategory?.color || (initialEvent?.calendarId === calendarId && initialEvent?.calendar?.color) || '#2563EB')
+
+  const handleSelectPriority = (newPriority: EventPriority) => {
+    if (newPriority === priority) return
+    if (entryType === 'task') {
+      setPendingPriority(newPriority)
+      setShowPriorityConfirmDialog(true)
+    } else {
+      setPriority(newPriority)
+    }
+  }
+
+  const handleApplyPriorityConfig = () => {
+    if (!pendingPriority) return
+    setPriority(pendingPriority)
+    const config = PRIORITY_CONFIG[pendingPriority]
+    if (config) {
+      setColor(config.color)
+      setReminders(
+        config.defaultReminders.map((r, idx) => ({
+          id: `rem-p-${idx}-${Date.now()}`,
+          method: r.method,
+          quantity: r.quantity,
+          unit: r.unit,
+        })),
+      )
+    }
+    setShowPriorityConfirmDialog(false)
+    setPendingPriority(null)
+  }
+
+  const handleKeepCurrentConfig = () => {
+    if (!pendingPriority) return
+    setPriority(pendingPriority)
+    setShowPriorityConfirmDialog(false)
+    setPendingPriority(null)
+  }
+
+  const checklistCompletedCount = checklist.filter((i) => i.isCompleted).length
+  const checklistTotalCount = checklist.length
+  const checklistProgressPercent =
+    checklistTotalCount > 0 ? Math.round((checklistCompletedCount / checklistTotalCount) * 100) : 0
+
+  const handleToggleComplete = (): boolean => {
+    const titleError = isCompleted ? undefined : validateEventTitle(title)
+    if (titleError) {
+      setErrors((prev) => ({ ...prev, title: titleError }))
+      return false
+    }
+    setIsCompleted((prev) => !prev)
+    return true
+  }
 
   const handleAddReminder = () => {
+    if (reminders.length >= 10) {
+      setErrors((prev) => ({ ...prev, reminders: 'Tối đa 10 mốc thông báo cho mỗi sự kiện / nhiệm vụ' }))
+      return
+    }
     const newRem: ReminderFormItem = {
       id: `rem-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       method: 'in-app',
@@ -679,10 +796,12 @@ export function useEventModalViewModel({
       unit: 'minutes',
     }
     setReminders((prev) => [...prev, newRem])
+    clearError('reminders')
   }
 
   const handleRemoveReminder = (id: string) => {
     setReminders((prev) => prev.filter((r) => r.id !== id))
+    clearError('reminders')
   }
 
   const handleUpdateReminder = (
@@ -696,11 +815,16 @@ export function useEventModalViewModel({
         return { ...r, [field]: value }
       }),
     )
+    clearError('reminders')
   }
 
   const handleAddSubtask = () => {
     const text = newSubtaskTitle.trim()
-    if (!text) return
+    const stepError = validateChecklistStep(text, checklist)
+    if (stepError) {
+      setErrors((prev) => ({ ...prev, checklist: stepError }))
+      return
+    }
     const newItem: SubtaskItem = {
       id: `step-${Date.now()}`,
       title: text,
@@ -708,6 +832,7 @@ export function useEventModalViewModel({
     }
     setChecklist((prev) => [...prev, newItem])
     setNewSubtaskTitle('')
+    clearError('checklist')
   }
 
   const handleToggleSubtask = (subtaskId: string) => {
@@ -718,15 +843,35 @@ export function useEventModalViewModel({
 
   const handleRemoveSubtask = (subtaskId: string) => {
     setChecklist((prev) => prev.filter((item) => item.id !== subtaskId))
+    clearError('checklist')
   }
 
   const handleSelectRecurrence = (freq: RecurrenceFrequency) => {
+    if (freq !== 'none' && entryType === 'task' && hasDeadline) {
+      setPendingRecurrence(freq)
+      return
+    }
+    applyRecurrence(freq)
+  }
+
+  const applyRecurrence = (freq: RecurrenceFrequency) => {
     if (freq === 'custom') {
       setIsCustomRecurrenceOpen(true)
     } else {
       setRecurrenceFreq(freq)
       setIsCustomRecurrenceOpen(false)
     }
+  }
+
+  const handleConfirmRecurrenceWithoutDeadline = () => {
+    if (!pendingRecurrence) return
+    setHasDeadline(false)
+    applyRecurrence(pendingRecurrence)
+    setPendingRecurrence(null)
+  }
+
+  const handleCancelRecurrenceChange = () => {
+    setPendingRecurrence(null)
   }
 
   const handleToggleCustomDay = (day: number) => {
@@ -740,11 +885,31 @@ export function useEventModalViewModel({
   }
 
   const handleConfirmCustomRecurrence = () => {
+    const err = validateCustomRecurrence({
+      interval: customInterval,
+      unit: customUnit,
+      daysOfWeek: customDaysOfWeek,
+      endCondition: customEndCondition,
+      untilDate: customUntilDate,
+      count: customCount,
+      startDate,
+    })
+    if (err) {
+      setCustomRecurrenceError(err)
+      return
+    }
+    setCustomRecurrenceError(null)
+    if (entryType === 'task' && hasDeadline) {
+      setPendingRecurrence('custom')
+      setIsCustomRecurrenceOpen(false)
+      return
+    }
     setRecurrenceFreq('custom')
     setIsCustomRecurrenceOpen(false)
   }
 
   const handleCancelCustomRecurrence = () => {
+    setCustomRecurrenceError(null)
     setIsCustomRecurrenceOpen(false)
   }
 
@@ -795,25 +960,18 @@ export function useEventModalViewModel({
     setGeneralError(null)
 
     const activeTimeZone = timeZone || selectedCategory?.settings?.timeZone || 'Asia/Ho_Chi_Minh'
-    let startIso: string
-    let endIso: string
+    const original = initialEvent?.isAllDay === isAllDay ? initialEvent : undefined
+    const startIso = serializeEventTime(
+      startDate, isAllDay ? '00:00:00' : `${startTime}:00`, activeTimeZone, original?.startDate, isAllDay,
+    )
+    const endIso = serializeEventTime(
+      endDate, isAllDay ? '23:59:59' : `${endTime}:00`, activeTimeZone, original?.endDate, isAllDay,
+    )
 
-    if (entryType === 'task') {
-      if (isAllDay) {
-        startIso = toCalendarInstant(`${deadlineDate}T00:00:00`, activeTimeZone)
-        endIso = toCalendarInstant(`${deadlineDate}T23:59:59`, activeTimeZone)
-      } else {
-        startIso = toCalendarInstant(`${deadlineDate}T${deadlineTime}:00`, activeTimeZone)
-        endIso = toCalendarInstant(`${deadlineDate}T${deadlineTime}:00`, activeTimeZone)
-      }
-    } else {
-      if (isAllDay) {
-        startIso = toCalendarInstant(`${startDate}T00:00:00`, activeTimeZone)
-        endIso = toCalendarInstant(`${endDate}T23:59:59`, activeTimeZone)
-      } else {
-        startIso = toCalendarInstant(`${startDate}T${startTime}:00`, activeTimeZone)
-        endIso = toCalendarInstant(`${endDate}T${endTime}:00`, activeTimeZone)
-      }
+    let deadlineIso: string | null = null
+    if (entryType === 'task' && hasDeadline && deadlineDate && recurrenceFreq === 'none') {
+      deadlineIso = serializeEventTime(deadlineDate, isAllDay ? '23:59:59' : `${deadlineTime}:00`,
+        activeTimeZone, original?.deadline, isAllDay)
     }
 
     const convertedReminders: ReminderItem[] = reminders.map((r) => ({
@@ -822,7 +980,7 @@ export function useEventModalViewModel({
     }))
 
     let recurrencePayload: RecurrenceConfig = { frequency: 'none', interval: 1 }
-    if (entryType === 'event' && recurrenceFreq !== 'none') {
+    if (recurrenceFreq !== 'none') {
       if (recurrenceFreq === 'custom') {
         recurrencePayload = {
           frequency: { day: 'daily', week: 'custom', month: 'monthly', year: 'yearly' }[customUnit] as RecurrenceFrequency,
@@ -848,28 +1006,46 @@ export function useEventModalViewModel({
     }
 
     const submissionGuests = [...guests]
-    const pendingGuestInput = newGuestEmail.trim().toLowerCase()
-    if (pendingGuestInput) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      const usernameRegex = /^[a-zA-Z0-9._-]{3,40}$/
-      if (emailRegex.test(pendingGuestInput) || usernameRegex.test(pendingGuestInput)) {
-        if (
-          (!user?.email || pendingGuestInput !== user.email.toLowerCase()) &&
-          (!creatorEmail || pendingGuestInput !== creatorEmail.toLowerCase()) &&
-          !submissionGuests.some((g) => g.email.toLowerCase() === pendingGuestInput)
-        ) {
-          submissionGuests.push({
-            email: pendingGuestInput,
-            role: isOwner && guestCanModify ? 'editor' : 'viewer',
-            canModify: isOwner ? guestCanModify : false,
-            canInviteOthers: guestCanInviteOthers,
-            canSeeGuestList: guestCanSeeGuestList,
-            status: 'pending',
-          })
-          setGuests(submissionGuests)
-          setNewGuestEmail('')
-        }
+    if (newGuestEmail.trim()) {
+      const guestErr = validateGuestInput(
+        newGuestEmail,
+        guests,
+        user?.email,
+        creatorEmail || initialEvent?.creator?.email,
+        true,
+      )
+      if (guestErr) {
+        setGuestEmailError(guestErr)
+        return
       }
+      submissionGuests.push({
+        email: newGuestEmail.trim().toLowerCase(),
+        role: isOwner && guestCanModify ? 'editor' : 'viewer',
+        canModify: isOwner ? guestCanModify : false,
+        canInviteOthers: guestCanInviteOthers,
+        canSeeGuestList: guestCanSeeGuestList,
+        status: 'pending',
+      })
+      setGuests(submissionGuests)
+      setNewGuestEmail('')
+      setGuestEmailError(null)
+    }
+
+    const currentChecklist = [...checklist]
+    if (entryType === 'task' && newSubtaskTitle.trim()) {
+      const stepErr = validateChecklistStep(newSubtaskTitle, checklist)
+      if (stepErr) {
+        setErrors((prev) => ({ ...prev, checklist: stepErr }))
+        return
+      }
+      currentChecklist.push({
+        id: `step-${Date.now()}`,
+        title: newSubtaskTitle.trim(),
+        isCompleted: false,
+      })
+      setChecklist(currentChecklist)
+      setNewSubtaskTitle('')
+      clearError('checklist')
     }
 
     const payload: CreateEventInput = {
@@ -878,29 +1054,29 @@ export function useEventModalViewModel({
       priority,
       startDate: startIso,
       endDate: endIso,
+      deadline: deadlineIso,
       isAllDay,
-      calendarId: calendarId || null,
+      calendarId: entryType === 'task' ? null : calendarId || null,
       location: entryType === 'event' ? location : '',
       onlineMeetingUrl: entryType === 'event' ? onlineMeetingUrl : '',
       submissionUrl: entryType === 'task' ? submissionUrl : '',
       description,
-      color,
+      color: color || (entryType === 'task' ? (PRIORITY_CONFIG[priority]?.color || '#3B82F6') : ''),
       availability,
-      visibility,
-      timeZone: activeTimeZone,
+      visibility: entryType === 'task' && visibility === 'default' ? 'private' : visibility,
+      timeZone: initialEvent && !initialEvent.timeZone && activeTimeZone === (selectedCategory?.settings?.timeZone || 'Asia/Ho_Chi_Minh')
+        ? initialEvent.timeZone
+        : activeTimeZone,
       guests: submissionGuests,
-      checklist: entryType === 'task' ? checklist : [],
+      checklist: entryType === 'task' ? currentChecklist : [],
       reminders: convertedReminders,
       recurrence: recurrencePayload,
     }
 
     const validationErrors = validateEventForm(payload)
-    if (entryType === 'event' && recurrenceFreq === 'custom' && (
-      !Number.isInteger(customInterval) || customInterval < 1 || customInterval > 99
-      || (customUnit === 'week' && customDaysOfWeek.length === 0)
-      || (customEndCondition === 'count' && (!Number.isInteger(customCount) || customCount < 1 || customCount > 365))
-      || (customEndCondition === 'until' && (!recurrencePayload.until || recurrencePayload.until < startIso))
-    )) {
+    const missingUntil =
+      recurrenceFreq === 'custom' && customEndCondition === 'until' && !recurrencePayload.until
+    if (missingUntil) {
       validationErrors.recurrence = 'Quy tắc lặp lại không hợp lệ. Kiểm tra chu kỳ (1–99), ngày kết thúc và số lần lặp (1–365).'
     }
     if (Object.keys(validationErrors).length > 0) {
@@ -908,12 +1084,17 @@ export function useEventModalViewModel({
       return
     }
 
+    if (isRecurring || recurrencePayload.frequency !== 'none') {
+      const action = !isRecurring ? 'create' : recurrencePayload.frequency === 'none' ? 'stop' : 'save'
+      if (!await confirmRecurring(action, entryType, title)) return
+    }
+
     try {
       setIsSubmitting(true)
       if (initialEvent) {
         const realEventId =
           (initialEvent as unknown as { _baseEventId?: string })._baseEventId || initialEvent.id
-        await calendarApi.updateEvent(realEventId, payload)
+        await calendarApi.updateEvent(realEventId, { ...payload, isCompleted: entryType === 'task' ? isCompleted : false })
       } else {
         await calendarApi.createEvent(payload)
       }
@@ -940,7 +1121,7 @@ export function useEventModalViewModel({
 
       const realEventId =
         (initialEvent as unknown as { _baseEventId?: string })._baseEventId || initialEvent.id
-      const targetDate = initialEvent.startDate
+      const targetDate = initialDate?.toISOString() ?? initialEvent.startDate
 
       if (isRecurring) {
         await calendarApi.deleteEvent(realEventId, deleteRecurringMode, targetDate)
@@ -961,6 +1142,7 @@ export function useEventModalViewModel({
 
   return {
     entryType,
+    confirmation,
     handleTabChange,
     title,
     setTitle: (val: string) => { setTitle(val); clearError('title') },
@@ -968,6 +1150,20 @@ export function useEventModalViewModel({
     handleCalendarSelect,
     priority,
     setPriority,
+    handleSelectPriority,
+    showPriorityConfirmDialog,
+    setShowPriorityConfirmDialog,
+    pendingPriority,
+    handleApplyPriorityConfig,
+    handleKeepCurrentConfig,
+    hasDeadline,
+    setHasDeadline,
+    isCompleted,
+    setIsCompleted,
+    handleToggleComplete,
+    checklistCompletedCount,
+    checklistTotalCount,
+    checklistProgressPercent,
     description,
     setDescription: (val: string) => { setDescription(val); clearError('description') },
     color,
@@ -978,7 +1174,10 @@ export function useEventModalViewModel({
     handleTimeZoneChange,
     guests,
     newGuestEmail,
-    setNewGuestEmail,
+    setNewGuestEmail: (val: string) => {
+      setNewGuestEmail(val)
+      if (guestEmailError) setGuestEmailError(null)
+    },
     creatorEmail,
     guestEmailError,
     guestCanModify,
@@ -1006,6 +1205,9 @@ export function useEventModalViewModel({
     handleUpdateReminder,
     recurrenceFreq,
     handleSelectRecurrence,
+    pendingRecurrence,
+    handleConfirmRecurrenceWithoutDeadline,
+    handleCancelRecurrenceChange,
     isCustomRecurrenceOpen,
     setIsCustomRecurrenceOpen,
     customInterval,
@@ -1022,6 +1224,7 @@ export function useEventModalViewModel({
     setCustomCount,
     handleConfirmCustomRecurrence,
     handleCancelCustomRecurrence,
+    customRecurrenceError,
     getRecurrenceLabel,
     startDate,
     setStartDate: (val: string) => { setStartDate(val); clearError('startDate') },
@@ -1038,14 +1241,14 @@ export function useEventModalViewModel({
     onlineMeetingUrl,
     setOnlineMeetingUrl: (val: string) => { setOnlineMeetingUrl(val); clearError('onlineMeetingUrl') },
     deadlineDate,
-    setDeadlineDate: (val: string) => { setDeadlineDate(val); clearError('endDate') },
+    setDeadlineDate: (val: string) => { setDeadlineDate(val); clearError('deadline') },
     deadlineTime,
-    setDeadlineTime: (val: string) => { setDeadlineTime(val); clearError('endDate') },
+    setDeadlineTime: (val: string) => { setDeadlineTime(val); clearError('deadline') },
     submissionUrl,
     setSubmissionUrl: (val: string) => { setSubmissionUrl(val); clearError('submissionUrl') },
     checklist,
     newSubtaskTitle,
-    setNewSubtaskTitle,
+    setNewSubtaskTitle: (val: string) => { setNewSubtaskTitle(val); clearError('checklist') },
     handleAddSubtask,
     handleToggleSubtask,
     handleRemoveSubtask,
@@ -1076,6 +1279,5 @@ export function useEventModalViewModel({
     canInviteOthers,
     canSeeGuestList,
     handleRespondInvite,
-    handleLeaveEvent,
   }
 }
