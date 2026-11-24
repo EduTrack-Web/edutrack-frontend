@@ -1462,43 +1462,35 @@ export function CalendarPage() {
                           today.getDate() === dNum && today.getMonth() === mIdx && today.getFullYear() === currentYear
 
                         return (
-                          <div
-                            className={`relative mx-auto grid size-5 place-items-center rounded-full font-medium ${
-                              isCurrentDay
-                                ? 'bg-blue-600 font-bold text-white'
-                                : hasEvents
-                                  ? 'bg-blue-100 font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                                  : 'text-slate-700 dark:text-slate-300'
-                            }`}
-                            className="mx-auto inline-flex min-h-5 items-center justify-center font-medium"
-                            key={dNum}
-                            title={
-                              dayTasks.length > 0
-                                ? allTasksDone
-                                  ? 'Đã hoàn thành tất cả nhiệm vụ'
-                                  : 'Còn nhiệm vụ chưa hoàn thành'
-                                : undefined
-                            }
-                          >
-                            {dNum}
-                            {allTasksDone && (
-                              <span className="absolute -right-0.5 -top-0.5 grid size-2.5 place-items-center rounded-full bg-emerald-500 text-white">
-                                <Icon className="size-2" name="check" />
-                              </span>
-                            )}
-                            {hasPendingTask && (
-                              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500" />
-                            )}
-                            <CalendarDateLabel
-                              hasEvents={hasEvents}
-                              isToday={isCurrentDay}
-                              lunarDate={vm.lunarDatesBySolarDate[key]}
-                              showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
-                              solarDay={dNum}
-                              variant="year"
-                            />
-                          </div>
-                        )
+                        <div
+                          className="relative mx-auto inline-flex min-h-5 items-center justify-center font-medium"
+                          key={dNum}
+                          title={
+                            dayTasks.length > 0
+                              ? allTasksDone
+                                ? 'Đã hoàn thành tất cả nhiệm vụ'
+                                : 'Còn nhiệm vụ chưa hoàn thành'
+                              : undefined
+                          }
+                        >
+                          {allTasksDone && (
+                            <span className="absolute -right-0.5 -top-0.5 grid size-2.5 place-items-center rounded-full bg-emerald-500 text-white">
+                              <Icon className="size-2" name="check" />
+                            </span>
+                          )}
+                          {hasPendingTask && (
+                            <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500" />
+                          )}
+                          <CalendarDateLabel
+                            hasEvents={hasEvents}
+                            isToday={isCurrentDay}
+                            lunarDate={vm.lunarDatesBySolarDate[key]}
+                            showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                            solarDay={dNum}
+                            variant="year"
+                          />
+                        </div>
+                      )
                       })}
                     </div>
                   </div>
