@@ -3,14 +3,34 @@ import type { ApiSuccess } from '@/modules/auth/models/AuthUser'
 import type {
   CalendarCategory,
   CalendarEvent,
+  CalendarPreferences,
   CreateCategoryInput,
   CreateEventInput,
   EventQueryFilters,
   UpdateCategoryInput,
   UpdateEventInput,
+  VietnameseLunarDate,
 } from '@/modules/calendar/models/calendar.types'
 
 export const calendarApi = {
+  getPreferences: () =>
+    request<ApiSuccess<{ preferences: CalendarPreferences }>>('/calendar/preferences'),
+
+  updatePreferences: (payload: CalendarPreferences) =>
+    request<ApiSuccess<{ preferences: CalendarPreferences }>>('/calendar/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  getLunarDates: (from: string, to: string) => {
+    const search = new URLSearchParams({ from, to })
+    return request<ApiSuccess<{
+      dates: VietnameseLunarDate[]
+      timeZone: 'Asia/Ho_Chi_Minh'
+      timeZoneOffset: 7
+    }>>(`/calendar/lunar-dates?${search.toString()}`)
+  },
+
   getCategories: () => request<ApiSuccess<{ categories: CalendarCategory[] }>>('/calendar/categories'),
 
   createCategory: (payload: CreateCategoryInput) =>

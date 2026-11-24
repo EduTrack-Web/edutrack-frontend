@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
 import type { CalendarEvent } from '@/modules/calendar/models/calendar.types'
+import { isFirstOrLastDayOfSolarMonth } from '@/modules/calendar/models/lunarCalendar'
 import { useCalendarViewModel, type CalendarViewMode } from '@/modules/calendar/viewmodels/useCalendarViewModel'
 import { CalendarSidebar } from './components/CalendarSidebar'
+import { CalendarDateLabel } from './components/CalendarDateLabel'
+import { CalendarSettingsModal } from './components/CalendarSettingsModal'
 import { CategoryModal } from './components/CategoryModal'
 import { EventModal } from './components/EventModal'
 
@@ -64,6 +68,7 @@ export function CalendarPage() {
   const timeGridRef = useRef<HTMLDivElement>(null)
   const dayGridRef = useRef<HTMLDivElement>(null)
   const [hoveredDateCell, setHoveredDateCell] = useState<string | null>(null)
+  const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false)
   const currentYear = vm.currentDate.getFullYear()
   const currentMonth = vm.currentDate.getMonth()
   const today = new Date()
@@ -249,6 +254,17 @@ export function CalendarPage() {
                 </button>
               </div>
 
+              <button
+                aria-label="Cài đặt lịch"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                onClick={() => setIsCalendarSettingsOpen(true)}
+                title="Cài đặt lịch"
+                type="button"
+              >
+                <Settings aria-hidden="true" className="size-4" />
+                <span className="hidden sm:inline">Cài đặt</span>
+              </button>
+
             </div>
           </div>
 
@@ -261,14 +277,17 @@ export function CalendarPage() {
             <div className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
               {/* Header ngày */}
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/60 p-3 sm:px-4 dark:border-white/10 dark:bg-white/5">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CalendarDateLabel
+                    isToday={isSelectedDateToday}
+                    lunarDate={vm.lunarDatesBySolarDate[selectedDayKey]}
+                    showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                    showLunarMonth
+                    solarDay={vm.currentDate.getDate()}
+                    variant="day"
+                  />
                   <h3 className="text-sm font-bold capitalize text-slate-900 sm:text-base dark:text-white">
-                    {vm.currentDate.toLocaleDateString('vi-VN', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    })}
+                    {vm.currentDate.toLocaleDateString('vi-VN', { weekday: 'long' })}
                   </h3>
                   {isSelectedDateToday && (
                     <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
@@ -448,7 +467,7 @@ export function CalendarPage() {
 
                 {/* 7 cột ngày */}
                 <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 py-2.5 text-center dark:divide-white/10">
-                  {weekDays.map((wd) => {
+                  {weekDays.map((wd, weekIndex) => {
                     const isCurrentDay =
                       today.getDate() === wd.dayNum &&
                       today.getMonth() === wd.date.getMonth() &&
@@ -465,14 +484,15 @@ export function CalendarPage() {
                         >
                           {wd.weekdayLabel}
                         </span>
-                        <span
-                          className={`mx-auto mt-0.5 text-xl font-medium sm:text-2xl ${
-                            isCurrentDay
-                              ? 'grid size-8 sm:size-9 place-items-center rounded-full bg-blue-600 font-bold text-white shadow-xs'
-                              : 'text-slate-800 dark:text-slate-200'
-                          }`}
-                        >
-                          {wd.dayNum}
+                        <span className="mt-0.5 inline-flex justify-center">
+                          <CalendarDateLabel
+                            isToday={isCurrentDay}
+                            lunarDate={vm.lunarDatesBySolarDate[wd.dateKey]}
+                            showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                            showLunarMonth={weekIndex === 0}
+                            solarDay={wd.dayNum}
+                            variant="week"
+                          />
                         </span>
                       </div>
                     )
@@ -680,23 +700,21 @@ export function CalendarPage() {
                       onMouseEnter={() => setHoveredDateCell(dateKey)}
                       onMouseLeave={() => setHoveredDateCell(null)}
                     >
-                      <div className="flex items-center justify-between pb-1">
-                        <span
-                          className={`grid size-6 place-items-center rounded-full text-xs font-semibold ${
-                            isCurrentDay
-                              ? 'bg-blue-600 font-bold text-white shadow-xs'
-                              : isCurrentMonth
-                                ? 'text-slate-800 dark:text-slate-200'
-                                : 'text-slate-400 dark:text-slate-600'
-                          }`}
-                        >
-                          {d}
-                        </span>
+                      <div className="relative flex items-center justify-center pb-1">
+                        <CalendarDateLabel
+                          isMuted={!isCurrentMonth}
+                          isToday={isCurrentDay}
+                          lunarDate={vm.lunarDatesBySolarDate[dateKey]}
+                          showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                          showLunarMonth={isCurrentMonth && isFirstOrLastDayOfSolarMonth(cellDate)}
+                          solarDay={d}
+                          variant="month"
+                        />
 
                         {isHovered && isCurrentMonth && (
                           <button
                             aria-label={`Thêm sự kiện ngày ${d}`}
-                            className="grid size-5 place-items-center rounded-full bg-slate-200/80 text-slate-700 hover:bg-blue-600 hover:text-white dark:bg-white/10 dark:text-white dark:hover:bg-blue-600"
+                            className="absolute top-0 right-0 grid size-5 place-items-center rounded-full bg-slate-200/80 text-slate-700 hover:bg-blue-600 hover:text-white dark:bg-white/10 dark:text-white dark:hover:bg-blue-600"
                             onClick={() => vm.handleOpenCreateEvent(cellDate)}
                             title="Thêm sự kiện vào ngày này"
                             type="button"
@@ -794,16 +812,17 @@ export function CalendarPage() {
 
                         return (
                           <div
-                            className={`mx-auto grid size-5 place-items-center rounded-full font-medium ${
-                              isCurrentDay
-                                ? 'bg-blue-600 font-bold text-white'
-                                : hasEvents
-                                  ? 'bg-blue-100 font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                                  : 'text-slate-700 dark:text-slate-300'
-                            }`}
+                            className="mx-auto inline-flex min-h-5 items-center justify-center font-medium"
                             key={dNum}
                           >
-                            {dNum}
+                            <CalendarDateLabel
+                              hasEvents={hasEvents}
+                              isToday={isCurrentDay}
+                              lunarDate={vm.lunarDatesBySolarDate[key]}
+                              showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                              solarDay={dNum}
+                              variant="year"
+                            />
                           </div>
                         )
                       })}
@@ -965,6 +984,14 @@ export function CalendarPage() {
         isOpen={vm.isCategoryModalOpen}
         onClose={() => vm.setIsCategoryModalOpen(false)}
         onSaved={vm.refreshData}
+      />
+
+      <CalendarSettingsModal
+        isOpen={isCalendarSettingsOpen}
+        isSaving={vm.isSavingPreferences}
+        onClose={() => setIsCalendarSettingsOpen(false)}
+        onUpdatePreferences={vm.handleUpdateCalendarPreferences}
+        showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
       />
 
     </div>
