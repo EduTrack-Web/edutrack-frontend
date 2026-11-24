@@ -6,7 +6,8 @@ import {
   useEventModalViewModel,
   type ReminderUnit,
 } from '../../viewmodels/useEventModalViewModel'
-import { COMMON_TIMEZONES } from '../../models/calendarConstants'
+import { COMMON_TIMEZONES, PRIORITY_CONFIG } from '../../models/calendarConstants'
+import { RecurringConfirmationDialog } from './RecurringConfirmationDialog'
 
 interface EventModalProps {
   isOpen: boolean
@@ -168,7 +169,7 @@ export function EventModal(props: EventModalProps) {
                     <button
                       className="rounded-xl border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-600 shadow-2xs transition-colors hover:bg-rose-50 active:scale-95 dark:border-rose-900/40 dark:bg-white/10 dark:text-rose-400"
                       disabled={vm.isDeleting}
-                      onClick={() => void vm.handleLeaveEvent()}
+                      onClick={() => vm.setShowLeaveConfirm(true)}
                       type="button"
                     >
                       Rời sự kiện
@@ -200,7 +201,7 @@ export function EventModal(props: EventModalProps) {
               ref={titleInputRef}
               aria-describedby={vm.errors.title ? 'title-error' : undefined}
               aria-invalid={Boolean(vm.errors.title)}
-              className="w-full border-b border-slate-200 pb-2 text-xl font-bold text-slate-900 placeholder:text-slate-400 focus:border-slate-300 dark:border-white/15 dark:focus:border-white/30 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 transition-colors"
+              className="w-full border-0 border-b border-slate-200 pb-2 text-xl font-bold text-slate-900 placeholder:text-slate-400 focus:border-slate-400 dark:border-white/15 dark:focus:border-white/30 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none transition-colors"
               style={{ outline: 'none', boxShadow: 'none' }}
               disabled={!vm.canModify}
               onChange={(e) => vm.setTitle(e.target.value)}
@@ -362,15 +363,70 @@ export function EventModal(props: EventModalProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/5 dark:bg-white/5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Hạn chót hoàn thành (Deadline)
-                  </span>
-                  <label className="flex cursor-pointer items-center gap-1.5 select-none" htmlFor="task-is-allday">
+              <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/5 dark:bg-white/5">
+                <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Thời gian thực hiện
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 dark:border-white/10 dark:bg-white/5 space-y-1.5 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Bắt đầu
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        aria-label="Ngày bắt đầu nhiệm vụ"
+                        className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
+                        onChange={(e) => vm.setStartDate(e.target.value)}
+                        type="date"
+                        value={vm.startDate}
+                      />
+                      {!vm.isAllDay && (
+                        <input
+                          aria-label="Giờ bắt đầu nhiệm vụ"
+                          className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-slate-50/70 px-1.5 py-1.5 text-xs font-bold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                          disabled={!vm.canModify}
+                          onChange={(e) => vm.setStartTime(e.target.value)}
+                          type="time"
+                          value={vm.startTime}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 dark:border-white/10 dark:bg-white/5 space-y-1.5 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Kết thúc
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        aria-label="Ngày kết thúc nhiệm vụ"
+                        className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
+                        onChange={(e) => vm.setEndDate(e.target.value)}
+                        type="date"
+                        value={vm.endDate}
+                      />
+                      {!vm.isAllDay && (
+                        <input
+                          aria-label="Giờ kết thúc nhiệm vụ"
+                          className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-slate-50/70 px-1.5 py-1.5 text-xs font-bold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/10 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                          disabled={!vm.canModify}
+                          onChange={(e) => vm.setEndTime(e.target.value)}
+                          type="time"
+                          value={vm.endTime}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/60 dark:border-white/5">
+                  <label className="flex cursor-pointer items-center gap-2 select-none" htmlFor="task-is-allday">
                     <input
                       checked={vm.isAllDay}
-                      className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
+                      className="size-4 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
                       disabled={!vm.canModify}
                       id="task-is-allday"
                       onChange={(e) => vm.setIsAllDay(e.target.checked)}
@@ -378,50 +434,150 @@ export function EventModal(props: EventModalProps) {
                     />
                     <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Cả ngày</span>
                   </label>
-                </div>
 
-                <div className="flex items-center gap-2 text-xs">
-                  <input
-                    aria-label="Ngày hạn chót"
-                    className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
-                    disabled={!vm.canModify}
-                    onChange={(e) => vm.setDeadlineDate(e.target.value)}
-                    type="date"
-                    value={vm.deadlineDate}
-                  />
-
-                  {!vm.isAllDay && (
-                    <input
-                      aria-label="Giờ hạn chót"
-                      className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <select
+                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                       disabled={!vm.canModify}
-                      onChange={(e) => vm.setDeadlineTime(e.target.value)}
-                      type="time"
-                      value={vm.deadlineTime}
-                    />
-                  )}
+                      onChange={(e) => vm.handleSelectRecurrence(e.target.value as RecurrenceFrequency)}
+                      aria-invalid={Boolean(vm.errors.recurrence)}
+                      aria-describedby={vm.errors.recurrence ? 'task-recurrence-error' : undefined}
+                      value={vm.recurrenceFreq}
+                    >
+                      <option value="none">Không lặp lại</option>
+                      <option value="daily">Hàng ngày</option>
+                      <option value="weekly">Hàng tuần</option>
+                      <option value="monthly">Hàng tháng</option>
+                      <option value="yearly">Hàng năm</option>
+                      <option value="weekdays">Mọi ngày trong tuần (T2 - T6)</option>
+                      <option value="custom">Tùy chỉnh...</option>
+                    </select>
+
+                    {vm.errors.recurrence && (
+                      <p id="task-recurrence-error" className="mt-1 text-xs text-red-600">{vm.errors.recurrence}</p>
+                    )}
+                    {vm.recurrenceFreq === 'custom' && (
+                      <button
+                        className="flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
+                        onClick={() => vm.setIsCustomRecurrenceOpen(true)}
+                        title="Chỉnh sửa cấu hình lặp lại"
+                        type="button"
+                      >
+                        <Icon className="size-3" name="edit" />
+                        <span>{vm.getRecurrenceLabel()}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {(vm.errors.startDate || vm.errors.endDate) && (
+                  <p className="text-xs font-semibold text-rose-500">
+                    {vm.errors.startDate || vm.errors.endDate}
+                  </p>
+                )}
               </div>
 
+              {vm.recurrenceFreq !== 'none' ? (
+                <p className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-[11px] italic text-slate-500 dark:border-white/5 dark:bg-white/5 dark:text-slate-400">
+                  Việc cần làm định kỳ không được có thời hạn. Chọn &quot;Không lặp lại&quot; để đặt thời hạn.
+                </p>
+              ) : (
+              <div className="space-y-2.5 rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/5 dark:bg-white/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Hạn chót hoàn thành (Deadline)
+                    </span>
+                    {vm.hasDeadline && (
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                        Có deadline
+                      </span>
+                    )}
+                  </div>
+
+                  <label className="flex cursor-pointer items-center gap-1.5 select-none" htmlFor="toggle-has-deadline">
+                    <input
+                      checked={vm.hasDeadline}
+                      className="size-3.5 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
+                      disabled={!vm.canModify}
+                      id="toggle-has-deadline"
+                      onChange={(e) => vm.setHasDeadline(e.target.checked)}
+                      type="checkbox"
+                    />
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Đặt hạn chót</span>
+                  </label>
+                </div>
+
+                {vm.hasDeadline ? (
+                  <div className="flex items-center gap-2 text-xs">
+                    <input
+                      aria-label="Ngày hạn chót"
+                      className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                      disabled={!vm.canModify}
+                      onChange={(e) => vm.setDeadlineDate(e.target.value)}
+                      type="date"
+                      value={vm.deadlineDate}
+                    />
+
+                    {!vm.isAllDay && (
+                      <input
+                        aria-label="Giờ hạn chót"
+                        className="w-[102px] shrink-0 rounded-lg border border-slate-200 bg-white px-1.5 py-1.5 font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
+                        onChange={(e) => vm.setDeadlineTime(e.target.value)}
+                        type="time"
+                        value={vm.deadlineTime}
+                      />
+                    )}
+
+                    {vm.canModify && (
+                      <button
+                        aria-label="Hủy hạn chót"
+                        className="grid size-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+                        onClick={() => vm.setHasDeadline(false)}
+                        title="Bỏ hạn chót"
+                        type="button"
+                      >
+                        <Icon className="size-3.5" name="close" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                    Chưa đặt hạn chót riêng cho nhiệm vụ này (áp dụng theo thời gian kết thúc ở trên).
+                  </p>
+                )}
+                {vm.errors.deadline && (
+                  <p className="text-xs font-semibold text-rose-500">{vm.errors.deadline}</p>
+                )}
+              </div>
+              )}
+
               <div>
-                <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Mức độ ưu tiên
-                </span>
-                <div className="mt-1.5 grid grid-cols-4 gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Mức độ ưu tiên
+                  </span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                    Màu sắc & thông báo tự động theo mức
+                  </span>
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {PRIORITY_ITEMS.map((item) => {
                     const isSelected = vm.priority === item.value
                     return (
                       <button
-                        className={`flex items-center justify-center gap-2 rounded-xl border py-2 text-xs font-bold transition-all ${isSelected
+                        className={`flex items-center justify-center gap-2 rounded-xl border py-2 px-2 text-xs font-bold transition-all ${isSelected
                           ? 'border-blue-600 bg-blue-50/70 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 ring-2 ring-blue-600/30'
                           : 'border-slate-200 bg-white/70 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
                           } ${!vm.canModify ? 'opacity-70 cursor-not-allowed' : ''}`}
                         disabled={!vm.canModify}
                         key={item.value}
-                        onClick={() => vm.setPriority(item.value)}
+                        onClick={() => vm.handleSelectPriority(item.value)}
                         type="button"
                       >
-                        <span className={`size-2 rounded-full ${item.dotColor}`} />
+                        <span className={`size-2.5 rounded-full ${item.dotColor}`} />
                         <span>{item.label}</span>
                       </button>
                     )
@@ -429,67 +585,135 @@ export function EventModal(props: EventModalProps) {
                 </div>
               </div>
 
-              <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/5 dark:bg-white/5">
-                <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Các bước cần làm (Checklist {vm.checklist.length > 0 ? `• ${vm.checklist.filter((i) => i.isCompleted).length}/${vm.checklist.length}` : ''})
-                </span>
-
-                {vm.checklist.length > 0 && (
-                  <div className="space-y-1.5">
-                    {vm.checklist.map((item) => (
-                      <div className="flex items-center justify-between gap-2 rounded-lg bg-white p-2 shadow-2xs dark:bg-white/5" key={item.id}>
-                        <label className="flex flex-1 cursor-pointer items-center gap-2 select-none" htmlFor={`check-${item.id}`}>
-                          <input
-                            checked={item.isCompleted}
-                            className="size-4 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
-                            disabled={!vm.canModify}
-                            id={`check-${item.id}`}
-                            onChange={() => vm.handleToggleSubtask(item.id)}
-                            type="checkbox"
-                          />
-                          <span className={`text-xs font-medium ${item.isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-white'}`}>
-                            {item.title}
-                          </span>
-                        </label>
-                        {vm.canModify && (
-                          <button
-                            aria-label="Xóa bước này"
-                            className="text-slate-400 hover:text-rose-500"
-                            onClick={() => vm.handleRemoveSubtask(item.id)}
-                            type="button"
-                          >
-                            <Icon className="size-3.5" name="close" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {vm.canModify && (
+              <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3.5 dark:border-white/5 dark:bg-white/5">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <input
-                      className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                      onChange={(e) => vm.setNewSubtaskTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          vm.handleAddSubtask()
-                        }
-                      }}
-                      placeholder="Thêm bước thực hiện (ví dụ: Vẽ kiến trúc)..."
-                      type="text"
-                      value={vm.newSubtaskTitle}
-                    />
-                    <button
-                      className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-300 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
-                      onClick={vm.handleAddSubtask}
-                      type="button"
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Trạng thái & Tiến độ
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        vm.isCompleted
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                          : 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
+                      }`}
                     >
-                      + Thêm
-                    </button>
+                      {vm.isCompleted ? '✓ Đã hoàn thành' : 'Đang thực hiện'}
+                    </span>
+                  </div>
+
+                  <label
+                    className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 select-none transition-colors ${
+                      vm.isCompleted
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
+                        : 'border-slate-200 bg-white hover:border-emerald-500 dark:border-white/10 dark:bg-white/5'
+                    } ${!vm.canModify ? 'cursor-not-allowed opacity-70' : ''}`}
+                    htmlFor="toggle-task-complete"
+                  >
+                    <input
+                      checked={vm.isCompleted}
+                      className="size-4 rounded-sm border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed"
+                      disabled={!vm.canModify}
+                      id="toggle-task-complete"
+                      onChange={() => {
+                        if (!vm.handleToggleComplete()) titleInputRef.current?.focus()
+                      }}
+                      type="checkbox"
+                    />
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">Đã hoàn thành</span>
+                  </label>
+                </div>
+
+                {vm.checklistTotalCount > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      <span>Tiến độ checklist ({vm.checklistCompletedCount}/{vm.checklistTotalCount} bước)</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{vm.checklistProgressPercent}%</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          vm.checklistProgressPercent === 100
+                            ? 'bg-emerald-500'
+                            : 'bg-[#548383]'
+                        }`}
+                        style={{ width: `${vm.checklistProgressPercent}%` }}
+                      />
+                    </div>
                   </div>
                 )}
+
+                <div className="space-y-2 pt-1 border-t border-slate-200/60 dark:border-white/5">
+                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Các bước cần làm (Checklist)
+                  </span>
+                  {vm.errors.checklist && (
+                    <p className="text-xs font-semibold text-rose-500">{vm.errors.checklist}</p>
+                  )}
+
+                  {vm.checklist.length > 0 && (
+                    <div className="space-y-1.5">
+                      {vm.checklist.map((item) => (
+                        <div className="flex items-center justify-between gap-2 rounded-lg bg-white p-2 shadow-2xs dark:bg-white/5" key={item.id}>
+                          <label className="flex flex-1 cursor-pointer items-center gap-2 select-none" htmlFor={`check-${item.id}`}>
+                            <input
+                              checked={item.isCompleted}
+                              className="size-4 rounded-sm border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
+                              disabled={!vm.canModify}
+                              id={`check-${item.id}`}
+                              onChange={() => vm.handleToggleSubtask(item.id)}
+                              type="checkbox"
+                            />
+                            <span className={`text-xs font-medium ${item.isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-white'}`}>
+                              {item.title}
+                            </span>
+                          </label>
+                          {vm.canModify && (
+                            <button
+                              aria-label="Xóa bước này"
+                              className="text-slate-400 hover:text-rose-500"
+                              onClick={() => vm.handleRemoveSubtask(item.id)}
+                              type="button"
+                            >
+                              <Icon className="size-3.5" name="close" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {vm.canModify && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        aria-describedby={vm.errors.checklist ? 'checklist-error' : undefined}
+                        aria-invalid={Boolean(vm.errors.checklist)}
+                        className={`flex-1 rounded-lg border bg-white px-3 py-1.5 text-xs text-slate-800 outline-hidden transition-all dark:bg-white/5 dark:text-white ${
+                          vm.errors.checklist
+                            ? 'border-rose-500 focus:border-rose-500'
+                            : 'border-slate-200 focus:border-blue-600 dark:border-white/10'
+                        }`}
+                        onChange={(e) => vm.setNewSubtaskTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            vm.handleAddSubtask()
+                          }
+                        }}
+                        placeholder="Thêm bước thực hiện (ví dụ: Vẽ kiến trúc)..."
+                        type="text"
+                        value={vm.newSubtaskTitle}
+                      />
+                      <button
+                        className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-300 active:scale-95 transition-all dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+                        onClick={vm.handleAddSubtask}
+                        type="button"
+                      >
+                        + Thêm
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
@@ -562,6 +786,9 @@ export function EventModal(props: EventModalProps) {
               >
                 + Thêm thông báo
               </button>
+              {vm.errors.reminders && (
+                <p className="text-xs font-semibold text-rose-500">{vm.errors.reminders}</p>
+              )}
             </div>
           </div>
 
@@ -571,6 +798,7 @@ export function EventModal(props: EventModalProps) {
                 <Icon className="size-4.5" name="calendar" />
               </span>
               <div className="relative flex flex-1 items-center gap-2">
+                {!isTask && (
                 <select
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                   disabled={!vm.canModify}
@@ -583,6 +811,10 @@ export function EventModal(props: EventModalProps) {
                     </option>
                   ))}
                 </select>
+                )}
+                {isTask && (
+                  <span className="flex-1 text-xs font-semibold text-slate-600 dark:text-slate-300">Màu thẻ nhiệm vụ</span>
+                )}
 
                 <div className="relative">
                   <button
@@ -607,25 +839,25 @@ export function EventModal(props: EventModalProps) {
                     >
                       <div className="flex items-center justify-between pb-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
                         <span>Màu sắc thẻ</span>
-                        {vm.color && (
-                          <button
-                            className="text-blue-600 hover:underline dark:text-blue-400"
-                            onClick={() => {
-                              vm.setColor('')
-                              vm.setIsColorPickerOpen(false)
-                            }}
-                            type="button"
-                          >
-                            Theo màu lịch
-                          </button>
-                        )}
+                        <button
+                          aria-pressed={!vm.color}
+                          className="text-blue-600 hover:underline aria-pressed:underline dark:text-blue-400"
+                          onClick={() => {
+                            vm.setColor('')
+                            vm.setIsColorPickerOpen(false)
+                          }}
+                          type="button"
+                        >
+                          {isTask ? 'Theo mức ưu tiên' : 'Theo màu lịch'}
+                        </button>
                       </div>
                       <div className="grid grid-cols-6 gap-2">
                         {EXTENDED_CALENDAR_COLORS.map((hex) => {
-                          const isSelected = (vm.color || vm.activeColor).toLowerCase() === hex.toLowerCase()
+                          const isSelected = vm.color.toLowerCase() === hex.toLowerCase()
                           return (
                             <button
                               aria-label={`Chọn màu ${hex}`}
+                              aria-pressed={isSelected}
                               className={`size-6 rounded-full transition-transform hover:scale-110 ${isSelected ? 'ring-2 ring-blue-600 ring-offset-2' : ''
                                 }`}
                               key={hex}
@@ -643,7 +875,7 @@ export function EventModal(props: EventModalProps) {
                   )}
                 </div>
 
-                {onOpenCreateCategory && vm.canModify && (
+                {onOpenCreateCategory && vm.canModify && !isTask && (
                   <button
                     className="shrink-0 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400"
                     onClick={onOpenCreateCategory}
@@ -692,14 +924,26 @@ export function EventModal(props: EventModalProps) {
                 {vm.canInviteOthers ? (
                   <div className="flex items-center gap-2">
                     <input
-                      className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      aria-describedby={vm.guestEmailError ? 'guest-email-error' : undefined}
+                      aria-invalid={Boolean(vm.guestEmailError)}
+                      className={`flex-1 rounded-xl border bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 outline-hidden transition-all focus:bg-white dark:bg-white/5 dark:text-white ${
+                        vm.guestEmailError
+                          ? 'border-rose-500 focus:border-rose-500'
+                          : 'border-slate-200 focus:border-blue-600 dark:border-white/10'
+                      }`}
                       onChange={(e) => vm.setNewGuestEmail(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          vm.handleAddGuest()
+                        }
+                      }}
                       placeholder="Thêm khách mời (nhập email hoặc username)..."
                       type="text"
                       value={vm.newGuestEmail}
                     />
                     <button
-                      className="shrink-0 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700"
+                      className="shrink-0 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700 active:scale-95"
                       onClick={vm.handleAddGuest}
                       type="button"
                     >
@@ -712,7 +956,7 @@ export function EventModal(props: EventModalProps) {
                   </p>
                 )}
                 {vm.guestEmailError && (
-                  <p className="text-xs font-semibold text-rose-500">{vm.guestEmailError}</p>
+                  <p className="text-xs font-semibold text-rose-500" id="guest-email-error">{vm.guestEmailError}</p>
                 )}
 
                 {vm.isOwner && (
@@ -829,9 +1073,9 @@ export function EventModal(props: EventModalProps) {
                 className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                 disabled={!vm.canModify}
                 onChange={(e) => vm.setVisibility(e.target.value as 'default' | 'public' | 'private')}
-                value={vm.visibility}
+                value={isTask && vm.visibility === 'default' ? 'private' : vm.visibility}
               >
-                <option value="default">Mặc định (Theo quyền riêng tư của lịch)</option>
+                {!isTask && <option value="default">Mặc định (Theo quyền riêng tư của lịch)</option>}
                 <option value="private">Riêng tư (Chỉ mình tôi & khách mời)</option>
                 <option value="public">Công khai (Mọi người có thể xem)</option>
               </select>
@@ -1051,6 +1295,12 @@ export function EventModal(props: EventModalProps) {
                 </div>
               </div>
 
+              {vm.customRecurrenceError && (
+                <p className="text-xs font-semibold text-rose-500" role="alert">
+                  {vm.customRecurrenceError}
+                </p>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-white/10">
                 <button
                   className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
@@ -1071,6 +1321,8 @@ export function EventModal(props: EventModalProps) {
           </div>
         )}
 
+        {vm.confirmation && <RecurringConfirmationDialog confirmation={vm.confirmation} />}
+
         {vm.showDeleteConfirm && (
           <div
             aria-modal="true"
@@ -1088,18 +1340,18 @@ export function EventModal(props: EventModalProps) {
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                     {vm.isRecurring
-                      ? 'Xóa sự kiện lặp lại'
+                      ? `Xóa ${isTask ? 'nhiệm vụ' : 'sự kiện'} lặp lại`
                       : `Xóa ${isTask ? 'nhiệm vụ' : 'sự kiện'} này?`}
                   </h4>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                     {vm.isRecurring
-                      ? `Sự kiện "${vm.title || 'này'}" thuộc chuỗi lặp lại. Vui lòng chọn phạm vi xóa:`
+                      ? `Bạn muốn xóa những lần nào trong chuỗi “${vm.title}”?`
                       : `Bạn có chắc chắn muốn xóa "${vm.title || (isTask ? 'nhiệm vụ' : 'sự kiện')}" không? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.`}
                   </p>
                 </div>
               </div>
 
-              {vm.isRecurring && (
+              {vm.isRecurring && initialEvent && (
                 <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-white/5 dark:bg-white/5">
                   <label
                     className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${vm.deleteRecurringMode === 'this'
@@ -1117,10 +1369,10 @@ export function EventModal(props: EventModalProps) {
                     />
                     <div>
                       <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Chỉ sự kiện này
+                        Chỉ lần này
                       </span>
                       <span className="block text-[11px] text-slate-400 dark:text-slate-400">
-                        Chỉ xóa lần xảy ra vào ngày này, các ngày lặp lại khác vẫn được giữ nguyên.
+                        Chỉ xóa lần diễn ra vào ngày {(props.initialDate ?? new Date(initialEvent.startDate)).toLocaleDateString('vi-VN')}.
                       </span>
                     </div>
                   </label>
@@ -1141,10 +1393,10 @@ export function EventModal(props: EventModalProps) {
                     />
                     <div>
                       <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Sự kiện này và các sự kiện tiếp theo
+                        Lần này và các lần tiếp theo
                       </span>
                       <span className="block text-[11px] text-slate-400 dark:text-slate-400">
-                        Xóa sự kiện này và dừng toàn bộ các lần lặp tiếp theo trong tương lai.
+                        Xóa từ lần đang chọn đến hết chuỗi.
                       </span>
                     </div>
                   </label>
@@ -1165,10 +1417,10 @@ export function EventModal(props: EventModalProps) {
                     />
                     <div>
                       <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Tất cả các sự kiện
+                        Tất cả các lần trong chuỗi
                       </span>
                       <span className="block text-[11px] text-slate-400 dark:text-slate-400">
-                        Xóa hoàn toàn mọi lần diễn ra của sự kiện này trong quá khứ và tương lai.
+                        Xóa cả các lần trước và sau lần đang chọn.
                       </span>
                     </div>
                   </label>
@@ -1213,11 +1465,10 @@ export function EventModal(props: EventModalProps) {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Rời khỏi sự kiện này?
+                    {vm.isRecurring ? 'Rời khỏi cả chuỗi lặp?' : 'Rời khỏi mục này?'}
                   </h4>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    Bạn có chắc chắn muốn rời khỏi sự kiện <span className="font-semibold text-slate-700 dark:text-slate-200">"{vm.title || 'này'}"</span> không?
-                    Sự kiện sẽ bị xóa khỏi lịch của bạn và người tạo sự kiện sẽ nhận được thông báo phản hồi.
+                    {vm.isRecurring ? 'Bạn sẽ rời tất cả các lần của' : 'Bạn sẽ rời'} {isTask ? 'nhiệm vụ' : 'sự kiện'} <strong>“{vm.title}”</strong>. Người tạo sẽ nhận được thông báo.
                   </p>
                 </div>
               </div>
@@ -1283,6 +1534,102 @@ export function EventModal(props: EventModalProps) {
                   type="button"
                 >
                   Xác nhận xóa
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {vm.pendingRecurrence && (
+          <div
+            aria-modal="true"
+            className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+            onClick={vm.handleCancelRecurrenceChange}
+            role="dialog"
+          >
+            <div
+              className="w-full max-w-lg space-y-5 rounded-[28px] border border-slate-200/80 bg-[#f0f4f9] p-6 sm:p-7 shadow-2xl dark:border-white/10 dark:bg-[#052659]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <h4 className="text-xl sm:text-2xl font-normal text-slate-900 dark:text-white">
+                  Việc cần làm định kỳ không được có thời hạn
+                </h4>
+                <p className="mt-2.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                  Khi chuyển việc cần làm này thành việc cần làm định kỳ, thời hạn sẽ bị xoá
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+                <button
+                  className="rounded-full px-5 py-2.5 text-sm font-medium text-[#0b57d0] hover:bg-[#0b57d0]/10 dark:text-blue-300 dark:hover:bg-white/10 transition-colors"
+                  onClick={vm.handleCancelRecurrenceChange}
+                  type="button"
+                >
+                  Quay lại chế độ chỉnh sửa
+                </button>
+                <button
+                  className="rounded-full bg-[#0b57d0] px-6 py-2.5 text-sm font-medium text-white shadow-xs hover:bg-[#0842a0] transition-colors"
+                  onClick={vm.handleConfirmRecurrenceWithoutDeadline}
+                  type="button"
+                >
+                  Vẫn chuyển thành việc cần làm định kỳ
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {vm.showPriorityConfirmDialog && vm.pendingPriority && (
+          <div
+            aria-modal="true"
+            className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+            role="dialog"
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                  <Icon className="size-5" name="bell" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Áp dụng thông báo cho mức {PRIORITY_CONFIG[vm.pendingPriority]?.label}?
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Mức ưu tiên <span className="font-bold text-slate-700 dark:text-slate-200">{PRIORITY_CONFIG[vm.pendingPriority]?.label}</span> có cấu hình thông báo khuyến nghị:
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                    {PRIORITY_CONFIG[vm.pendingPriority]?.defaultReminders.map((r, idx) => (
+                      <li className="flex items-center gap-1.5" key={idx}>
+                        <span className="size-1.5 rounded-full bg-blue-500" />
+                        <span>
+                          Trước {r.quantity} {r.unit === 'minutes' ? 'phút' : r.unit === 'hours' ? 'giờ' : r.unit === 'days' ? 'ngày' : 'tuần'} qua {r.method === 'email' ? 'Email' : 'Thông báo'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Bạn có muốn áp dụng cấu hình này và thay thế danh sách thông báo hiện tại không?
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
+                <button
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+                  onClick={vm.handleKeepCurrentConfig}
+                  type="button"
+                >
+                  Giữ nguyên thông báo
+                </button>
+                <button
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition-colors"
+                  onClick={vm.handleApplyPriorityConfig}
+                  type="button"
+                >
+                  Áp dụng cấu hình mới
                 </button>
               </div>
             </div>

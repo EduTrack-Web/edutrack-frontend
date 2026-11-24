@@ -2,9 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NotificationItem } from '../models/notification.types'
 import { notificationApi } from '../services/notificationApi'
 import { calendarApi } from '@/modules/calendar/services/calendarApi'
+import { useRecurringConfirmation } from '@/modules/calendar/viewmodels/useRecurringConfirmation'
 import { useToast } from '@/shared/viewmodels/useToast'
 
 export function useNotifications() {
+  const { confirmation, confirmRecurring } = useRecurringConfirmation()
+  const responding = useRef(false)
+  useEffect(() => () => { responding.current = false }, [])
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
@@ -105,7 +109,15 @@ export function useNotifications() {
     eventId: string,
     status: 'accepted' | 'declined',
   ) => {
+    if (responding.current) return
+    responding.current = true
     try {
+      const { data } = await calendarApi.getEventById(eventId)
+      if (!responding.current) return
+      const event = data.event
+      if (event.recurrence && event.recurrence.frequency !== 'none') {
+        if (!await confirmRecurring(status, event.entryType, event.title)) return
+      }
       await calendarApi.respondInvite(eventId, status)
       setNotifications((prev) =>
         prev.map((n) =>
@@ -132,10 +144,13 @@ export function useNotifications() {
       window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Không thể phản hồi lời mời.', 'error')
+    } finally {
+      responding.current = false
     }
   }
 
   return {
+    confirmation,
     notifications,
     unreadCount,
     isLoading,

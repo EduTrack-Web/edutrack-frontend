@@ -3,6 +3,7 @@ export type EventPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type EventAvailability = 'busy' | 'free'
 export type EventVisibility = 'default' | 'public' | 'private'
 export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'weekdays' | 'custom'
+export type RecurringUpdateMode = 'this' | 'following' | 'all' | 'all_this_weekday'
 export type ReminderMethod = 'in-app' | 'email'
 
 export interface CalendarPreferences {
@@ -113,11 +114,13 @@ export interface CalendarEvent {
   priority: EventPriority
   startDate: string
   endDate: string
+  deadline?: string | null
   isAllDay: boolean
   location: string
   onlineMeetingUrl: string
   submissionUrl: string
   color: string
+  inheritsCalendarColor?: boolean
   availability: EventAvailability
   visibility: EventVisibility
   timeZone?: string
@@ -140,6 +143,7 @@ export interface CreateEventInput {
   priority?: EventPriority
   startDate: string
   endDate: string
+  deadline?: string | null
   isAllDay?: boolean
   location?: string
   onlineMeetingUrl?: string
@@ -156,6 +160,8 @@ export interface CreateEventInput {
 
 export interface UpdateEventInput extends Partial<CreateEventInput> {
   isCompleted?: boolean
+  mode?: RecurringUpdateMode
+  targetDate?: string
 }
 
 export interface EventQueryFilters {

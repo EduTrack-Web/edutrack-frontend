@@ -5,6 +5,7 @@ import type {
   CalendarPreferences,
   EntryType,
   VietnameseLunarDate,
+  RecurringUpdateMode,
 } from '@/modules/calendar/models/calendar.types'
 import {
   clipRangeToSupportedLunarYears,
@@ -20,12 +21,14 @@ import { calendarApi } from '@/modules/calendar/services/calendarApi'
 import { expandAllRecurringEvents } from '@/modules/calendar/utils/recurrenceExpander'
 import { ApiError } from '@/shared/api/httpClient'
 import { useToast } from '@/shared/viewmodels/useToast'
+import { useRecurringConfirmation } from './useRecurringConfirmation'
 
 export type CalendarViewMode = 'day' | 'week' | 'month' | 'year' | 'list'
 
 const LUNAR_FETCH_DEBOUNCE_MS = 300
 
 export function useCalendarViewModel() {
+  const { confirmation, confirmRecurring } = useRecurringConfirmation()
   const { showToast } = useToast()
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [categories, setCategories] = useState<CalendarCategory[]>([])
@@ -235,7 +238,7 @@ export function useCalendarViewModel() {
       setEvents((prev) =>
         prev.map((e) =>
           e.calendarId === categoryId
-            ? { ...e, calendar: e.calendar ? { ...e.calendar, color } : null }
+            ? { ...e, color: e.inheritsCalendarColor ? color : e.color, calendar: e.calendar ? { ...e.calendar, color } : null }
             : e,
         ),
       )
@@ -247,7 +250,6 @@ export function useCalendarViewModel() {
   }
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa lịch này? Các sự kiện sẽ được tách ra.')) return
     try {
       await calendarApi.deleteCategory(categoryId)
       setSelectedCategoryIds((prev) => prev.filter((id) => id !== categoryId))
@@ -305,22 +307,14 @@ export function useCalendarViewModel() {
     const baseId = eventWithMeta._baseEventId || event.id
 
     void calendarApi.getEventById(baseId).then((res) => {
-      if (res.data?.event) {
-        setEditingEvent(res.data.event)
+      const fullEvent = res.data?.event
+      if (fullEvent) {
+        setEditingEvent((current) => current && resolveBaseEventId(current.id) === baseId ? fullEvent : current)
       }
     }).catch(() => {})
 
-    if (eventWithMeta._isOccurrence && eventWithMeta._baseEventId) {
-      const baseEvent = events.find((e) => e.id === eventWithMeta._baseEventId)
-      if (baseEvent) {
-        setEditingEvent(baseEvent)
-        setSelectedModalDate(null)
-        setIsEventModalOpen(true)
-        return
-      }
-    }
-    setEditingEvent(event)
-    setSelectedModalDate(null)
+    setEditingEvent(events.find((item) => item.id === baseId) ?? event)
+    setSelectedModalDate(new Date(event.startDate))
     setIsEventModalOpen(true)
   }
 
@@ -343,6 +337,11 @@ export function useCalendarViewModel() {
 
   const handleToggleComplete = async (eventId: string, currentStatus: boolean) => {
     const baseId = resolveBaseEventId(eventId)
+    const task = events.find((event) => event.id === baseId)
+    if (!task) return
+    if (task.recurrence && task.recurrence.frequency !== 'none') {
+      if (!await confirmRecurring(currentStatus ? 'reopen' : 'complete', task.entryType, task.title)) return
+    }
     try {
       setEvents((prev) =>
         prev.map((e) =>
@@ -358,15 +357,79 @@ export function useCalendarViewModel() {
     }
   }
 
-  const handleDeleteEvent = async (eventId: string) => {
+  const handleDeleteEvent = async (
+    eventId: string,
+    mode?: 'this' | 'following' | 'all',
+    date?: string,
+  ) => {
     const baseId = resolveBaseEventId(eventId)
-    if (!window.confirm('Bạn có chắc chắn muốn xóa mục này?')) return
     try {
-      setEvents((prev) => prev.filter((e) => e.id !== baseId))
-      await calendarApi.deleteEvent(baseId)
+      if (mode && mode !== 'all') {
+        await calendarApi.deleteEvent(baseId, mode, date)
+        await fetchData(true)
+      } else {
+        setEvents((prev) => prev.filter((e) => e.id !== baseId))
+        await calendarApi.deleteEvent(baseId, mode, date)
+      }
     } catch (err) {
       console.error('Lỗi khi xóa sự kiện:', err)
       fetchData(true)
+    }
+  }
+
+  const handleMoveEvent = async (
+    eventId: string,
+    newStartDateIso: string,
+    newEndDateIso: string,
+    isAllDay?: boolean,
+    mode?: RecurringUpdateMode,
+    targetDate?: string,
+  ) => {
+    const baseId = resolveBaseEventId(eventId)
+    const prevEvents = [...events]
+    const targetEvent = events.find((e) => e.id === baseId)
+    if (!targetEvent) return
+
+    let nextDeadlineIso: string | null | undefined = undefined
+    if (targetEvent.deadline) {
+      const origStartMs = new Date(targetEvent.startDate).getTime()
+      const origDeadlineMs = new Date(targetEvent.deadline).getTime()
+      const offsetMs = origDeadlineMs - origStartMs
+      const newStartMs = new Date(newStartDateIso).getTime()
+      nextDeadlineIso = new Date(newStartMs + offsetMs).toISOString()
+    }
+
+    try {
+      const res = await calendarApi.updateEvent(baseId, {
+        startDate: newStartDateIso,
+        endDate: newEndDateIso,
+        isAllDay: typeof isAllDay === 'boolean' ? isAllDay : undefined,
+        deadline: nextDeadlineIso,
+        mode,
+        targetDate,
+      })
+
+      if (mode && mode !== 'all') {
+        await fetchData(true)
+      } else {
+        setEvents((prev) =>
+          prev.map((e) => {
+            if (e.id === baseId) {
+              return res.data?.event || {
+                ...e,
+                startDate: newStartDateIso,
+                endDate: newEndDateIso,
+                isAllDay: typeof isAllDay === 'boolean' ? isAllDay : e.isAllDay,
+                deadline: nextDeadlineIso !== undefined ? nextDeadlineIso : e.deadline,
+              }
+            }
+            return e
+          }),
+        )
+      }
+    } catch (err) {
+      console.error('Lỗi khi di chuyển sự kiện:', err)
+      setEvents(prevEvents)
     }
   }
 
@@ -416,6 +479,7 @@ export function useCalendarViewModel() {
   const dateTitleLabel = getDateTitleLabel()
 
   return {
+    confirmation,
     categories,
     selectedCategoryIds,
     events: displayedEvents,
@@ -452,6 +516,7 @@ export function useCalendarViewModel() {
     handleOpenEditCategory,
     handleToggleComplete,
     handleDeleteEvent,
+    handleMoveEvent,
     handleUpdateCalendarPreferences,
     refreshData: fetchData,
   }

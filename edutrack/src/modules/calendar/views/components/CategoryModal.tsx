@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../../../shared/components/Icon'
 import type { CalendarCategory, CalendarSettings, CategoryMember, CreateCategoryInput, ReminderItem, ReminderMethod } from '../../models/calendar.types'
-import { validateCategoryForm } from '../../models/calendarValidation'
+import { validateCategoryForm, validateGuestInput } from '../../models/calendarValidation'
 import { COMMON_TIMEZONES } from '../../models/calendarConstants'
 import { calendarApi } from '../../services/calendarApi'
 import { EXTENDED_CALENDAR_COLORS, type ReminderUnit } from '../../viewmodels/useEventModalViewModel'
@@ -68,19 +68,15 @@ export function CategoryModal({
   onClose,
   onSaved,
 }: CategoryModalProps) {
-  // Nhóm 1: Thông tin chung
   const [name, setName] = useState('')
   const [color, setColor] = useState(EXTENDED_CALENDAR_COLORS[0] ?? '#2563EB')
   const [description, setDescription] = useState('')
 
-  // Nhóm 2: Thời gian và múi giờ
   const [timeZone, setTimeZone] = useState(DEFAULT_SETTINGS.timeZone)
   const [defaultDurationMinutes, setDefaultDurationMinutes] = useState(DEFAULT_SETTINGS.defaultDurationMinutes)
 
-  // Nhóm 3: Thông báo mặc định
   const [reminderRows, setReminderRows] = useState<ReminderFormRow[]>([])
 
-  // Nhóm 4: Quyền riêng tư và chia sẻ / mời khách
   const [privacy, setPrivacy] = useState<'private' | 'public'>('private')
   const [archived, setArchived] = useState(false)
   const [sharedWith, setSharedWith] = useState<CategoryMember[]>([])
@@ -88,16 +84,15 @@ export function CategoryModal({
   const [newGuestRole, setNewGuestRole] = useState<'viewer' | 'editor' | 'admin'>('viewer')
   const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
 
-  // Nhóm 5: Import/Export .ics
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importMessage, setImportMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Form State
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [generalError, setGeneralError] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -154,7 +149,6 @@ export function CategoryModal({
 
   const isEditing = Boolean(initialCategory)
 
-  // Xử lý thông báo mặc định
   const handleAddReminder = () => {
     if (reminderRows.length >= 10) return
     const newRow: ReminderFormRow = {
@@ -183,19 +177,19 @@ export function CategoryModal({
     )
   }
 
-  // Xử lý khách chia sẻ lịch
   const handleAddGuest = () => {
+    const error = validateGuestInput(
+      newGuestEmail,
+      sharedWith.map((g) => ({ email: g.email })),
+      undefined,
+      undefined,
+      false,
+    )
+    if (error) {
+      setGuestEmailError(error)
+      return
+    }
     const trimmed = newGuestEmail.trim().toLowerCase()
-    if (!trimmed) return
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(trimmed)) {
-      setGuestEmailError('Email không đúng định dạng')
-      return
-    }
-    if (sharedWith.some((g) => g.email === trimmed)) {
-      setGuestEmailError('Người dùng này đã có trong danh sách')
-      return
-    }
     setSharedWith((prev) => [...prev, { email: trimmed, role: newGuestRole }])
     setNewGuestEmail('')
     setGuestEmailError(null)
@@ -209,10 +203,28 @@ export function CategoryModal({
     setSharedWith((prev) => prev.map((g) => (g.email === email ? { ...g, role } : g)))
   }
 
-  // Xử lý Submit Form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setGeneralError(null)
+
+    let finalSharedWith = [...sharedWith]
+    if (newGuestEmail.trim()) {
+      const pendingGuestErr = validateGuestInput(
+        newGuestEmail,
+        sharedWith.map((g) => ({ email: g.email })),
+        undefined,
+        undefined,
+        false,
+      )
+      if (pendingGuestErr) {
+        setGuestEmailError(pendingGuestErr)
+        return
+      }
+      finalSharedWith = [...finalSharedWith, { email: newGuestEmail.trim().toLowerCase(), role: newGuestRole }]
+      setSharedWith(finalSharedWith)
+      setNewGuestEmail('')
+      setGuestEmailError(null)
+    }
 
     const convertedReminders: ReminderItem[] = reminderRows.map((r) => ({
       method: r.method,
@@ -228,7 +240,7 @@ export function CategoryModal({
       reminders: convertedReminders,
       privacy,
       archived,
-      sharedWith,
+      sharedWith: finalSharedWith,
     }
 
     const payload: CreateCategoryInput = {
@@ -236,7 +248,7 @@ export function CategoryModal({
       color,
       description,
       settings: settingsPayload,
-      sharedWith,
+      sharedWith: finalSharedWith,
     }
 
     const valErrors = validateCategoryForm(payload)
@@ -266,22 +278,21 @@ export function CategoryModal({
     }
   }
 
-  // Xóa lịch
-  const handleDeleteCalendar = async () => {
+  const handleDeleteCalendar = () => {
     if (!initialCategory) return
     if (initialCategory.isDefault) {
       setGeneralError('Không thể xóa lịch mặc định của hệ thống.')
       return
     }
+    setShowDeleteConfirm(true)
+  }
 
-    const confirmed = window.confirm(
-      `Bạn có chắc chắn muốn xóa vĩnh viễn lịch "${initialCategory.name}"? Các sự kiện thuộc lịch này sẽ được tách ra.`,
-    )
-    if (!confirmed) return
-
+  const handleConfirmDeleteCalendar = async () => {
+    if (!initialCategory) return
     try {
       setIsSubmitting(true)
       await calendarApi.deleteCategory(initialCategory.id)
+      setShowDeleteConfirm(false)
       onSaved()
       onClose()
     } catch {
@@ -291,7 +302,6 @@ export function CategoryModal({
     }
   }
 
-  // Xuất file iCalendar (.ics)
   const handleExportIcs = async () => {
     if (!initialCategory) return
     try {
@@ -306,7 +316,6 @@ export function CategoryModal({
     }
   }
 
-  // Nhập file iCalendar (.ics)
   const handleImportIcs = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !initialCategory) return
@@ -330,19 +339,19 @@ export function CategoryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
-      {/* Overlay */}
+      
       <div
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
 
-      {/* Modal Dialog Bố cục cuộn dọc 4 phần */}
+      
       <div
         aria-modal="true"
         className="relative z-10 flex max-h-[92vh] w-full max-w-2xl flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xl dark:border-white/10 dark:bg-[#021024]"
         role="dialog"
       >
-        {/* Header Modal */}
+        
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-white/10">
           <div className="flex items-center gap-3">
             <span
@@ -371,7 +380,7 @@ export function CategoryModal({
           </button>
         </div>
 
-        {/* Nội dung form cuộn dọc cả 4 phần */}
+        
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <div className="flex-1 space-y-7 overflow-y-auto px-6 py-5">
             {generalError && (
@@ -380,7 +389,7 @@ export function CategoryModal({
               </div>
             )}
 
-            {/* ==================== PHẦN 1: THÔNG TIN CHUNG ==================== */}
+            
             <section className="space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
                 <span className="grid size-5.5 place-items-center rounded-md bg-blue-50 text-xs font-bold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
@@ -391,7 +400,7 @@ export function CategoryModal({
                 </h3>
               </div>
 
-              {/* Tên lịch */}
+              
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-name">
                   Tên lịch <span className="text-rose-500">*</span>
@@ -423,7 +432,7 @@ export function CategoryModal({
                 )}
               </div>
 
-              {/* Bảng màu nhận diện */}
+              
               <div>
                 <div className="flex items-center justify-between">
                   <span className="block text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -462,7 +471,7 @@ export function CategoryModal({
                   })}
                 </div>
 
-                {/* Huy hiệu xem trước */}
+                
                 <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/80 p-2.5 dark:border-white/5 dark:bg-white/5">
                   <span className="text-xs text-slate-500 dark:text-slate-400">Xem trước hiển thị:</span>
                   <span
@@ -475,7 +484,7 @@ export function CategoryModal({
                 </div>
               </div>
 
-              {/* Mô tả lịch */}
+              
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-desc">
                   Mô tả / Ghi chú mục đích
@@ -492,7 +501,7 @@ export function CategoryModal({
               </div>
             </section>
 
-            {/* ==================== PHẦN 2: THỜI GIAN & MÚI GIỜ ==================== */}
+            
             <section className="space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
                 <span className="grid size-5.5 place-items-center rounded-md bg-blue-50 text-xs font-bold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
@@ -503,7 +512,7 @@ export function CategoryModal({
                 </h3>
               </div>
 
-              {/* Múi giờ */}
+              
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="time-zone">
                   Múi giờ của lịch
@@ -528,7 +537,7 @@ export function CategoryModal({
                 </p>
               </div>
 
-              {/* Thời lượng sự kiện mặc định */}
+              
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="default-duration">
                   Thời lượng sự kiện mặc định khi tạo mới
@@ -568,7 +577,7 @@ export function CategoryModal({
               </div>
             </section>
 
-            {/* ==================== PHẦN 3: THÔNG BÁO MẶC ĐỊNH ==================== */}
+            
             <section className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2 dark:border-white/10">
                 <div className="flex items-center gap-2">
@@ -604,7 +613,7 @@ export function CategoryModal({
                     >
                       <span className="text-xs font-bold text-slate-400 w-6">#{idx + 1}</span>
 
-                      {/* Kênh thông báo */}
+                      
                       <select
                         aria-label="Kênh thông báo"
                         className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/10 dark:text-white"
@@ -617,7 +626,7 @@ export function CategoryModal({
 
                       <span className="text-xs text-slate-500">trước</span>
 
-                      {/* Số lượng */}
+                      
                       <input
                         aria-label="Số lượng thời gian"
                         className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/10 dark:text-white"
@@ -628,7 +637,7 @@ export function CategoryModal({
                         value={row.quantity}
                       />
 
-                      {/* Đơn vị */}
+                      
                       <select
                         aria-label="Đơn vị thời gian"
                         className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/10 dark:text-white"
@@ -655,7 +664,7 @@ export function CategoryModal({
               )}
             </section>
 
-            {/* ==================== PHẦN 4: QUYỀN RIÊNG TƯ & QUẢN LÝ ==================== */}
+            
             <section className="space-y-4">
               <div className="flex items-center gap-2 border-b border-slate-100 pb-2 dark:border-white/10">
                 <span className="grid size-5.5 place-items-center rounded-md bg-blue-50 text-xs font-bold text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
@@ -666,7 +675,7 @@ export function CategoryModal({
                 </h3>
               </div>
 
-              {/* Chế độ hiển thị riêng tư / công khai */}
+              
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300" htmlFor="category-privacy">
                   Chế độ hiển thị lịch
@@ -714,7 +723,7 @@ export function CategoryModal({
                 </div>
               </div>
 
-              {/* Mời khách / Chia sẻ lịch với người khác */}
+              
               <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-white/10 dark:bg-white/5 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -727,14 +736,26 @@ export function CategoryModal({
                   </div>
                 </div>
 
-                {/* Ô nhập mời khách */}
+                
                 <div className="flex flex-wrap items-center gap-2">
                   <input
+                    aria-describedby={guestEmailError ? 'category-guest-error' : undefined}
+                    aria-invalid={Boolean(guestEmailError)}
                     aria-label="Email khách mời"
-                    className="flex-1 min-w-[200px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                    className={`flex-1 min-w-[200px] rounded-lg border bg-white px-3 py-1.5 text-xs text-slate-900 outline-hidden transition-all dark:bg-white/10 dark:text-white ${
+                      guestEmailError
+                        ? 'border-rose-500 focus:border-rose-500'
+                        : 'border-slate-200 focus:border-blue-600 dark:border-white/10'
+                    }`}
                     onChange={(e) => {
                       setNewGuestEmail(e.target.value)
                       if (guestEmailError) setGuestEmailError(null)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddGuest()
+                      }
                     }}
                     placeholder="Nhập email khách (ví dụ: colleague@hcmute.edu.vn)..."
                     type="email"
@@ -761,10 +782,12 @@ export function CategoryModal({
                   </button>
                 </div>
                 {guestEmailError && (
-                  <p className="text-xs font-semibold text-rose-500">{guestEmailError}</p>
+                  <p className="text-xs font-semibold text-rose-500" id="category-guest-error">
+                    {guestEmailError}
+                  </p>
                 )}
 
-                {/* Danh sách khách đã mời */}
+                
                 {sharedWith.length > 0 && (
                   <div className="space-y-1.5 pt-2 border-t border-slate-200/60 dark:border-white/5">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -810,7 +833,7 @@ export function CategoryModal({
                 )}
               </div>
 
-              {/* Nhập / Xuất file iCalendar (.ics) */}
+              
               {isEditing && (
                 <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 dark:border-white/10 dark:bg-white/5 space-y-2">
                   <h4 className="text-xs font-bold text-slate-800 dark:text-white">
@@ -855,7 +878,7 @@ export function CategoryModal({
                 </div>
               )}
 
-              {/* Quản lý lưu trữ & Xóa lịch */}
+              
               {isEditing && (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 dark:border-white/10 dark:bg-white/2">
                   <div className="flex items-center gap-2">
@@ -886,7 +909,7 @@ export function CategoryModal({
             </section>
           </div>
 
-          {/* Footer Modal cố định */}
+          
           <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 bg-slate-50/50 px-6 py-3.5 dark:border-white/10 dark:bg-white/5">
             <button
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-white/10 dark:bg-white/10 dark:text-slate-300 dark:hover:bg-white/15"
@@ -904,6 +927,51 @@ export function CategoryModal({
             </button>
           </div>
         </form>
+
+        {showDeleteConfirm && initialCategory && (
+          <div
+            aria-modal="true"
+            className="fixed inset-0 z-80 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+            role="dialog"
+          >
+            <div
+              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                  <Icon className="size-5" name="trash" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Xác nhận xóa lịch &quot;{initialCategory.name}&quot;?
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Hành động này sẽ xóa vĩnh viễn lịch này. Các sự kiện thuộc lịch này sẽ không bị xóa mà được tách thành sự kiện độc lập.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
+                <button
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+                  disabled={isSubmitting}
+                  onClick={() => setShowDeleteConfirm(false)}
+                  type="button"
+                >
+                  Hủy
+                </button>
+                <button
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition-colors disabled:opacity-50"
+                  disabled={isSubmitting}
+                  onClick={handleConfirmDeleteCalendar}
+                  type="button"
+                >
+                  {isSubmitting ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
