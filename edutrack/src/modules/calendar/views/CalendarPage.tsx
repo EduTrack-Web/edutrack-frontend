@@ -3,6 +3,11 @@ import { Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
 import type { CalendarEvent, RecurringUpdateMode } from '@/modules/calendar/models/calendar.types'
 import { isFirstOrLastDayOfSolarMonth } from '@/modules/calendar/models/lunarCalendar'
+import {
+  formatHolidayTooltip,
+  VIETNAM_HOLIDAY_BADGE_CLASSES,
+  VIETNAM_HOLIDAY_DOT_CLASS,
+} from '@/modules/calendar/models/vietnameseHolidays'
 import { useCalendarViewModel, type CalendarViewMode } from '@/modules/calendar/viewmodels/useCalendarViewModel'
 import { CalendarSidebar } from './components/CalendarSidebar'
 import { CalendarDateLabel } from './components/CalendarDateLabel'
@@ -547,6 +552,7 @@ export function CalendarPage() {
         <CalendarSidebar
           categories={vm.categories}
           currentDate={vm.currentDate}
+          isSavingPreferences={vm.isSavingPreferences}
           onDeleteCategory={(catId) => setCategoryToDelete(catId)}
           onOpenCreateCategory={vm.handleOpenCreateCategory}
           onOpenCreateEvent={() => vm.handleOpenCreateEvent()}
@@ -556,6 +562,8 @@ export function CalendarPage() {
           onShowAllCategories={vm.handleShowAllCategories}
           onShowOnlyCategory={vm.handleShowOnlyCategory}
           onToggleCategoryVisibility={vm.handleToggleCategoryVisibility}
+          onUpdatePreferences={vm.handleUpdateCalendarPreferences}
+          preferences={vm.calendarPreferences}
           selectedCategoryIds={vm.selectedCategoryIds}
         />
 
@@ -721,6 +729,16 @@ export function CalendarPage() {
                   <span className="text-xs text-slate-500 dark:text-slate-400">
                     ({selectedDayEvents.length} mục)
                   </span>
+                  {(vm.holidaysBySolarDate[selectedDayKey] ?? []).map((holiday) => (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                      key={holiday.id}
+                      title={formatHolidayTooltip(holiday)}
+                    >
+                      <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                      <span>{holiday.name}</span>
+                    </span>
+                  ))}
                 </div>
                 <button
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700"
@@ -1018,6 +1036,19 @@ export function CalendarPage() {
                             variant="week"
                           />
                         </span>
+                        {(vm.holidaysBySolarDate[wd.dateKey] ?? []).length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {(vm.holidaysBySolarDate[wd.dateKey] ?? []).slice(0, 2).map((holiday) => (
+                              <div
+                                className={`truncate rounded border px-1 py-0.5 text-[10px] font-semibold ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                                key={holiday.id}
+                                title={formatHolidayTooltip(holiday)}
+                              >
+                                {holiday.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -1392,6 +1423,16 @@ export function CalendarPage() {
                       </div>
 
                       <div className="flex-1 space-y-1 overflow-hidden">
+                        {(vm.holidaysBySolarDate[dateKey] ?? []).slice(0, 2).map((holiday) => (
+                          <div
+                            className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[9px] font-bold sm:px-1.5 sm:text-[10px] ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                            key={holiday.id}
+                            title={formatHolidayTooltip(holiday)}
+                          >
+                            <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                            <span className="truncate">{holiday.name}</span>
+                          </div>
+                        ))}
                         {dayEvents.slice(0, 3).map((event) => {
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
                           const isTask = event.entryType === 'task'
@@ -1493,30 +1534,23 @@ export function CalendarPage() {
                         const hasEvents = dayItems.length > 0
                         const dayTasks = dayItems.filter((item) => item.entryType === 'task')
                         const allTasksDone = dayTasks.length > 0 && dayTasks.every((item) => item.isCompleted)
-                        const hasPendingTask = dayTasks.some((item) => !item.isCompleted)
                         const isCurrentDay =
                           today.getDate() === dNum && today.getMonth() === mIdx && today.getFullYear() === currentYear
+                        const dayHolidays = vm.holidaysBySolarDate[key] ?? []
+                        const taskTooltip = dayTasks.length > 0
+                          ? allTasksDone
+                            ? 'Đã hoàn thành tất cả nhiệm vụ'
+                            : 'Còn nhiệm vụ chưa hoàn thành'
+                          : ''
+                        const holidayTooltip = dayHolidays.map(formatHolidayTooltip).join(' • ')
+                        const yearCellTooltip = [holidayTooltip, taskTooltip].filter(Boolean).join('\n') || undefined
 
                         return (
                         <div
                           className="relative mx-auto inline-flex min-h-5 items-center justify-center font-medium"
                           key={dNum}
-                          title={
-                            dayTasks.length > 0
-                              ? allTasksDone
-                                ? 'Đã hoàn thành tất cả nhiệm vụ'
-                                : 'Còn nhiệm vụ chưa hoàn thành'
-                              : undefined
-                          }
+                          title={yearCellTooltip}
                         >
-                          {allTasksDone && (
-                            <span className="absolute -right-0.5 -top-0.5 grid size-2.5 place-items-center rounded-full bg-emerald-500 text-white">
-                              <Icon className="size-2" name="check" />
-                            </span>
-                          )}
-                          {hasPendingTask && (
-                            <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500" />
-                          )}
                           <CalendarDateLabel
                             hasEvents={hasEvents}
                             isToday={isCurrentDay}
@@ -2001,7 +2035,7 @@ export function CalendarPage() {
         isSaving={vm.isSavingPreferences}
         onClose={() => setIsCalendarSettingsOpen(false)}
         onUpdatePreferences={vm.handleUpdateCalendarPreferences}
-        showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+        preferences={vm.calendarPreferences}
       />
 
     </div>
