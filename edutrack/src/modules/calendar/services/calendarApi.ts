@@ -135,10 +135,19 @@ export const calendarApi = {
     })
   },
 
-  toggleTaskComplete: (eventId: string, isCompleted: boolean) =>
+  toggleTaskComplete: (
+    eventId: string,
+    isCompleted: boolean,
+    mode?: 'this' | 'following' | 'all',
+    targetDate?: string,
+  ) =>
     request<ApiSuccess<{ event: CalendarEvent }>>(`/calendar/events/${eventId}/completion`, {
       method: 'PATCH',
-      body: JSON.stringify({ isCompleted }),
+      body: JSON.stringify({
+        isCompleted,
+        ...(mode ? { mode } : {}),
+        ...(targetDate ? { targetDate } : {}),
+      }),
     }),
 
   respondInvite: (eventId: string, status: 'accepted' | 'declined') =>

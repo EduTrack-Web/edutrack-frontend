@@ -335,22 +335,32 @@ export function useCalendarViewModel() {
     return eventId
   }
 
-  const handleToggleComplete = async (eventId: string, currentStatus: boolean) => {
+  const handleToggleComplete = async (
+    eventId: string,
+    currentStatus: boolean,
+    mode?: 'this' | 'following' | 'all',
+    targetDate?: string,
+  ) => {
     const baseId = resolveBaseEventId(eventId)
     const task = events.find((event) => event.id === baseId)
     if (!task) return
-    if (task.recurrence && task.recurrence.frequency !== 'none') {
+    if (!mode && task.recurrence && task.recurrence.frequency !== 'none') {
       if (!await confirmRecurring(currentStatus ? 'reopen' : 'complete', task.entryType, task.title)) return
     }
     try {
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === baseId
-            ? { ...e, isCompleted: !currentStatus, completedAt: !currentStatus ? new Date().toISOString() : null }
-            : e,
-        ),
-      )
-      await calendarApi.toggleTaskComplete(baseId, !currentStatus)
+      if (mode && mode !== 'all') {
+        await calendarApi.toggleTaskComplete(baseId, !currentStatus, mode, targetDate)
+        await fetchData(true)
+      } else {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === baseId
+              ? { ...e, isCompleted: !currentStatus, completedAt: !currentStatus ? new Date().toISOString() : null }
+              : e,
+          ),
+        )
+        await calendarApi.toggleTaskComplete(baseId, !currentStatus)
+      }
     } catch (err) {
       console.error('Lỗi khi toggle task:', err)
       fetchData(true)

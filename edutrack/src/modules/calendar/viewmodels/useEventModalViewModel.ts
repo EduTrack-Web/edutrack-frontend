@@ -233,6 +233,8 @@ export function useEventModalViewModel({
   const [showPriorityConfirmDialog, setShowPriorityConfirmDialog] = useState(false)
   const [pendingPriority, setPendingPriority] = useState<EventPriority | null>(null)
   const [priority, setPriority] = useState<EventPriority>('medium')
+  const [showEditScopeModal, setShowEditScopeModal] = useState(false)
+  const [pendingSavePayload, setPendingSavePayload] = useState<CreateEventInput | null>(null)
   const [submissionUrl, setSubmissionUrl] = useState('')
   const [checklist, setChecklist] = useState<SubtaskItem[]>([])
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
@@ -284,7 +286,7 @@ export function useEventModalViewModel({
       const baseEventId =
         (initialEvent as unknown as { _baseEventId?: string })?._baseEventId || initialEvent?.id
       const currentInitKey = initialEvent
-        ? `edit:${baseEventId}:${initialEvent.updatedAt || ''}`
+        ? `edit:${baseEventId}:${initialDate ? initialDate.toISOString() : ''}:${initialEvent.updatedAt || ''}`
         : `new:${initialDate ? initialDate.toISOString() : ''}`
 
       if (lastInitKeyRef.current === currentInitKey) {
@@ -295,8 +297,15 @@ export function useEventModalViewModel({
       if (initialEvent) {
         const initialCat = categories.find((c) => c.id === initialEvent.calendarId)
         const zone = initialEvent.timeZone || initialCat?.settings?.timeZone || 'Asia/Ho_Chi_Minh'
-        const start = formatInstantToWallTime(initialEvent.startDate, zone)
-        const end = formatInstantToWallTime(initialEvent.endDate, zone)
+        const baseStartMs = new Date(initialEvent.startDate).getTime()
+        const baseEndMs = new Date(initialEvent.endDate).getTime()
+        const durationMs = Math.max(0, baseEndMs - baseStartMs)
+        const effectiveStartIso = initialDate ? initialDate.toISOString() : initialEvent.startDate
+        const effectiveEndIso = initialDate
+          ? new Date(initialDate.getTime() + durationMs).toISOString()
+          : initialEvent.endDate
+        const start = formatInstantToWallTime(effectiveStartIso, zone)
+        const end = formatInstantToWallTime(effectiveEndIso, zone)
 
         setEntryType(initialEvent.entryType)
         setTitle(initialEvent.title)
@@ -465,6 +474,8 @@ export function useEventModalViewModel({
       setIsColorPickerOpen(false)
       setIsCustomRecurrenceOpen(false)
       setShowDeleteConfirm(false)
+      setShowEditScopeModal(false)
+      setPendingSavePayload(null)
       setIsDeleting(false)
       setDeleteRecurringMode('this')
     }, 0)
@@ -485,28 +496,23 @@ export function useEventModalViewModel({
   }
 
   const handleTabChange = (nextType: EntryType) => {
+    if (initialEvent) return
     setEntryType(nextType)
     clearError('entryType')
     if (nextType === 'task') {
-      if (initialEvent) {
-        setHasDeadline(Boolean(initialEvent.deadline))
-      } else {
-        setHasDeadline(false)
-      }
+      setHasDeadline(false)
       setCalendarId('')
-      if (!initialEvent) {
-        const config = PRIORITY_CONFIG[priority]
-        if (config) {
-          setColor(config.color)
-          setReminders(
-            config.defaultReminders.map((r, idx) => ({
-              id: `rem-p-${idx}-${Date.now()}`,
-              method: r.method,
-              quantity: r.quantity,
-              unit: r.unit,
-            })),
-          )
-        }
+      const config = PRIORITY_CONFIG[priority]
+      if (config) {
+        setColor(config.color)
+        setReminders(
+          config.defaultReminders.map((r, idx) => ({
+            id: `rem-p-${idx}-${Date.now()}`,
+            method: r.method,
+            quantity: r.quantity,
+            unit: r.unit,
+          })),
+        )
       }
     } else {
       if (!calendarId && categories.length > 0) {
@@ -1039,7 +1045,7 @@ export function useEventModalViewModel({
         return
       }
       currentChecklist.push({
-        id: `step-${Date.now()}`,
+        id: `step-${crypto.randomUUID()}`,
         title: newSubtaskTitle.trim(),
         isCompleted: false,
       })
@@ -1048,8 +1054,10 @@ export function useEventModalViewModel({
       clearError('checklist')
     }
 
+    const normalizedTitle = title.trim() || 'Không có tiêu đề'
+
     const payload: CreateEventInput = {
-      title,
+      title: normalizedTitle,
       entryType,
       priority,
       startDate: startIso,
@@ -1084,24 +1092,44 @@ export function useEventModalViewModel({
       return
     }
 
-    if (isRecurring || recurrencePayload.frequency !== 'none') {
-      const action = !isRecurring ? 'create' : recurrencePayload.frequency === 'none' ? 'stop' : 'save'
-      if (!await confirmRecurring(action, entryType, title)) return
+    if (initialEvent && isRecurring) {
+      if (recurrencePayload.frequency === 'none') {
+        if (!await confirmRecurring('stop', entryType, title)) return
+      } else {
+        setPendingSavePayload(payload)
+        setShowEditScopeModal(true)
+        return
+      }
     }
 
+    await executeSave(payload)
+  }
+
+  const executeSave = async (
+    payload: CreateEventInput,
+    mode?: 'this' | 'following' | 'all',
+  ) => {
     try {
       setIsSubmitting(true)
       if (initialEvent) {
         const realEventId =
           (initialEvent as unknown as { _baseEventId?: string })._baseEventId || initialEvent.id
-        await calendarApi.updateEvent(realEventId, { ...payload, isCompleted: entryType === 'task' ? isCompleted : false })
+        const targetDate = initialDate?.toISOString() ?? initialEvent.startDate
+        await calendarApi.updateEvent(realEventId, {
+          ...payload,
+          isCompleted: entryType === 'task' ? isCompleted : false,
+          ...(mode ? { mode, targetDate } : {}),
+        })
       } else {
         await calendarApi.createEvent(payload)
       }
+      setShowEditScopeModal(false)
+      setPendingSavePayload(null)
       onSaved()
       window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
       onClose()
     } catch (err: unknown) {
+      setShowEditScopeModal(false)
       const maybeErr = err as { fieldErrors?: Record<string, string>; message?: string }
       if (maybeErr.fieldErrors) {
         setErrors(maybeErr.fieldErrors)
@@ -1113,7 +1141,17 @@ export function useEventModalViewModel({
     }
   }
 
-  const handleDeleteEvent = async () => {
+  const handleConfirmEditScope = async (mode: 'this' | 'following' | 'all') => {
+    if (!pendingSavePayload) return
+    await executeSave(pendingSavePayload, mode)
+  }
+
+  const handleCancelEditScope = () => {
+    setShowEditScopeModal(false)
+    setPendingSavePayload(null)
+  }
+
+  const handleDeleteEvent = async (mode?: 'this' | 'following' | 'all') => {
     if (!initialEvent) return
     try {
       setIsDeleting(true)
@@ -1124,7 +1162,7 @@ export function useEventModalViewModel({
       const targetDate = initialDate?.toISOString() ?? initialEvent.startDate
 
       if (isRecurring) {
-        await calendarApi.deleteEvent(realEventId, deleteRecurringMode, targetDate)
+        await calendarApi.deleteEvent(realEventId, mode ?? deleteRecurringMode, targetDate)
       } else {
         await calendarApi.deleteEvent(realEventId, 'all')
       }
@@ -1261,6 +1299,9 @@ export function useEventModalViewModel({
     showDeleteConfirm,
     setShowDeleteConfirm,
     handleDeleteEvent,
+    showEditScopeModal,
+    handleConfirmEditScope,
+    handleCancelEditScope,
     showLeaveConfirm,
     setShowLeaveConfirm,
     guestToRemove,
