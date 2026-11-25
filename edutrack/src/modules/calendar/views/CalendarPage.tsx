@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
-import type { CalendarEvent, RecurringUpdateMode } from '@/modules/calendar/models/calendar.types'
+import type { CalendarEvent } from '@/modules/calendar/models/calendar.types'
 import { isFirstOrLastDayOfSolarMonth } from '@/modules/calendar/models/lunarCalendar'
+import {
+  formatHolidayTooltip,
+  VIETNAM_HOLIDAY_BADGE_CLASSES,
+  VIETNAM_HOLIDAY_DOT_CLASS,
+} from '@/modules/calendar/models/vietnameseHolidays'
 import { useCalendarViewModel, type CalendarViewMode } from '@/modules/calendar/viewmodels/useCalendarViewModel'
 import { CalendarSidebar } from './components/CalendarSidebar'
 import { CalendarDateLabel } from './components/CalendarDateLabel'
@@ -11,6 +16,14 @@ import { CategoryModal } from './components/CategoryModal'
 import { EventModal } from './components/EventModal'
 import { TaskTickButton } from './components/TaskTickButton'
 import { RecurringConfirmationDialog } from './components/RecurringConfirmationDialog'
+import { RecurrenceScopeModal, type RecurrenceScopeMode } from './components/RecurrenceScopeModal'
+import {
+  buildEventsByDateMap,
+  buildTimedSegmentsForDate,
+  formatDateKey,
+  layoutDayTimedSegments,
+  unifyMultiDaySegmentWidths,
+} from '../utils/calendarLayout'
 
 const GOOGLE_WEEKDAYS = ['CN', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']
 const GOOGLE_SHORT_WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
@@ -28,6 +41,13 @@ const VIEW_OPTIONS: { mode: CalendarViewMode; label: string }[] = [
   { mode: 'year', label: 'Năm' },
   { mode: 'list', label: 'Danh sách' },
 ]
+
+function formatMinutesToHHMM(totalMinutes: number): string {
+  const wrapped = ((totalMinutes % 1440) + 1440) % 1440
+  const hh = Math.floor(wrapped / 60)
+  const mm = wrapped % 60
+  return `${hh < 10 ? `0${hh}` : hh}:${mm < 10 ? `0${mm}` : mm}`
+}
 
 function formatEventTime(startStr: string, endStr: string, isAllDay: boolean): string {
   try {
@@ -59,91 +79,6 @@ function getTimeZoneOffsetLabel(tz?: string): string {
   }
 }
 
-interface RecurringScopeOption {
-  value: RecurringUpdateMode
-  label: string
-  description: string
-}
-
-function getScopeOptions(
-  event: CalendarEvent,
-  isSameDay: boolean,
-  isResize: boolean,
-  targetDate: Date,
-): RecurringScopeOption[] {
-  const freq = event.recurrence?.frequency || 'daily'
-  const isMultiDayWeekly =
-    (freq === 'weekly' || freq === 'custom' || freq === 'weekdays') &&
-    ((event.recurrence?.daysOfWeek && event.recurrence.daysOfWeek.length > 1) || freq === 'weekdays')
-
-  const formattedDate = targetDate.toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-
-  const weekdayNames = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy']
-  const weekdayName = weekdayNames[targetDate.getDay()]
-
-  if (isSameDay || isResize) {
-    if (isMultiDayWeekly) {
-      return [
-        {
-          value: 'this',
-          label: 'Chỉ lần này',
-          description: `Chỉ cập nhật cho lần diễn ra vào ${weekdayName}, ngày ${formattedDate}`,
-        },
-        {
-          value: 'following',
-          label: 'Lần này và các lần tiếp theo',
-          description: `Cập nhật từ ngày ${formattedDate} trở đi trong chuỗi lặp`,
-        },
-        {
-          value: 'all_this_weekday',
-          label: `Tất cả các lần vào ${weekdayName}`,
-          description: `Cập nhật toàn bộ các lần xuất hiện vào ${weekdayName} trong chuỗi lặp`,
-        },
-        {
-          value: 'all',
-          label: 'Tất cả các lần trong chuỗi',
-          description: 'Cập nhật cho toàn bộ các lần xuất hiện trong chuỗi lặp',
-        },
-      ]
-    }
-
-    return [
-      {
-        value: 'this',
-        label: 'Chỉ lần này',
-        description: `Chỉ cập nhật cho lần diễn ra vào ngày ${formattedDate}`,
-      },
-      {
-        value: 'following',
-        label: 'Lần này và các lần tiếp theo',
-        description: `Cập nhật từ ngày ${formattedDate} trở đi trong chuỗi lặp`,
-      },
-      {
-        value: 'all',
-        label: 'Tất cả các lần trong chuỗi',
-        description: 'Cập nhật cho toàn bộ các lần xuất hiện trong chuỗi lặp',
-      },
-    ]
-  }
-
-  return [
-    {
-      value: 'this',
-      label: 'Chỉ lần này',
-      description: `Chỉ dời lần diễn ra vào ngày ${formattedDate} sang ngày mới`,
-    },
-    {
-      value: 'following',
-      label: 'Lần này và các lần tiếp theo',
-      description: `Bắt đầu lịch trình lặp mới từ ngày đã chọn trở đi`,
-    },
-  ]
-}
-
 function formatDayHeader(dateStr: string): string {
   try {
     const d = new Date(dateStr)
@@ -160,11 +95,19 @@ export function CalendarPage() {
   const [hoveredDateCell, setHoveredDateCell] = useState<string | null>(null)
   const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null)
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null)
+  const [dragPreview, setDragPreview] = useState<{
+    columnKey: string
+    startMin: number
+    endMin: number
+    label: string
+  } | null>(null)
+  const dragGrabOffsetYRef = useRef(0)
   const isSuppressClickRef = useRef(false)
 
   const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null)
-  const [deleteRecurringMode, setDeleteRecurringMode] = useState<'this' | 'following' | 'all'>('this')
   const [isDeletingEvent, setIsDeletingEvent] = useState(false)
+  const [pendingToggleTask, setPendingToggleTask] = useState<CalendarEvent | null>(null)
+  const [isTogglingTask, setIsTogglingTask] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
 
   const [pendingRecurringAction, setPendingRecurringAction] = useState<{
@@ -176,10 +119,10 @@ export function CalendarPage() {
     isResize: boolean
     targetDate: string
   } | null>(null)
-  const [selectedRecurringMode, setSelectedRecurringMode] = useState<RecurringUpdateMode>('this')
 
   const [resizingEvent, setResizingEvent] = useState<{
     event: CalendarEvent
+    segmentId: string
     initialY: number
     initialHeight: number
     currentHeight: number
@@ -223,7 +166,6 @@ export function CalendarPage() {
       )
 
       if (isRecurring) {
-        setSelectedRecurringMode('this')
         setPendingRecurringAction({
           event,
           newStartDate: event.startDate,
@@ -246,7 +188,12 @@ export function CalendarPage() {
     }
   }, [resizingEvent, vm])
 
-  const handleResizeStart = (e: React.PointerEvent, event: CalendarEvent) => {
+  const handleResizeStart = (
+    e: React.PointerEvent,
+    event: CalendarEvent,
+    segmentId: string,
+    segmentHeight?: number,
+  ) => {
     e.stopPropagation()
     e.preventDefault()
     isSuppressClickRef.current = true
@@ -254,17 +201,30 @@ export function CalendarPage() {
     const endD = new Date(event.endDate)
     const rawDuration = (endD.getTime() - startD.getTime()) / 60000
     const durationMin = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 30
-    const initialH = Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
+    const initialH = segmentHeight ?? Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
 
     setResizingEvent({
       event,
+      segmentId,
       initialY: e.clientY,
       initialHeight: initialH,
       currentHeight: initialH,
     })
   }
 
-  const handleConfirmRecurringMove = async () => {
+  const handleRequestToggleTask = (event: CalendarEvent) => {
+    const isRecurring = Boolean(
+      (event.recurrence && event.recurrence.frequency !== 'none') ||
+      (event as unknown as { _isOccurrence?: boolean })?._isOccurrence,
+    )
+    if (isRecurring) {
+      setPendingToggleTask(event)
+      return
+    }
+    void vm.handleToggleComplete(event.id, event.isCompleted)
+  }
+
+  const handleConfirmRecurringMove = async (mode: RecurrenceScopeMode) => {
     if (!pendingRecurringAction) return
     const action = pendingRecurringAction
     setPendingRecurringAction(null)
@@ -273,7 +233,7 @@ export function CalendarPage() {
       action.newStartDate,
       action.newEndDate,
       action.isAllDay,
-      selectedRecurringMode,
+      mode,
       action.targetDate,
     )
   }
@@ -281,6 +241,8 @@ export function CalendarPage() {
   const handleDragStart = (e: React.DragEvent, event: CalendarEvent) => {
     e.stopPropagation()
     isSuppressClickRef.current = true
+    const rect = e.currentTarget.getBoundingClientRect()
+    dragGrabOffsetYRef.current = Math.max(0, Math.min(rect.height, e.clientY - rect.top))
     setDraggedEvent(event)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', event.id)
@@ -289,15 +251,46 @@ export function CalendarPage() {
   const handleDragEnd = () => {
     setDraggedEvent(null)
     setDragOverTarget(null)
+    setDragPreview(null)
+    dragGrabOffsetYRef.current = 0
     window.setTimeout(() => {
       isSuppressClickRef.current = false
     }, 350)
+  }
+
+  const getSnappedMinutesFromColumn = (columnEl: HTMLElement, clientY: number): number => {
+    const rect = columnEl.getBoundingClientRect()
+    const rawTopPx = Math.max(0, Math.min(24 * HOUR_HEIGHT - 12, clientY - rect.top - dragGrabOffsetYRef.current))
+    const quarterIndex = Math.round(rawTopPx / (HOUR_HEIGHT / 4))
+    return Math.max(0, Math.min(24 * 60 - 15, quarterIndex * 15))
+  }
+
+  const handleTimedColumnDragOver = (e: React.DragEvent<HTMLDivElement>, columnKey: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+
+    if (!draggedEvent) return
+    const startMin = getSnappedMinutesFromColumn(e.currentTarget, e.clientY)
+    const rawDurationMin = Math.round(
+      (new Date(draggedEvent.endDate).getTime() - new Date(draggedEvent.startDate).getTime()) / 60000,
+    )
+    const durationMin = draggedEvent.isAllDay ? 60 : Math.max(15, Number.isFinite(rawDurationMin) ? rawDurationMin : 30)
+    const endMin = startMin + durationMin
+    const label = `${formatMinutesToHHMM(startMin)} – ${formatMinutesToHHMM(endMin)}`
+
+    setDragPreview((prev) => {
+      if (prev && prev.columnKey === columnKey && prev.startMin === startMin && prev.endMin === endMin) {
+        return prev
+      }
+      return { columnKey, startMin, endMin, label }
+    })
   }
 
   const handleDropOnMonthDay = async (e: React.DragEvent, targetDate: Date) => {
     e.preventDefault()
     e.stopPropagation()
     setDragOverTarget(null)
+    setDragPreview(null)
     if (!draggedEvent) return
 
     isSuppressClickRef.current = true
@@ -338,7 +331,6 @@ export function CalendarPage() {
       origStart.getDate() === newStart.getDate()
 
     if (isRecurring) {
-      setSelectedRecurringMode('this')
       setPendingRecurringAction({
         event: draggedEvent,
         newStartDate: newStart.toISOString(),
@@ -356,10 +348,11 @@ export function CalendarPage() {
     }
   }
 
-  const handleDropOnTimedSlot = async (e: React.DragEvent, targetDate: Date, hour: number) => {
+  const handleDropOnTimedColumn = async (e: React.DragEvent<HTMLDivElement>, targetDate: Date) => {
     e.preventDefault()
     e.stopPropagation()
     setDragOverTarget(null)
+    setDragPreview(null)
     if (!draggedEvent) return
 
     isSuppressClickRef.current = true
@@ -369,12 +362,12 @@ export function CalendarPage() {
 
     const origStart = new Date(draggedEvent.startDate)
     const origEnd = new Date(draggedEvent.endDate)
-    const durationMs = Math.max(0, origEnd.getTime() - origStart.getTime())
+    const durationMs = draggedEvent.isAllDay ? 60 * 60000 : Math.max(0, origEnd.getTime() - origStart.getTime())
 
-    const rect = e.currentTarget.getBoundingClientRect()
-    const relY = Math.max(0, Math.min(47, e.clientY - rect.top))
-    const quarter = Math.min(3, Math.max(0, Math.floor((relY / 48) * 4)))
-    const targetMinute = quarter * 15
+    const snappedStartMin = getSnappedMinutesFromColumn(e.currentTarget, e.clientY)
+    const hour = Math.floor(snappedStartMin / 60)
+    const targetMinute = snappedStartMin % 60
+    dragGrabOffsetYRef.current = 0
 
     const newStart = new Date(
       targetDate.getFullYear(),
@@ -397,7 +390,6 @@ export function CalendarPage() {
       origStart.getDate() === newStart.getDate()
 
     if (isRecurring) {
-      setSelectedRecurringMode('this')
       setPendingRecurringAction({
         event: draggedEvent,
         newStartDate: newStart.toISOString(),
@@ -419,6 +411,7 @@ export function CalendarPage() {
     e.preventDefault()
     e.stopPropagation()
     setDragOverTarget(null)
+    setDragPreview(null)
     if (!draggedEvent) return
 
     isSuppressClickRef.current = true
@@ -444,7 +437,6 @@ export function CalendarPage() {
       origStart.getDate() === newStart.getDate()
 
     if (isRecurring) {
-      setSelectedRecurringMode('this')
       setPendingRecurringAction({
         event: draggedEvent,
         newStartDate: newStart.toISOString(),
@@ -488,18 +480,10 @@ export function CalendarPage() {
     }
   }, [vm.viewMode])
 
-  const eventsByDate: Record<string, CalendarEvent[]> = {}
-  for (const event of vm.events) {
-    if (event.calendarId && !vm.selectedCategoryIds.includes(event.calendarId)) {
-      continue
-    }
-    const start = new Date(event.startDate)
-    const month = String(start.getMonth() + 1).padStart(2, '0')
-    const day = String(start.getDate()).padStart(2, '0')
-    const dateKey = [start.getFullYear(), month, day].join('-')
-    if (!eventsByDate[dateKey]) eventsByDate[dateKey] = []
-    eventsByDate[dateKey]?.push(event)
-  }
+  const visibleEvents = vm.events.filter(
+    (event) => !event.calendarId || vm.selectedCategoryIds.includes(event.calendarId),
+  )
+  const eventsByDate = buildEventsByDateMap(visibleEvents)
 
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1)
   const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0)
@@ -527,7 +511,42 @@ export function CalendarPage() {
   const selectedDayKey = `${vm.currentDate.getFullYear()}-${vm.currentDate.getMonth() + 1 < 10 ? `0${vm.currentDate.getMonth() + 1}` : vm.currentDate.getMonth() + 1}-${vm.currentDate.getDate() < 10 ? `0${vm.currentDate.getDate()}` : vm.currentDate.getDate()}`
   const selectedDayEvents = eventsByDate[selectedDayKey] ?? []
   const selectedDayAllDayEvents = selectedDayEvents.filter((e) => e.isAllDay)
-  const selectedDayTimedEvents = selectedDayEvents.filter((e) => !e.isAllDay)
+  const selectedDayTimedSegments = (() => {
+    const dayDateKeys = new Set<string>([selectedDayKey])
+    for (const ev of selectedDayEvents) {
+      if (ev.isAllDay) continue
+      const startD = new Date(ev.startDate)
+      const endD = new Date(ev.endDate)
+      const cursor = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate())
+      const endDay = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate())
+      let guard = 0
+      while (cursor <= endDay && guard < 31) {
+        dayDateKeys.add(formatDateKey(cursor))
+        cursor.setDate(cursor.getDate() + 1)
+        guard++
+      }
+    }
+    const rawByDate: Record<string, ReturnType<typeof layoutDayTimedSegments>> = {}
+    for (const key of dayDateKeys) {
+      const [y, m, d] = key.split('-').map(Number)
+      if (y && m && d) {
+        rawByDate[key] = layoutDayTimedSegments(
+          buildTimedSegmentsForDate(eventsByDate[key] ?? [], new Date(y, m - 1, d)),
+        )
+      }
+    }
+    return unifyMultiDaySegmentWidths(rawByDate)[selectedDayKey] ?? []
+  })()
+
+  const weekTimedSegmentsByDate = (() => {
+    const rawByDate: Record<string, ReturnType<typeof layoutDayTimedSegments>> = {}
+    for (const wd of weekDays) {
+      rawByDate[wd.dateKey] = layoutDayTimedSegments(
+        buildTimedSegmentsForDate(eventsByDate[wd.dateKey] ?? [], wd.date),
+      )
+    }
+    return unifyMultiDaySegmentWidths(rawByDate)
+  })()
 
   const isSelectedDateToday =
     today.getDate() === vm.currentDate.getDate() &&
@@ -547,6 +566,7 @@ export function CalendarPage() {
         <CalendarSidebar
           categories={vm.categories}
           currentDate={vm.currentDate}
+          isSavingPreferences={vm.isSavingPreferences}
           onDeleteCategory={(catId) => setCategoryToDelete(catId)}
           onOpenCreateCategory={vm.handleOpenCreateCategory}
           onOpenCreateEvent={() => vm.handleOpenCreateEvent()}
@@ -556,6 +576,8 @@ export function CalendarPage() {
           onShowAllCategories={vm.handleShowAllCategories}
           onShowOnlyCategory={vm.handleShowOnlyCategory}
           onToggleCategoryVisibility={vm.handleToggleCategoryVisibility}
+          onUpdatePreferences={vm.handleUpdateCalendarPreferences}
+          preferences={vm.calendarPreferences}
           selectedCategoryIds={vm.selectedCategoryIds}
         />
 
@@ -721,6 +743,16 @@ export function CalendarPage() {
                   <span className="text-xs text-slate-500 dark:text-slate-400">
                     ({selectedDayEvents.length} mục)
                   </span>
+                  {(vm.holidaysBySolarDate[selectedDayKey] ?? []).map((holiday) => (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                      key={holiday.id}
+                      title={formatHolidayTooltip(holiday)}
+                    >
+                      <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                      <span>{holiday.name}</span>
+                    </span>
+                  ))}
                 </div>
                 <button
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700"
@@ -780,7 +812,7 @@ export function CalendarPage() {
                           {isTaskItem && (
                             <TaskTickButton
                               isCompleted={event.isCompleted}
-                              onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                              onToggle={() => handleRequestToggleTask(event)}
                               size="sm"
                             />
                           )}
@@ -818,47 +850,49 @@ export function CalendarPage() {
                 </div>
 
                 
-                <div className="relative flex-1">
-                  
-                  {HOURS_24.map((h) => {
-                    const slotKey = `day-slot-${h.hour}`
-                    const isOver = dragOverTarget === slotKey
-                    return (
-                      <div
-                        className={`relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5 ${
-                          isOver ? 'bg-blue-100/70 border-blue-400 border-dashed dark:bg-blue-900/40' : ''
-                        }`}
-                        key={h.hour}
-                        onClick={() => {
-                          const clickD = new Date(
-                            vm.currentDate.getFullYear(),
-                            vm.currentDate.getMonth(),
-                            vm.currentDate.getDate(),
-                            h.hour,
-                            0,
-                            0,
-                          )
-                          vm.handleOpenCreateEvent(clickD)
-                        }}
-                        onDragLeave={() => {
-                          if (dragOverTarget === slotKey) setDragOverTarget(null)
-                        }}
-                        onDragOver={(e) => {
-                          e.preventDefault()
-                          e.dataTransfer.dropEffect = 'move'
-                          setDragOverTarget(slotKey)
-                        }}
-                        onDrop={(e) => handleDropOnTimedSlot(e, vm.currentDate, h.hour)}
-                        title={`Thêm lịch trình lúc ${h.label}`}
-                      >
-                        {isOver && draggedEvent && (
-                          <div className="pointer-events-none absolute inset-x-2 top-1 z-20 flex h-6 items-center rounded-lg border border-blue-500 bg-blue-600/30 px-2 text-[10px] font-bold text-blue-900 dark:text-blue-200 truncate shadow-xs">
-                            Di chuyển đến {h.label}: {draggedEvent.title}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                <div
+                  className="relative flex-1"
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                      setDragPreview((prev) => (prev?.columnKey === 'day-column' ? null : prev))
+                    }
+                  }}
+                  onDragOver={(e) => handleTimedColumnDragOver(e, 'day-column')}
+                  onDrop={(e) => handleDropOnTimedColumn(e, vm.currentDate)}
+                >
+                  {HOURS_24.map((h) => (
+                    <div
+                      className="relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5"
+                      key={h.hour}
+                      onClick={() => {
+                        const clickD = new Date(
+                          vm.currentDate.getFullYear(),
+                          vm.currentDate.getMonth(),
+                          vm.currentDate.getDate(),
+                          h.hour,
+                          0,
+                          0,
+                        )
+                        vm.handleOpenCreateEvent(clickD)
+                      }}
+                      title={`Thêm lịch trình lúc ${h.label}`}
+                    />
+                  ))}
+
+                  {dragPreview?.columnKey === 'day-column' && draggedEvent && (
+                    <div
+                      className="pointer-events-none absolute inset-x-2 z-30 flex items-center gap-1.5 rounded-xl border-2 border-dashed border-blue-500 bg-blue-600/20 px-2.5 text-[11px] font-bold text-blue-950 dark:text-blue-100 shadow-sm backdrop-blur-2xs"
+                      style={{
+                        top: `${(dragPreview.startMin / 60) * HOUR_HEIGHT}px`,
+                        height: `${Math.max(24, ((dragPreview.endMin - dragPreview.startMin) / 60) * HOUR_HEIGHT)}px`,
+                      }}
+                    >
+                      <span className="shrink-0 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                        {dragPreview.label}
+                      </span>
+                      <span className="truncate">{draggedEvent.title}</span>
+                    </div>
+                  )}
 
                   
                   {isSelectedDateToday && (
@@ -872,23 +906,27 @@ export function CalendarPage() {
                   )}
 
                   
-                  {selectedDayTimedEvents.map((event) => {
-                    const startD = new Date(event.startDate)
-                    const endD = new Date(event.endDate)
-                    const startMin = startD.getHours() * 60 + startD.getMinutes()
-                    const rawDuration = (endD.getTime() - startD.getTime()) / 60000
-                    const isZeroDuration = Number.isFinite(rawDuration) && rawDuration === 0
-                    const durationMin = Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : 30
+                  {selectedDayTimedSegments.map((seg) => {
+                    const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, leftPct, widthPct, zIndex } = seg
                     const top = (startMin / 60) * HOUR_HEIGHT
                     const height = isZeroDuration ? 26 : Math.max(26, (durationMin / 60) * HOUR_HEIGHT)
-                    const cardHeight = resizingEvent?.event.id === event.id ? resizingEvent.currentHeight : height
+                    const cardHeight = resizingEvent?.segmentId === segmentId ? resizingEvent.currentHeight : height
                     const eventColor = event.color || event.calendar?.color || '#2563EB'
                     const isTask = event.entryType === 'task'
                     const isBeingDragged = draggedEvent?.id === event.id
+                    const segmentTimeLabel = formatEventTime(event.startDate, event.endDate, false)
+                    const roundedClass =
+                      isStartSegment && isEndSegment
+                        ? 'rounded-xl'
+                        : isStartSegment
+                          ? 'rounded-t-xl rounded-b-xs border-b-dashed'
+                          : isEndSegment
+                            ? 'rounded-b-xl rounded-t-xs border-t-dashed'
+                            : 'rounded-xs border-y-dashed'
 
                     return (
                       <div
-                        className={`group/item absolute left-2 right-4 z-10 overflow-hidden rounded-xl border border-white/20 px-2.5 py-1 text-white shadow-xs transition-all hover:z-20 hover:scale-[1.005] hover:shadow-md ${
+                        className={`group/item absolute overflow-hidden border-[1.5px] border-white dark:border-[#021024] px-2.5 py-1 text-white shadow-sm transition-all hover:z-30! hover:shadow-md ${roundedClass} ${
                           event.isCompleted ? 'line-through opacity-50' : ''
                         } ${
                           isBeingDragged
@@ -896,7 +934,7 @@ export function CalendarPage() {
                             : 'cursor-grab active:cursor-grabbing'
                         }`}
                         draggable={true}
-                        key={event.id}
+                        key={segmentId}
                         onClick={(e) => {
                           e.stopPropagation()
                           if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
@@ -907,6 +945,9 @@ export function CalendarPage() {
                         style={{
                           top: `${top}px`,
                           height: `${cardHeight}px`,
+                          left: `calc(${leftPct}% + 4px)`,
+                          width: `calc(${widthPct}% - 8px)`,
+                          zIndex,
                           backgroundColor: eventColor,
                         }}
                         title={`${event.title} (${formatEventTime(event.startDate, event.endDate, false)})`}
@@ -916,26 +957,26 @@ export function CalendarPage() {
                             {isTask && (
                               <TaskTickButton
                                 isCompleted={event.isCompleted}
-                                onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                onToggle={() => handleRequestToggleTask(event)}
                               />
                             )}
                             <Icon className="size-3 text-white/80 shrink-0" name="clock" />
                             <span className="font-bold opacity-90 shrink-0">
-                              {formatEventTime(event.startDate, event.endDate, false)}
+                              {segmentTimeLabel}
                             </span>
                             <span className="truncate">{event.title}</span>
                           </span>
-                          <div className="flex items-center gap-1.5">
-                            {event.calendar ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {widthPct >= 50 && event.calendar ? (
                               <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-bold">
                                 {event.calendar.name}
                               </span>
-                            ) : isTask ? (
+                            ) : widthPct >= 50 && isTask ? (
                               <span className="rounded-sm bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">
                                 Độc lập
                               </span>
                             ) : null}
-                            {isTask && event.calendar && (
+                            {widthPct >= 50 && isTask && event.calendar && (
                               <span className="rounded-sm bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">
                                 Nhiệm vụ
                               </span>
@@ -960,18 +1001,20 @@ export function CalendarPage() {
                           </p>
                         )}
 
-                        <div
-                          aria-label="Kéo đổi thời lượng"
-                          className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            e.preventDefault()
-                          }}
-                          onPointerDown={(e) => handleResizeStart(e, event)}
-                          title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
-                        >
-                          <div className="h-0.5 w-6 rounded-full bg-white/80 pointer-events-none" />
-                        </div>
+                        {isEndSegment && (
+                          <div
+                            aria-label="Kéo đổi thời lượng"
+                            className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              e.preventDefault()
+                            }}
+                            onPointerDown={(e) => handleResizeStart(e, event, segmentId, height)}
+                            title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
+                          >
+                            <div className="h-0.5 w-6 rounded-full bg-white/80 pointer-events-none" />
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -1018,6 +1061,19 @@ export function CalendarPage() {
                             variant="week"
                           />
                         </span>
+                        {(vm.holidaysBySolarDate[wd.dateKey] ?? []).length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {(vm.holidaysBySolarDate[wd.dateKey] ?? []).slice(0, 2).map((holiday) => (
+                              <div
+                                className={`truncate rounded border px-1 py-0.5 text-[10px] font-semibold ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                                key={holiday.id}
+                                title={formatHolidayTooltip(holiday)}
+                              >
+                                {holiday.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -1078,7 +1134,7 @@ export function CalendarPage() {
                                 {isTaskItem && (
                                   <TaskTickButton
                                     isCompleted={event.isCompleted}
-                                    onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                    onToggle={() => handleRequestToggleTask(event)}
                                     size="sm"
                                   />
                                 )}
@@ -1126,50 +1182,55 @@ export function CalendarPage() {
                       today.getMonth() === wd.date.getMonth() &&
                       today.getFullYear() === wd.date.getFullYear()
 
-                    const timedEvents = (eventsByDate[wd.dateKey] ?? []).filter((e) => !e.isAllDay)
+                    const timedSegments = weekTimedSegmentsByDate[wd.dateKey] ?? []
+
+                    const columnKey = `week-col-${wd.dateKey}`
 
                     return (
-                      <div className="relative" key={wd.dateKey}>
-                        
-                        {HOURS_24.map((h) => {
-                          const slotKey = `week-slot-${wd.dateKey}-${h.hour}`
-                          const isOver = dragOverTarget === slotKey
-                          return (
-                            <div
-                              className={`relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5 ${
-                                isOver ? 'bg-blue-100/70 border-blue-400 border-dashed dark:bg-blue-900/40' : ''
-                              }`}
-                              key={h.hour}
-                              onClick={() => {
-                                const clickD = new Date(
-                                  wd.date.getFullYear(),
-                                  wd.date.getMonth(),
-                                  wd.date.getDate(),
-                                  h.hour,
-                                  0,
-                                  0,
-                                )
-                                vm.handleOpenCreateEvent(clickD)
-                              }}
-                              onDragLeave={() => {
-                                if (dragOverTarget === slotKey) setDragOverTarget(null)
-                              }}
-                              onDragOver={(e) => {
-                                e.preventDefault()
-                                e.dataTransfer.dropEffect = 'move'
-                                setDragOverTarget(slotKey)
-                              }}
-                              onDrop={(e) => handleDropOnTimedSlot(e, wd.date, h.hour)}
-                              title={`Thêm lịch trình lúc ${h.label}`}
-                            >
-                              {isOver && draggedEvent && (
-                                <div className="pointer-events-none absolute inset-x-0.5 top-1 z-20 flex h-5 items-center rounded border border-blue-500 bg-blue-600/30 px-1 text-[9px] font-bold text-blue-900 dark:text-blue-200 truncate shadow-xs">
-                                  {draggedEvent.title}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
+                      <div
+                        className="relative"
+                        key={wd.dateKey}
+                        onDragLeave={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                            setDragPreview((prev) => (prev?.columnKey === columnKey ? null : prev))
+                          }
+                        }}
+                        onDragOver={(e) => handleTimedColumnDragOver(e, columnKey)}
+                        onDrop={(e) => handleDropOnTimedColumn(e, wd.date)}
+                      >
+                        {HOURS_24.map((h) => (
+                          <div
+                            className="relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5"
+                            key={h.hour}
+                            onClick={() => {
+                              const clickD = new Date(
+                                wd.date.getFullYear(),
+                                wd.date.getMonth(),
+                                wd.date.getDate(),
+                                h.hour,
+                                0,
+                                0,
+                              )
+                              vm.handleOpenCreateEvent(clickD)
+                            }}
+                            title={`Thêm lịch trình lúc ${h.label}`}
+                          />
+                        ))}
+
+                        {dragPreview?.columnKey === columnKey && draggedEvent && (
+                          <div
+                            className="pointer-events-none absolute inset-x-0.5 z-30 flex items-center gap-1 rounded border-2 border-dashed border-blue-500 bg-blue-600/20 px-1.5 text-[10px] font-bold text-blue-950 dark:text-blue-100 shadow-sm backdrop-blur-2xs"
+                            style={{
+                              top: `${(dragPreview.startMin / 60) * HOUR_HEIGHT}px`,
+                              height: `${Math.max(20, ((dragPreview.endMin - dragPreview.startMin) / 60) * HOUR_HEIGHT)}px`,
+                            }}
+                          >
+                            <span className="shrink-0 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-extrabold text-white">
+                              {dragPreview.label}
+                            </span>
+                            <span className="truncate">{draggedEvent.title}</span>
+                          </div>
+                        )}
 
                         
                         {isCurrentDay && (
@@ -1183,23 +1244,32 @@ export function CalendarPage() {
                         )}
 
                         
-                        {timedEvents.map((event) => {
-                          const startD = new Date(event.startDate)
-                          const endD = new Date(event.endDate)
-                          const startMin = startD.getHours() * 60 + startD.getMinutes()
-                          const rawDuration = (endD.getTime() - startD.getTime()) / 60000
-                          const isZeroDuration = Number.isFinite(rawDuration) && rawDuration === 0
-                          const durationMin = Number.isFinite(rawDuration) && rawDuration >= 0 ? rawDuration : 30
+                        {timedSegments.map((seg) => {
+                          const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, isMultiDay, leftPct, widthPct, zIndex } = seg
                           const top = (startMin / 60) * HOUR_HEIGHT
                           const height = isZeroDuration ? 20 : Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
-                          const cardHeight = resizingEvent?.event.id === event.id ? resizingEvent.currentHeight : height
+                          const cardHeight = resizingEvent?.segmentId === segmentId ? resizingEvent.currentHeight : height
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
                           const isTask = event.entryType === 'task'
                           const isBeingDragged = draggedEvent?.id === event.id
+                          const startTimeText = isMultiDay
+                            ? formatEventTime(event.startDate, event.endDate, false)
+                            : formatMinutesToHHMM(startMin)
+                          const timeRangeText = isMultiDay
+                            ? formatEventTime(event.startDate, event.endDate, false)
+                            : startTimeText
+                          const roundedClass =
+                            isStartSegment && isEndSegment
+                              ? 'rounded-md'
+                              : isStartSegment
+                                ? 'rounded-t-md rounded-b-xs'
+                                : isEndSegment
+                                  ? 'rounded-b-md rounded-t-xs'
+                                  : 'rounded-xs'
 
                           return (
                             <div
-                              className={`group/item absolute inset-x-0.5 z-10 overflow-hidden rounded-md px-1.5 py-0.5 text-white shadow-2xs transition-all hover:z-20 hover:scale-[1.01] hover:shadow-md ${
+                              className={`group/item absolute overflow-hidden border-[1.5px] border-white dark:border-[#021024] px-1.5 py-0.5 text-white shadow-sm transition-all hover:z-30! hover:shadow-md ${roundedClass} ${
                                 event.isCompleted ? 'line-through opacity-50' : ''
                               } ${
                                 isBeingDragged
@@ -1207,7 +1277,7 @@ export function CalendarPage() {
                                   : 'cursor-grab active:cursor-grabbing'
                               }`}
                               draggable={true}
-                              key={event.id}
+                              key={segmentId}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
@@ -1218,6 +1288,9 @@ export function CalendarPage() {
                               style={{
                                 top: `${top}px`,
                                 height: `${cardHeight}px`,
+                                left: `calc(${leftPct}% + 2px)`,
+                                width: `calc(${widthPct}% - 4px)`,
+                                zIndex,
                                 backgroundColor: eventColor,
                               }}
                               title={`${event.title} (${formatEventTime(event.startDate, event.endDate, event.isAllDay)})`}
@@ -1228,16 +1301,12 @@ export function CalendarPage() {
                                     {isTask && (
                                       <TaskTickButton
                                         isCompleted={event.isCompleted}
-                                        onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                        onToggle={() => handleRequestToggleTask(event)}
                                         size="sm"
                                       />
                                     )}
                                     <span className="font-bold opacity-80 shrink-0">
-                                      {startD.toLocaleTimeString('vi-VN', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        hour12: false,
-                                      })}
+                                      {startTimeText}
                                     </span>
                                     <span className="truncate font-medium">{event.title}</span>
                                   </span>
@@ -1252,16 +1321,12 @@ export function CalendarPage() {
                                       {isTask && (
                                         <TaskTickButton
                                           isCompleted={event.isCompleted}
-                                          onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                          onToggle={() => handleRequestToggleTask(event)}
                                           size="sm"
                                         />
                                       )}
                                       <span className="truncate">
-                                        {startD.toLocaleTimeString('vi-VN', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          hour12: false,
-                                        })}
+                                        {timeRangeText}
                                       </span>
                                     </span>
                                     {isTask && (
@@ -1274,18 +1339,20 @@ export function CalendarPage() {
                                 </>
                               )}
 
-                              <div
-                                aria-label="Kéo đổi thời lượng"
-                                className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  e.preventDefault()
-                                }}
-                                onPointerDown={(e) => handleResizeStart(e, event)}
-                                title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
-                              >
-                                <div className="h-0.5 w-4 rounded-full bg-white/80 pointer-events-none" />
-                              </div>
+                              {isEndSegment && (
+                                <div
+                                  aria-label="Kéo đổi thời lượng"
+                                  className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    e.preventDefault()
+                                  }}
+                                  onPointerDown={(e) => handleResizeStart(e, event, segmentId, height)}
+                                  title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
+                                >
+                                  <div className="h-0.5 w-4 rounded-full bg-white/80 pointer-events-none" />
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -1392,6 +1459,16 @@ export function CalendarPage() {
                       </div>
 
                       <div className="flex-1 space-y-1 overflow-hidden">
+                        {(vm.holidaysBySolarDate[dateKey] ?? []).slice(0, 2).map((holiday) => (
+                          <div
+                            className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[9px] font-bold sm:px-1.5 sm:text-[10px] ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                            key={holiday.id}
+                            title={formatHolidayTooltip(holiday)}
+                          >
+                            <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                            <span className="truncate">{holiday.name}</span>
+                          </div>
+                        ))}
                         {dayEvents.slice(0, 3).map((event) => {
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
                           const isTask = event.entryType === 'task'
@@ -1420,7 +1497,7 @@ export function CalendarPage() {
                               {isTask ? (
                                 <TaskTickButton
                                   isCompleted={event.isCompleted}
-                                  onToggle={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                  onToggle={() => handleRequestToggleTask(event)}
                                   size="sm"
                                 />
                               ) : (
@@ -1493,30 +1570,23 @@ export function CalendarPage() {
                         const hasEvents = dayItems.length > 0
                         const dayTasks = dayItems.filter((item) => item.entryType === 'task')
                         const allTasksDone = dayTasks.length > 0 && dayTasks.every((item) => item.isCompleted)
-                        const hasPendingTask = dayTasks.some((item) => !item.isCompleted)
                         const isCurrentDay =
                           today.getDate() === dNum && today.getMonth() === mIdx && today.getFullYear() === currentYear
+                        const dayHolidays = vm.holidaysBySolarDate[key] ?? []
+                        const taskTooltip = dayTasks.length > 0
+                          ? allTasksDone
+                            ? 'Đã hoàn thành tất cả nhiệm vụ'
+                            : 'Còn nhiệm vụ chưa hoàn thành'
+                          : ''
+                        const holidayTooltip = dayHolidays.map(formatHolidayTooltip).join(' • ')
+                        const yearCellTooltip = [holidayTooltip, taskTooltip].filter(Boolean).join('\n') || undefined
 
                         return (
                         <div
                           className="relative mx-auto inline-flex min-h-5 items-center justify-center font-medium"
                           key={dNum}
-                          title={
-                            dayTasks.length > 0
-                              ? allTasksDone
-                                ? 'Đã hoàn thành tất cả nhiệm vụ'
-                                : 'Còn nhiệm vụ chưa hoàn thành'
-                              : undefined
-                          }
+                          title={yearCellTooltip}
                         >
-                          {allTasksDone && (
-                            <span className="absolute -right-0.5 -top-0.5 grid size-2.5 place-items-center rounded-full bg-emerald-500 text-white">
-                              <Icon className="size-2" name="check" />
-                            </span>
-                          )}
-                          {hasPendingTask && (
-                            <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500" />
-                          )}
                           <CalendarDateLabel
                             hasEvents={hasEvents}
                             isToday={isCurrentDay}
@@ -1687,7 +1757,6 @@ export function CalendarPage() {
                                   aria-label="Xóa"
                                   className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
                                   onClick={() => {
-                                    setDeleteRecurringMode('this')
                                     setEventToDelete(event)
                                   }}
                                   type="button"
@@ -1779,10 +1848,30 @@ export function CalendarPage() {
           (eventToDelete.recurrence && eventToDelete.recurrence.frequency !== 'none') ||
           (eventToDelete as unknown as { _isOccurrence?: boolean })?._isOccurrence,
         )
+        if (isEventToDeleteRecurring) {
+          return (
+            <RecurrenceScopeModal
+              action="delete"
+              entryType={eventToDelete.entryType}
+              isOpen={true}
+              isSubmitting={isDeletingEvent}
+              onCancel={() => setEventToDelete(null)}
+              onConfirm={async (mode) => {
+                setIsDeletingEvent(true)
+                await vm.handleDeleteEvent(eventToDelete.id, mode, eventToDelete.startDate)
+                setIsDeletingEvent(false)
+                setEventToDelete(null)
+              }}
+              targetDate={new Date(eventToDelete.startDate)}
+              title={eventToDelete.title}
+            />
+          )
+        }
         return (
           <div
             aria-modal="true"
             className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+            onClick={() => setEventToDelete(null)}
             role="dialog"
           >
             <div
@@ -1798,91 +1887,10 @@ export function CalendarPage() {
                     {eventToDelete.entryType === 'task' ? 'Xóa nhiệm vụ?' : 'Xóa sự kiện?'}
                   </h4>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {isEventToDeleteRecurring
-                      ? `Mục "${eventToDelete.title}" là một chuỗi lặp lại. Vui lòng chọn phạm vi xóa:`
-                      : `Bạn có chắc chắn muốn xóa "${eventToDelete.title}" không? Thao tác này không thể hoàn tác.`}
+                    {`Bạn có chắc chắn muốn xóa "${eventToDelete.title}" không? Thao tác này không thể hoàn tác.`}
                   </p>
                 </div>
               </div>
-
-              {isEventToDeleteRecurring && (
-                <div className="space-y-2 pt-1">
-                  <label
-                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
-                      deleteRecurringMode === 'this'
-                        ? 'border-rose-600 bg-rose-50/50 dark:border-rose-500 dark:bg-rose-950/30'
-                        : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="deleteRecurringMode"
-                      value="this"
-                      checked={deleteRecurringMode === 'this'}
-                      onChange={() => setDeleteRecurringMode('this')}
-                      className="mt-0.5 size-4 text-rose-600 focus:ring-rose-500"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-slate-800 dark:text-white">
-                        Chỉ lần này
-                      </span>
-                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                        Chỉ xóa lần diễn ra vào ngày {new Date(eventToDelete.startDate).toLocaleDateString('vi-VN')}.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
-                      deleteRecurringMode === 'following'
-                        ? 'border-rose-600 bg-rose-50/50 dark:border-rose-500 dark:bg-rose-950/30'
-                        : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="deleteRecurringMode"
-                      value="following"
-                      checked={deleteRecurringMode === 'following'}
-                      onChange={() => setDeleteRecurringMode('following')}
-                      className="mt-0.5 size-4 text-rose-600 focus:ring-rose-500"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-slate-800 dark:text-white">
-                        Lần này và các lần tiếp theo
-                      </span>
-                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                        Xóa từ lần đang chọn đến hết chuỗi.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
-                      deleteRecurringMode === 'all'
-                        ? 'border-rose-600 bg-rose-50/50 dark:border-rose-500 dark:bg-rose-950/30'
-                        : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="deleteRecurringMode"
-                      value="all"
-                      checked={deleteRecurringMode === 'all'}
-                      onChange={() => setDeleteRecurringMode('all')}
-                      className="mt-0.5 size-4 text-rose-600 focus:ring-rose-500"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-slate-800 dark:text-white">
-                        Tất cả các lần trong chuỗi
-                      </span>
-                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                        Xóa cả các lần trước và sau lần đang chọn.
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              )}
 
               <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-3 dark:border-white/10">
                 <button
@@ -1899,11 +1907,7 @@ export function CalendarPage() {
                   onClick={async () => {
                     if (!eventToDelete) return
                     setIsDeletingEvent(true)
-                    await vm.handleDeleteEvent(
-                      eventToDelete.id,
-                      isEventToDeleteRecurring ? deleteRecurringMode : undefined,
-                      eventToDelete.startDate,
-                    )
+                    await vm.handleDeleteEvent(eventToDelete.id, undefined, eventToDelete.startDate)
                     setIsDeletingEvent(false)
                     setEventToDelete(null)
                   }}
@@ -1918,90 +1922,45 @@ export function CalendarPage() {
       })()}
 
       {pendingRecurringAction && (
-        <div
-          aria-modal="true"
-          className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
-          role="dialog"
-        >
-          <div
-            className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#021024]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                {pendingRecurringAction.event.entryType === 'task'
-                  ? 'Thay đổi nhiệm vụ định kỳ'
-                  : 'Thay đổi sự kiện định kỳ'}
-              </h4>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {pendingRecurringAction.isResize
-                  ? 'Bạn đang thay đổi thời lượng của một mục lặp lại. Vui lòng chọn phạm vi áp dụng:'
-                  : pendingRecurringAction.isSameDay
-                    ? 'Bạn đang thay đổi giờ của một mục lặp lại. Vui lòng chọn phạm vi áp dụng:'
-                    : 'Bạn đang chuyển ngày của một mục lặp lại. Vui lòng chọn phạm vi áp dụng:'}
-              </p>
-            </div>
+        <RecurrenceScopeModal
+          action="update"
+          entryType={pendingRecurringAction.event.entryType}
+          isOpen={true}
+          onCancel={() => setPendingRecurringAction(null)}
+          onConfirm={(mode) => void handleConfirmRecurringMove(mode)}
+          targetDate={new Date(pendingRecurringAction.targetDate)}
+          title={pendingRecurringAction.event.title}
+        />
+      )}
 
-            <div className="space-y-2 pt-1">
-              {getScopeOptions(
-                pendingRecurringAction.event,
-                pendingRecurringAction.isSameDay,
-                pendingRecurringAction.isResize,
-                new Date(pendingRecurringAction.targetDate),
-              ).map((opt) => (
-                <label
-                  key={opt.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
-                    selectedRecurringMode === opt.value
-                      ? 'border-blue-600 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/30'
-                      : 'border-slate-200 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="recurring_scope"
-                    value={opt.value}
-                    checked={selectedRecurringMode === opt.value}
-                    onChange={() => setSelectedRecurringMode(opt.value)}
-                    className="mt-0.5 size-4 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="block text-xs font-bold text-slate-800 dark:text-white">
-                      {opt.label}
-                    </span>
-                    <span className="block mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                      {opt.description}
-                    </span>
-                  </div>
-                </label>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-3 dark:border-white/10">
-              <button
-                type="button"
-                onClick={() => setPendingRecurringAction(null)}
-                className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmRecurringMove}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition-colors"
-              >
-                Lưu thay đổi
-              </button>
-            </div>
-          </div>
-        </div>
+      {pendingToggleTask && (
+        <RecurrenceScopeModal
+          action={pendingToggleTask.isCompleted ? 'reopen' : 'complete'}
+          entryType={pendingToggleTask.entryType}
+          isOpen={true}
+          isSubmitting={isTogglingTask}
+          onCancel={() => setPendingToggleTask(null)}
+          onConfirm={async (mode) => {
+            setIsTogglingTask(true)
+            await vm.handleToggleComplete(
+              pendingToggleTask.id,
+              pendingToggleTask.isCompleted,
+              mode,
+              pendingToggleTask.startDate,
+            )
+            setIsTogglingTask(false)
+            setPendingToggleTask(null)
+          }}
+          targetDate={new Date(pendingToggleTask.startDate)}
+          title={pendingToggleTask.title}
+        />
       )}
       <CalendarSettingsModal
         isOpen={isCalendarSettingsOpen}
         isSaving={vm.isSavingPreferences}
         onClose={() => setIsCalendarSettingsOpen(false)}
         onUpdatePreferences={vm.handleUpdateCalendarPreferences}
-        showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+        preferences={vm.calendarPreferences}
       />
 
     </div>

@@ -8,6 +8,7 @@ import {
 } from '../../viewmodels/useEventModalViewModel'
 import { COMMON_TIMEZONES, PRIORITY_CONFIG } from '../../models/calendarConstants'
 import { RecurringConfirmationDialog } from './RecurringConfirmationDialog'
+import { RecurrenceScopeModal } from './RecurrenceScopeModal'
 
 interface EventModalProps {
   isOpen: boolean
@@ -76,8 +77,8 @@ export function EventModal(props: EventModalProps) {
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${!isTask
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                } ${!vm.canModify ? 'opacity-70 cursor-not-allowed' : ''}`}
-              disabled={!vm.canModify}
+                } ${!vm.canModify || (isEditing && isTask) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={!vm.canModify || (isEditing && isTask)}
               onClick={() => vm.handleTabChange('event')}
               type="button"
             >
@@ -88,8 +89,8 @@ export function EventModal(props: EventModalProps) {
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${isTask
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                } ${!vm.canModify ? 'opacity-70 cursor-not-allowed' : ''}`}
-              disabled={!vm.canModify}
+                } ${!vm.canModify || (isEditing && !isTask) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={!vm.canModify || (isEditing && !isTask)}
               onClick={() => vm.handleTabChange('task')}
               type="button"
             >
@@ -1323,7 +1324,20 @@ export function EventModal(props: EventModalProps) {
 
         {vm.confirmation && <RecurringConfirmationDialog confirmation={vm.confirmation} />}
 
-        {vm.showDeleteConfirm && (
+        {vm.showDeleteConfirm && vm.isRecurring && initialEvent && (
+          <RecurrenceScopeModal
+            action="delete"
+            entryType={vm.entryType}
+            isOpen={vm.showDeleteConfirm}
+            isSubmitting={vm.isDeleting}
+            onCancel={() => vm.setShowDeleteConfirm(false)}
+            onConfirm={(mode) => void vm.handleDeleteEvent(mode)}
+            targetDate={props.initialDate ?? new Date(initialEvent.startDate)}
+            title={vm.title}
+          />
+        )}
+
+        {vm.showDeleteConfirm && !vm.isRecurring && (
           <div
             aria-modal="true"
             className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
@@ -1339,93 +1353,13 @@ export function EventModal(props: EventModalProps) {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {vm.isRecurring
-                      ? `Xóa ${isTask ? 'nhiệm vụ' : 'sự kiện'} lặp lại`
-                      : `Xóa ${isTask ? 'nhiệm vụ' : 'sự kiện'} này?`}
+                    {`Xóa ${isTask ? 'nhiệm vụ' : 'sự kiện'} này?`}
                   </h4>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {vm.isRecurring
-                      ? `Bạn muốn xóa những lần nào trong chuỗi “${vm.title}”?`
-                      : `Bạn có chắc chắn muốn xóa "${vm.title || (isTask ? 'nhiệm vụ' : 'sự kiện')}" không? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.`}
+                    {`Bạn có chắc chắn muốn xóa "${vm.title || (isTask ? 'nhiệm vụ' : 'sự kiện')}" không? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.`}
                   </p>
                 </div>
               </div>
-
-              {vm.isRecurring && initialEvent && (
-                <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-white/5 dark:bg-white/5">
-                  <label
-                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${vm.deleteRecurringMode === 'this'
-                      ? 'bg-white shadow-2xs dark:bg-white/10'
-                      : 'hover:bg-white/50 dark:hover:bg-white/5'
-                      }`}
-                  >
-                    <input
-                      checked={vm.deleteRecurringMode === 'this'}
-                      className="mt-0.5 size-4 text-blue-600 focus:ring-blue-500"
-                      name="deleteRecurringMode"
-                      onChange={() => vm.setDeleteRecurringMode('this')}
-                      type="radio"
-                      value="this"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Chỉ lần này
-                      </span>
-                      <span className="block text-[11px] text-slate-400 dark:text-slate-400">
-                        Chỉ xóa lần diễn ra vào ngày {(props.initialDate ?? new Date(initialEvent.startDate)).toLocaleDateString('vi-VN')}.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${vm.deleteRecurringMode === 'following'
-                      ? 'bg-white shadow-2xs dark:bg-white/10'
-                      : 'hover:bg-white/50 dark:hover:bg-white/5'
-                      }`}
-                  >
-                    <input
-                      checked={vm.deleteRecurringMode === 'following'}
-                      className="mt-0.5 size-4 text-blue-600 focus:ring-blue-500"
-                      name="deleteRecurringMode"
-                      onChange={() => vm.setDeleteRecurringMode('following')}
-                      type="radio"
-                      value="following"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Lần này và các lần tiếp theo
-                      </span>
-                      <span className="block text-[11px] text-slate-400 dark:text-slate-400">
-                        Xóa từ lần đang chọn đến hết chuỗi.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-start gap-2.5 rounded-lg p-2 cursor-pointer transition-all ${vm.deleteRecurringMode === 'all'
-                      ? 'bg-white shadow-2xs dark:bg-white/10'
-                      : 'hover:bg-white/50 dark:hover:bg-white/5'
-                      }`}
-                  >
-                    <input
-                      checked={vm.deleteRecurringMode === 'all'}
-                      className="mt-0.5 size-4 text-blue-600 focus:ring-blue-500"
-                      name="deleteRecurringMode"
-                      onChange={() => vm.setDeleteRecurringMode('all')}
-                      type="radio"
-                      value="all"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Tất cả các lần trong chuỗi
-                      </span>
-                      <span className="block text-[11px] text-slate-400 dark:text-slate-400">
-                        Xóa cả các lần trước và sau lần đang chọn.
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              )}
 
               <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
                 <button
@@ -1439,7 +1373,7 @@ export function EventModal(props: EventModalProps) {
                 <button
                   className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 transition-colors"
                   disabled={vm.isDeleting}
-                  onClick={vm.handleDeleteEvent}
+                  onClick={() => void vm.handleDeleteEvent('all')}
                   type="button"
                 >
                   {vm.isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
@@ -1448,6 +1382,17 @@ export function EventModal(props: EventModalProps) {
             </div>
           </div>
         )}
+
+        <RecurrenceScopeModal
+          action="update"
+          entryType={vm.entryType}
+          isOpen={vm.showEditScopeModal}
+          isSubmitting={vm.isSubmitting}
+          onCancel={vm.handleCancelEditScope}
+          onConfirm={(mode) => void vm.handleConfirmEditScope(mode)}
+          targetDate={props.initialDate ?? (initialEvent ? new Date(initialEvent.startDate) : new Date())}
+          title={vm.title}
+        />
 
         {vm.showLeaveConfirm && (
           <div

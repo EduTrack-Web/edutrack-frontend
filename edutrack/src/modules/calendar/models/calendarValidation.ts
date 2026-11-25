@@ -32,10 +32,11 @@ const toTime = (value?: string | null): number => (value ? Date.parse(value.trim
 const isOptionalIntInRange = (value: number | null | undefined, min: number, max: number): boolean =>
   value === null || value === undefined || (Number.isInteger(value) && value >= min && value <= max)
 
+export const DEFAULT_EVENT_TITLE = 'Không có tiêu đề'
+
 export const validateEventTitle = (rawTitle: string): string | undefined => {
   const title = rawTitle.trim()
   return firstFailure(
-    failIf(!title, 'Vui lòng nhập tiêu đề'),
     failIf(title.length > MAX_TITLE_LENGTH, `Tiêu đề không được vượt quá ${MAX_TITLE_LENGTH} ký tự`),
   )
 }
