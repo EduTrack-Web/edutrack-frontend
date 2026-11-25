@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { EntryType } from '../models/calendar.types'
 
 const actions = {
-  create: ['Tạo chuỗi lặp', 'Các lần lặp sẽ được tạo theo quy tắc bạn đã chọn.'],
   save: ['Lưu cả chuỗi', 'Các thay đổi sẽ áp dụng cho tất cả các lần trong chuỗi.'],
   stop: ['Bỏ lặp lại', 'Chỉ mục gốc được giữ lại. Các lần do quy tắc lặp tạo ra sẽ biến mất khỏi lịch.'],
   complete: ['Đánh dấu hoàn thành', 'Tất cả các lần của nhiệm vụ này sẽ được đánh dấu hoàn thành.'],
