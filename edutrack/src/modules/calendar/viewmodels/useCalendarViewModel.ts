@@ -4,9 +4,14 @@ import type {
   CalendarEvent,
   CalendarPreferences,
   EntryType,
+  VietnameseHolidayItem,
   VietnameseLunarDate,
   RecurringUpdateMode,
 } from '@/modules/calendar/models/calendar.types'
+import {
+  DEFAULT_CALENDAR_PREFERENCES,
+  groupHolidaysByDate,
+} from '@/modules/calendar/models/vietnameseHolidays'
 import {
   clipRangeToSupportedLunarYears,
   enumerateDateKeys,
@@ -34,16 +39,21 @@ export function useCalendarViewModel() {
   const [categories, setCategories] = useState<CalendarCategory[]>([])
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [calendarPreferences, setCalendarPreferences] = useState<CalendarPreferences>({
-    showLunarCalendar: false,
-  })
+  const [calendarPreferences, setCalendarPreferences] = useState<CalendarPreferences>(
+    DEFAULT_CALENDAR_PREFERENCES,
+  )
   const [isPreferencesLoaded, setIsPreferencesLoaded] = useState(false)
   const [isSavingPreferences, setIsSavingPreferences] = useState(false)
   const [lunarDatesBySolarDate, setLunarDatesBySolarDate] = useState<
     Readonly<Record<string, VietnameseLunarDate>>
   >({})
+  const [rawHolidaysBySolarDate, setRawHolidaysBySolarDate] = useState<
+    Readonly<Record<string, VietnameseHolidayItem[]>>
+  >({})
   const lunarDateCacheRef = useRef(new Map<string, VietnameseLunarDate>())
   const inFlightLunarDateKeysRef = useRef(new Set<string>())
+  const holidayCacheRef = useRef(new Map<string, VietnameseHolidayItem[]>())
+  const inFlightHolidayKeysRef = useRef(new Set<string>())
   const isLunarOutOfRangeNoticeShownRef = useRef(false)
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
@@ -88,7 +98,10 @@ export function useCalendarViewModel() {
         setEvents(evRes.data.events)
       }
       if (preferenceRes?.data?.preferences) {
-        setCalendarPreferences(preferenceRes.data.preferences)
+        setCalendarPreferences({
+          ...DEFAULT_CALENDAR_PREFERENCES,
+          ...preferenceRes.data.preferences,
+        })
       }
       setIsPreferencesLoaded(true)
     } catch (err) {
@@ -153,16 +166,72 @@ export function useCalendarViewModel() {
     return () => window.clearTimeout(timer)
   }, [calendarPreferences.showLunarCalendar, currentDate, isPreferencesLoaded, showToast, viewMode])
 
+  useEffect(() => {
+    if (!isPreferencesLoaded || !calendarPreferences.showVietnameseHolidays) return
+
+    const visibleRange = getVisibleLunarDateRange(viewMode, currentDate)
+    if (!visibleRange) return
+
+    const timer = window.setTimeout(() => {
+      const unavailableKeys = new Set<string>([
+        ...holidayCacheRef.current.keys(),
+        ...inFlightHolidayKeysRef.current,
+      ])
+      const missingRanges = groupMissingDateRanges(visibleRange, unavailableKeys)
+
+      for (const missingRange of missingRanges) {
+        const requestedKeys = enumerateDateKeys(missingRange)
+        requestedKeys.forEach((dateKey) => inFlightHolidayKeysRef.current.add(dateKey))
+
+        void calendarApi.getHolidays(missingRange.from, missingRange.to)
+          .then((response) => {
+            const grouped = new Map<string, VietnameseHolidayItem[]>()
+            for (const dateKey of requestedKeys) grouped.set(dateKey, [])
+            for (const holiday of response.data?.holidays ?? []) {
+              const existing = grouped.get(holiday.solarDate) ?? []
+              existing.push(holiday)
+              grouped.set(holiday.solarDate, existing)
+            }
+            for (const [dateKey, items] of grouped.entries()) {
+              holidayCacheRef.current.set(dateKey, items)
+            }
+            setRawHolidaysBySolarDate(Object.fromEntries(holidayCacheRef.current))
+          })
+          .catch(() => {
+            // Giữ lịch hoạt động bình thường nếu tải ngày lễ thất bại tạm thời
+          })
+          .finally(() => {
+            requestedKeys.forEach((dateKey) => inFlightHolidayKeysRef.current.delete(dateKey))
+          })
+      }
+    }, LUNAR_FETCH_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [calendarPreferences.showVietnameseHolidays, currentDate, isPreferencesLoaded, viewMode])
+
   const handleUpdateCalendarPreferences = async (
-    preferences: CalendarPreferences,
+    preferences: Partial<CalendarPreferences>,
+    options?: { silent?: boolean },
   ): Promise<boolean> => {
+    const previous = calendarPreferences
+    setCalendarPreferences((prev) => ({
+      ...prev,
+      ...preferences,
+    }))
     try {
       setIsSavingPreferences(true)
       const response = await calendarApi.updatePreferences(preferences)
-      setCalendarPreferences(response.data?.preferences ?? preferences)
-      showToast('Đã cập nhật cài đặt hiển thị lịch.', 'success')
+      setCalendarPreferences((prev) => ({
+        ...prev,
+        ...preferences,
+        ...(response.data?.preferences ?? {}),
+      }))
+      if (!options?.silent) {
+        showToast('Đã cập nhật cài đặt hiển thị lịch.', 'success')
+      }
       return true
     } catch {
+      setCalendarPreferences(previous)
       showToast('Không thể lưu cài đặt, vui lòng thử lại.', 'error')
       return false
     } finally {
@@ -486,6 +555,7 @@ export function useCalendarViewModel() {
   }
 
   const dateTitleLabel = getDateTitleLabel()
+  const holidaysBySolarDate = groupHolidaysByDate(rawHolidaysBySolarDate, calendarPreferences)
 
   return {
     confirmation,
@@ -497,6 +567,7 @@ export function useCalendarViewModel() {
     calendarPreferences,
     isSavingPreferences,
     lunarDatesBySolarDate,
+    holidaysBySolarDate,
     viewMode,
     setViewMode,
     activeFilterTab,
