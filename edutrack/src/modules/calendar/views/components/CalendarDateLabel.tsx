@@ -1,5 +1,6 @@
 import type { VietnameseLunarDate } from '../../models/calendar.types'
 import { formatLunarDateLabel, getLunarDateTooltip } from '../../models/lunarCalendar'
+import { useTranslation } from '@/modules/i18n/viewmodels/useTranslation'
 
 interface CalendarDateLabelProps {
   solarDay: number
@@ -23,6 +24,7 @@ export function CalendarDateLabel({
   hasEvents = false,
   variant = 'month',
 }: CalendarDateLabelProps) {
+  const { t } = useTranslation()
   const isDay = variant === 'day'
   const isWeek = variant === 'week'
   const isYear = variant === 'year'
@@ -55,6 +57,12 @@ export function CalendarDateLabel({
 
   const formattedLunar = lunarDate ? formatLunarDateLabel(lunarDate, showLunarMonth) : ''
   const displayLunar = isMonth && formattedLunar ? `(${formattedLunar})` : formattedLunar
+  const lunarTooltip = lunarDate
+    ? getLunarDateTooltip(lunarDate, {
+        prefix: t('calendar.lunar.tooltipPrefix'),
+        leapSuffix: t('calendar.lunar.leapSuffix'),
+      })
+    : ''
 
   // Ở mobile (< sm), Tháng & Tuần xếp dọc để không tràn ô; từ sm trở lên xếp ngang gọn.
   const layoutClass = isAlwaysStacked
@@ -70,14 +78,14 @@ export function CalendarDateLabel({
       </span>
       {showLunarCalendar && lunarDate && (
         <span
-          aria-label={getLunarDateTooltip(lunarDate)}
+          aria-label={lunarTooltip}
           className={`${lunarSize} max-w-full truncate font-semibold ${
             isMuted ? 'text-[#548383]/60 dark:text-[#C1E8FF]/50' : 'text-[#548383] dark:text-[#C1E8FF]'
           }`}
-          title={getLunarDateTooltip(lunarDate)}
+          title={lunarTooltip}
         >
           {displayLunar}
-          {lunarDate.isLeapMonth && <span className="sr-only"> (tháng nhuận)</span>}
+          {lunarDate.isLeapMonth && <span className="sr-only">{t('calendar.lunar.leapSrOnly')}</span>}
         </span>
       )}
     </span>

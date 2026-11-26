@@ -28,7 +28,7 @@ export const calendarApi = {
     return request<ApiSuccess<{
       dates: VietnameseLunarDate[]
       timeZone: 'Asia/Ho_Chi_Minh'
-      timeZoneOffset: 7
+      timeZoneOffset: 7 | 8
     }>>(`/calendar/lunar-dates?${search.toString()}`)
   },
 

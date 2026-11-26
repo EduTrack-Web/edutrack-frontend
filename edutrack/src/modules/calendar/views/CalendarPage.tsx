@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
 import type { CalendarEvent } from '@/modules/calendar/models/calendar.types'
-import { isFirstOrLastDayOfSolarMonth } from '@/modules/calendar/models/lunarCalendar'
+import {
+  formatLunarDateLabel,
+  getLunarDateTooltip,
+  isFirstOrLastDayOfSolarMonth,
+} from '@/modules/calendar/models/lunarCalendar'
+import { useTranslation } from '@/modules/i18n/viewmodels/useTranslation'
 import {
   formatHolidayTooltip,
   VIETNAM_HOLIDAY_BADGE_CLASSES,
@@ -90,6 +95,7 @@ function formatDayHeader(dateStr: string): string {
 
 export function CalendarPage() {
   const vm = useCalendarViewModel()
+  const { t } = useTranslation()
   const timeGridRef = useRef<HTMLDivElement>(null)
   const dayGridRef = useRef<HTMLDivElement>(null)
   const [hoveredDateCell, setHoveredDateCell] = useState<string | null>(null)
@@ -701,14 +707,14 @@ export function CalendarPage() {
               </div>
 
               <button
-                aria-label="Cài đặt lịch"
-                className="inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 2xl:w-auto 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                aria-label={t('calendar.settings.openAria')}
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 lg:min-h-9 lg:min-w-9 2xl:w-auto 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                 onClick={() => setIsCalendarSettingsOpen(true)}
-                title="Cài đặt lịch"
+                title={t('calendar.settings.openAria')}
                 type="button"
               >
                 <Settings aria-hidden="true" className="size-4" />
-                <span className="hidden 2xl:inline">Cài đặt</span>
+                <span className="hidden 2xl:inline">{t('calendar.settings.button')}</span>
               </button>
 
             </div>
@@ -1615,11 +1621,30 @@ export function CalendarPage() {
               ) : (
                 sortedListDates.map((dateKey) => {
                   const dayEvents = eventsByDate[dateKey] ?? []
+                  const listLunarDate = vm.lunarDatesBySolarDate[dateKey]
+                  const listLunarTooltip = listLunarDate
+                    ? getLunarDateTooltip(listLunarDate, {
+                        prefix: t('calendar.lunar.tooltipPrefix'),
+                        leapSuffix: t('calendar.lunar.leapSuffix'),
+                      })
+                    : ''
 
                   return (
                     <div className="py-4 first:pt-2" key={dateKey}>
-                      <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        {formatDayHeader(dateKey)}
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        <span>{formatDayHeader(dateKey)}</span>
+                        {vm.calendarPreferences.showLunarCalendar && listLunarDate && (
+                          <span
+                            aria-label={listLunarTooltip}
+                            className="rounded-md bg-[#C1E8FF]/35 px-1.5 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-[#052659] dark:bg-[#548383]/25 dark:text-[#C1E8FF]"
+                            title={listLunarTooltip}
+                          >
+                            {t('calendar.lunar.tooltipPrefix')}: {formatLunarDateLabel(listLunarDate, true)}
+                            {listLunarDate.isLeapMonth && (
+                              <span className="sr-only">{t('calendar.lunar.leapSrOnly')}</span>
+                            )}
+                          </span>
+                        )}
                       </div>
 
                       <div className="space-y-2">

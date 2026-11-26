@@ -9,7 +9,7 @@ export interface DateOnlyRange {
 
 const DAY_IN_MILLISECONDS = 86_400_000
 
-// Phải khớp với LUNAR_SUPPORTED_MIN_YEAR / LUNAR_SUPPORTED_MAX_YEAR của backend.
+export const MAX_LUNAR_DATE_RANGE_DAYS = 400
 export const LUNAR_SUPPORTED_MIN_YEAR = 1900
 export const LUNAR_SUPPORTED_MAX_YEAR = 2199
 export const LUNAR_OUT_OF_RANGE_MESSAGE =
@@ -129,13 +129,51 @@ export const formatLunarDateLabel = (lunarDate: VietnameseLunarDate, showMonth =
     ? `${lunarDate.lunarDay}/${lunarDate.lunarMonth}`
     : lunarDate.lunarDay.toString()
 
-export const getLunarDateTooltip = (lunarDate: VietnameseLunarDate): string => {
-  const leapLabel = lunarDate.isLeapMonth ? ' nhuận' : ''
-  const primary = `Âm lịch: ${lunarDate.lunarDay}/${lunarDate.lunarMonth}${leapLabel}/${lunarDate.lunarYear}`
+export const getRangeForDateKeys = (dateKeys: readonly string[]): DateOnlyRange | null => {
+  const first = dateKeys[0]
+  if (!first) return null
+  let minKey = first
+  let maxKey = first
+  for (const key of dateKeys) {
+    if (key < minKey) minKey = key
+    if (key > maxKey) maxKey = key
+  }
+  return { from: minKey, to: maxKey }
+}
+
+export const chunkDateRange = (
+  range: DateOnlyRange,
+  maxDays = MAX_LUNAR_DATE_RANGE_DAYS,
+): DateOnlyRange[] => {
+  const keys = enumerateDateKeys(range)
+  if (keys.length === 0) return []
+  const chunks: DateOnlyRange[] = []
+  for (let index = 0; index < keys.length; index += maxDays) {
+    const slice = keys.slice(index, index + maxDays)
+    const first = slice[0]
+    const last = slice[slice.length - 1]
+    if (first && last) chunks.push({ from: first, to: last })
+  }
+  return chunks
+}
+
+export interface LunarTooltipLabels {
+  prefix?: string
+  leapSuffix?: string
+}
+
+export const getLunarDateTooltip = (
+  lunarDate: VietnameseLunarDate,
+  labels: LunarTooltipLabels = {},
+): string => {
+  const prefix = labels.prefix ?? 'Âm lịch'
+  const leapText = labels.leapSuffix ?? ' nhuận'
+  const leapLabel = lunarDate.isLeapMonth ? leapText : ''
+  const primary = `${prefix}: ${lunarDate.lunarDay}/${lunarDate.lunarMonth}${leapLabel}/${lunarDate.lunarYear}`
   if (!lunarDate.alternateLunar) return primary
 
   const alt = lunarDate.alternateLunar
-  const altLeap = alt.isLeapMonth ? ' nhuận' : ''
+  const altLeap = alt.isLeapMonth ? leapText : ''
   return `${primary} (${alt.label}: ${alt.lunarDay}/${alt.lunarMonth}${altLeap}/${alt.lunarYear})`
 }
 
