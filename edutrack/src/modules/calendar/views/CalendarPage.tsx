@@ -845,7 +845,7 @@ export function CalendarPage() {
                           event.stopPropagation()
                           setSelectedHoliday(holiday)
                         }}
-                        title={formatHolidayTooltip(holiday)}
+                        title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
                         type="button"
                       >
                         <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
@@ -1170,7 +1170,7 @@ export function CalendarPage() {
                                 event.stopPropagation()
                                 setSelectedHoliday(holiday)
                               }}
-                              title={formatHolidayTooltip(holiday)}
+                              title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
                               type="button"
                             >
                               <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
@@ -1537,7 +1537,7 @@ export function CalendarPage() {
                               event.stopPropagation()
                               setSelectedHoliday(holiday)
                             }}
-                            title={formatHolidayTooltip(holiday)}
+                            title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
                             type="button"
                           >
                             <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
@@ -1646,7 +1646,10 @@ export function CalendarPage() {
                         const dayHolidays = vm.calendarPreferences.showVietnameseHolidays
                           ? (vm.holidaysBySolarDate[key] ?? [])
                           : []
-                        const yearCellTooltip = dayHolidays.map(formatHolidayTooltip).join(' • ') || undefined
+                        const yearCellTooltip =
+                          dayHolidays
+                            .map((holiday) => formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar))
+                            .join(' • ') || undefined
 
                         return (
                         <div
@@ -1737,7 +1740,10 @@ export function CalendarPage() {
                       ) : (
                       <div className="space-y-2">
                         {dayHolidays.map((holiday) => {
-                          const lunarSubtitle = formatHolidayLunarSubtitle(holiday)
+                          const lunarSubtitle = formatHolidayLunarSubtitle(
+                            holiday,
+                            vm.calendarPreferences.showLunarCalendar,
+                          )
                           const noteText = getHolidayNote(holiday, {
                             typePublic: t('calendar.holiday.typePublic'),
                             typeCompensatory: t('calendar.holiday.typeCompensatory'),
@@ -2117,6 +2123,7 @@ export function CalendarPage() {
       <HolidayDetailModal
         holiday={selectedHoliday}
         onClose={() => setSelectedHoliday(null)}
+        showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
       />
 
     </div>
