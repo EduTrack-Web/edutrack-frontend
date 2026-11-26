@@ -10,6 +10,7 @@ import type {
 } from '@/modules/calendar/models/calendar.types'
 import {
   DEFAULT_CALENDAR_PREFERENCES,
+  getVisibleHolidayDateRange,
   groupHolidaysByDate,
 } from '@/modules/calendar/models/vietnameseHolidays'
 import {
@@ -24,6 +25,7 @@ import {
 } from '@/modules/calendar/models/lunarCalendar'
 import { calendarApi } from '@/modules/calendar/services/calendarApi'
 import { expandAllRecurringEvents } from '@/modules/calendar/utils/recurrenceExpander'
+import { useTranslation } from '@/modules/i18n/viewmodels/useTranslation'
 import { ApiError } from '@/shared/api/httpClient'
 import { useToast } from '@/shared/viewmodels/useToast'
 import { useRecurringConfirmation } from './useRecurringConfirmation'
@@ -35,6 +37,7 @@ const LUNAR_FETCH_DEBOUNCE_MS = 300
 export function useCalendarViewModel() {
   const { confirmation, confirmRecurring } = useRecurringConfirmation()
   const { showToast } = useToast()
+  const { t } = useTranslation()
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [categories, setCategories] = useState<CalendarCategory[]>([])
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
@@ -55,6 +58,7 @@ export function useCalendarViewModel() {
   const holidayCacheRef = useRef(new Map<string, VietnameseHolidayItem[]>())
   const inFlightHolidayKeysRef = useRef(new Set<string>())
   const isLunarOutOfRangeNoticeShownRef = useRef(false)
+  const isHolidayOutOfRangeNoticeShownRef = useRef(false)
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
 
@@ -166,18 +170,31 @@ export function useCalendarViewModel() {
     return () => window.clearTimeout(timer)
   }, [calendarPreferences.showLunarCalendar, currentDate, isPreferencesLoaded, showToast, viewMode])
 
+  const holidayVisibleRange = getVisibleHolidayDateRange(viewMode, currentDate)
+  const holidayRangeFrom = holidayVisibleRange.from
+  const holidayRangeTo = holidayVisibleRange.to
+
   useEffect(() => {
     if (!isPreferencesLoaded || !calendarPreferences.showVietnameseHolidays) return
 
-    const visibleRange = getVisibleLunarDateRange(viewMode, currentDate)
-    if (!visibleRange) return
+    const visibleRange = { from: holidayRangeFrom, to: holidayRangeTo }
 
     const timer = window.setTimeout(() => {
+      if (isRangeInsideSupportedLunarYears(visibleRange)) {
+        isHolidayOutOfRangeNoticeShownRef.current = false
+      } else if (!isHolidayOutOfRangeNoticeShownRef.current) {
+        isHolidayOutOfRangeNoticeShownRef.current = true
+        showToast(t('calendar.holiday.outOfRange'), 'info')
+      }
+
+      const supportedRange = clipRangeToSupportedLunarYears(visibleRange)
+      if (!supportedRange) return
+
       const unavailableKeys = new Set<string>([
         ...holidayCacheRef.current.keys(),
         ...inFlightHolidayKeysRef.current,
       ])
-      const missingRanges = groupMissingDateRanges(visibleRange, unavailableKeys)
+      const missingRanges = groupMissingDateRanges(supportedRange, unavailableKeys)
 
       for (const missingRange of missingRanges) {
         const requestedKeys = enumerateDateKeys(missingRange)
@@ -198,7 +215,7 @@ export function useCalendarViewModel() {
             setRawHolidaysBySolarDate(Object.fromEntries(holidayCacheRef.current))
           })
           .catch(() => {
-            // Giữ lịch hoạt động bình thường nếu tải ngày lễ thất bại tạm thời
+            showToast(t('calendar.holiday.loadError'), 'error')
           })
           .finally(() => {
             requestedKeys.forEach((dateKey) => inFlightHolidayKeysRef.current.delete(dateKey))
@@ -207,7 +224,14 @@ export function useCalendarViewModel() {
     }, LUNAR_FETCH_DEBOUNCE_MS)
 
     return () => window.clearTimeout(timer)
-  }, [calendarPreferences.showVietnameseHolidays, currentDate, isPreferencesLoaded, viewMode])
+  }, [
+    calendarPreferences.showVietnameseHolidays,
+    holidayRangeFrom,
+    holidayRangeTo,
+    isPreferencesLoaded,
+    showToast,
+    t,
+  ])
 
   const handleUpdateCalendarPreferences = async (
     preferences: Partial<CalendarPreferences>,
