@@ -10,6 +10,7 @@ import type {
 } from '@/modules/calendar/models/calendar.types'
 import {
   DEFAULT_CALENDAR_PREFERENCES,
+  getVisibleHolidayDateRange,
   groupHolidaysByDate,
 } from '@/modules/calendar/models/vietnameseHolidays'
 import {
@@ -59,6 +60,7 @@ export function useCalendarViewModel() {
   const holidayCacheRef = useRef(new Map<string, VietnameseHolidayItem[]>())
   const inFlightHolidayKeysRef = useRef(new Set<string>())
   const isLunarOutOfRangeNoticeShownRef = useRef(false)
+  const isHolidayOutOfRangeNoticeShownRef = useRef(false)
 
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
 
@@ -125,9 +127,9 @@ export function useCalendarViewModel() {
     }
   }, [showToast, t])
 
-  const holidayVisibleRange = getVisibleLunarDateRange(viewMode, currentDate)
-  const holidayRangeFrom = holidayVisibleRange?.from ?? null
-  const holidayRangeTo = holidayVisibleRange?.to ?? null
+  const holidayVisibleRange = getVisibleHolidayDateRange(viewMode, currentDate)
+  const holidayRangeFrom = holidayVisibleRange.from
+  const holidayRangeTo = holidayVisibleRange.to
 
   useEffect(() => {
     if (!isPreferencesLoaded || !calendarPreferences.showVietnameseHolidays) return
@@ -136,11 +138,21 @@ export function useCalendarViewModel() {
     const visibleRange = { from: holidayRangeFrom, to: holidayRangeTo }
 
     const timer = window.setTimeout(() => {
+      if (isRangeInsideSupportedLunarYears(visibleRange)) {
+        isHolidayOutOfRangeNoticeShownRef.current = false
+      } else if (!isHolidayOutOfRangeNoticeShownRef.current) {
+        isHolidayOutOfRangeNoticeShownRef.current = true
+        showToast(t('calendar.holiday.outOfRange'), 'info')
+      }
+
+      const supportedRange = clipRangeToSupportedLunarYears(visibleRange)
+      if (!supportedRange) return
+
       const unavailableKeys = new Set<string>([
         ...holidayCacheRef.current.keys(),
         ...inFlightHolidayKeysRef.current,
       ])
-      const missingRanges = groupMissingDateRanges(visibleRange, unavailableKeys)
+      const missingRanges = groupMissingDateRanges(supportedRange, unavailableKeys)
 
       for (const missingRange of missingRanges) {
         const requestedKeys = enumerateDateKeys(missingRange)
@@ -161,7 +173,7 @@ export function useCalendarViewModel() {
             setRawHolidaysBySolarDate(Object.fromEntries(holidayCacheRef.current))
           })
           .catch(() => {
-            // Giữ lịch hoạt động bình thường nếu tải ngày lễ thất bại tạm thời
+            showToast(t('calendar.holiday.loadError'), 'error')
           })
           .finally(() => {
             requestedKeys.forEach((dateKey) => inFlightHolidayKeysRef.current.delete(dateKey))
@@ -170,7 +182,14 @@ export function useCalendarViewModel() {
     }, LUNAR_FETCH_DEBOUNCE_MS)
 
     return () => window.clearTimeout(timer)
-  }, [calendarPreferences.showVietnameseHolidays, holidayRangeFrom, holidayRangeTo, isPreferencesLoaded])
+  }, [
+    calendarPreferences.showVietnameseHolidays,
+    holidayRangeFrom,
+    holidayRangeTo,
+    isPreferencesLoaded,
+    showToast,
+    t,
+  ])
 
   const handleUpdateCalendarPreferences = async (
     preferences: Partial<CalendarPreferences>,

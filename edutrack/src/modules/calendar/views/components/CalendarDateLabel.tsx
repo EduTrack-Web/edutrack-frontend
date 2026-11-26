@@ -10,7 +10,6 @@ interface CalendarDateLabelProps {
   showLunarMonth?: boolean
   isToday?: boolean
   isMuted?: boolean
-  hasEvents?: boolean
   variant?: 'day' | 'week' | 'month' | 'year'
 }
 
@@ -21,7 +20,6 @@ export function CalendarDateLabel({
   showLunarMonth = false,
   isToday = false,
   isMuted = false,
-  hasEvents = false,
   variant = 'month',
 }: CalendarDateLabelProps) {
   const { t } = useTranslation()
@@ -49,11 +47,9 @@ export function CalendarDateLabel({
     ? 'bg-blue-600 font-bold text-white shadow-xs'
     : isDay
       ? 'border border-slate-300 bg-transparent text-slate-800 dark:border-white/25 dark:text-slate-100'
-      : isYear && hasEvents
-        ? 'bg-blue-100 font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-        : isMuted
-          ? 'text-slate-400 dark:text-slate-600'
-          : 'text-slate-800 dark:text-slate-200'
+      : isMuted
+        ? 'text-slate-400 dark:text-slate-600'
+        : 'text-slate-800 dark:text-slate-200'
 
   const formattedLunar = lunarDate ? formatLunarDateLabel(lunarDate, showLunarMonth) : ''
   const displayLunar = isMonth && formattedLunar ? `(${formattedLunar})` : formattedLunar
