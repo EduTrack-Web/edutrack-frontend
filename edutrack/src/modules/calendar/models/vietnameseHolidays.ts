@@ -46,9 +46,12 @@ export const groupHolidaysByDate = (
   return result
 }
 
-export const formatHolidayTooltip = (holiday: VietnameseHolidayItem): string => {
+export const formatHolidayTooltip = (
+  holiday: VietnameseHolidayItem,
+  showLunarCalendar = true,
+): string => {
   const categoryLabel = holiday.category === 'public_holiday' ? 'Ngày nghỉ lễ' : 'Ngày lễ / Kỷ niệm'
-  return holiday.lunarDateLabel
+  return showLunarCalendar && holiday.lunarDateLabel
     ? `${categoryLabel}: ${holiday.name} (${holiday.lunarDateLabel})`
     : `${categoryLabel}: ${holiday.name}`
 }
@@ -67,7 +70,11 @@ export const formatHolidaySolarDate = (solarDate: string): string => {
   return `${capitalizedWeekday}, ${day} tháng ${month}, ${year}`
 }
 
-export const formatHolidayLunarSubtitle = (holiday: VietnameseHolidayItem): string | null => {
+export const formatHolidayLunarSubtitle = (
+  holiday: VietnameseHolidayItem,
+  showLunarCalendar = true,
+): string | null => {
+  if (!showLunarCalendar) return null
   if (holiday.lunarDate) {
     const leapText = holiday.lunarDate.isLeapMonth ? ' nhuận' : ''
     return `Nhằm ngày ${holiday.lunarDate.day} tháng ${holiday.lunarDate.month}${leapText} Âm lịch, năm ${holiday.lunarDate.yearCanChi}`

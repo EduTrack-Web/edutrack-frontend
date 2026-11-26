@@ -11,10 +11,11 @@ import {
 
 interface HolidayDetailModalProps {
   holiday: VietnameseHolidayItem | null
+  showLunarCalendar: boolean
   onClose: () => void
 }
 
-export function HolidayDetailModal({ holiday, onClose }: HolidayDetailModalProps) {
+export function HolidayDetailModal({ holiday, showLunarCalendar, onClose }: HolidayDetailModalProps) {
   const { t } = useTranslation()
   useEffect(() => {
     if (!holiday) return
@@ -29,7 +30,7 @@ export function HolidayDetailModal({ holiday, onClose }: HolidayDetailModalProps
 
   if (!holiday) return null
 
-  const lunarSubtitle = formatHolidayLunarSubtitle(holiday)
+  const lunarSubtitle = formatHolidayLunarSubtitle(holiday, showLunarCalendar)
   const holidayNote = getHolidayNote(holiday, {
     typePublic: t('calendar.holiday.typePublic'),
     typeCompensatory: t('calendar.holiday.typeCompensatory'),

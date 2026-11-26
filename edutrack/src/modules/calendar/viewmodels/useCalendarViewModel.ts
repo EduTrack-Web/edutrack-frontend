@@ -14,14 +14,15 @@ import {
   groupHolidaysByDate,
 } from '@/modules/calendar/models/vietnameseHolidays'
 import {
+  chunkDateRange,
   clipRangeToSupportedLunarYears,
   enumerateDateKeys,
+  getRangeForDateKeys,
   getVisibleLunarDateRange,
   groupMissingDateRanges,
   isRangeInsideSupportedLunarYears,
   LUNAR_OUT_OF_RANGE_CODE,
-  LUNAR_OUT_OF_RANGE_MESSAGE,
-  LUNAR_RATE_LIMITED_MESSAGE,
+  toLocalDateKey,
 } from '@/modules/calendar/models/lunarCalendar'
 import { calendarApi } from '@/modules/calendar/services/calendarApi'
 import { expandAllRecurringEvents } from '@/modules/calendar/utils/recurrenceExpander'
@@ -45,6 +46,7 @@ export function useCalendarViewModel() {
   const [calendarPreferences, setCalendarPreferences] = useState<CalendarPreferences>(
     DEFAULT_CALENDAR_PREFERENCES,
   )
+  const calendarPreferencesRef = useRef<CalendarPreferences>(DEFAULT_CALENDAR_PREFERENCES)
   const [isPreferencesLoaded, setIsPreferencesLoaded] = useState(false)
   const [isSavingPreferences, setIsSavingPreferences] = useState(false)
   const [lunarDatesBySolarDate, setLunarDatesBySolarDate] = useState<
@@ -73,12 +75,18 @@ export function useCalendarViewModel() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CalendarCategory | null>(null)
 
+  useEffect(() => {
+    calendarPreferencesRef.current = calendarPreferences
+  }, [calendarPreferences])
+
   const fetchData = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) {
         setIsLoading(true)
       }
+      let preferencesLoadFailed = false
       const preferenceRequest = calendarApi.getPreferences().catch((error: unknown) => {
+        preferencesLoadFailed = true
         console.error('Không thể tải cài đặt hiển thị lịch:', error)
         return null
       })
@@ -106,6 +114,8 @@ export function useCalendarViewModel() {
           ...DEFAULT_CALENDAR_PREFERENCES,
           ...preferenceRes.data.preferences,
         })
+      } else if (preferencesLoadFailed && !isSilent) {
+        showToast(t('calendar.settings.loadError'), 'error')
       }
       setIsPreferencesLoaded(true)
     } catch (err) {
@@ -115,60 +125,7 @@ export function useCalendarViewModel() {
         setIsLoading(false)
       }
     }
-  }, [])
-
-  useEffect(() => {
-    if (!isPreferencesLoaded || !calendarPreferences.showLunarCalendar) return
-
-    const visibleRange = getVisibleLunarDateRange(viewMode, currentDate)
-    if (!visibleRange) return
-
-    // Gộp các lần chuyển ngày/tháng/năm liên tiếp thành một lần tải để không vượt giới hạn request.
-    const timer = window.setTimeout(() => {
-      if (isRangeInsideSupportedLunarYears(visibleRange)) {
-        isLunarOutOfRangeNoticeShownRef.current = false
-      } else if (!isLunarOutOfRangeNoticeShownRef.current) {
-        isLunarOutOfRangeNoticeShownRef.current = true
-        showToast(LUNAR_OUT_OF_RANGE_MESSAGE, 'info')
-      }
-
-      const supportedRange = clipRangeToSupportedLunarYears(visibleRange)
-      if (!supportedRange) return
-
-      const unavailableKeys = new Set<string>([
-        ...lunarDateCacheRef.current.keys(),
-        ...inFlightLunarDateKeysRef.current,
-      ])
-      const missingRanges = groupMissingDateRanges(supportedRange, unavailableKeys)
-
-      for (const missingRange of missingRanges) {
-        const requestedKeys = enumerateDateKeys(missingRange)
-        requestedKeys.forEach((dateKey) => inFlightLunarDateKeysRef.current.add(dateKey))
-
-        void calendarApi.getLunarDates(missingRange.from, missingRange.to)
-          .then((response) => {
-            for (const lunarDate of response.data?.dates ?? []) {
-              lunarDateCacheRef.current.set(lunarDate.solarDate, lunarDate)
-            }
-            setLunarDatesBySolarDate(Object.fromEntries(lunarDateCacheRef.current))
-          })
-          .catch((error: unknown) => {
-            if (error instanceof ApiError && error.code === LUNAR_OUT_OF_RANGE_CODE) {
-              showToast(LUNAR_OUT_OF_RANGE_MESSAGE, 'info')
-            } else if (error instanceof ApiError && error.status === 429) {
-              showToast(LUNAR_RATE_LIMITED_MESSAGE, 'info')
-            } else {
-              showToast('Không thể tải dữ liệu lịch Âm. Lịch Dương vẫn được hiển thị bình thường.', 'error')
-            }
-          })
-          .finally(() => {
-            requestedKeys.forEach((dateKey) => inFlightLunarDateKeysRef.current.delete(dateKey))
-          })
-      }
-    }, LUNAR_FETCH_DEBOUNCE_MS)
-
-    return () => window.clearTimeout(timer)
-  }, [calendarPreferences.showLunarCalendar, currentDate, isPreferencesLoaded, showToast, viewMode])
+  }, [showToast, t])
 
   const holidayVisibleRange = getVisibleHolidayDateRange(viewMode, currentDate)
   const holidayRangeFrom = holidayVisibleRange.from
@@ -176,6 +133,7 @@ export function useCalendarViewModel() {
 
   useEffect(() => {
     if (!isPreferencesLoaded || !calendarPreferences.showVietnameseHolidays) return
+    if (!holidayRangeFrom || !holidayRangeTo) return
 
     const visibleRange = { from: holidayRangeFrom, to: holidayRangeTo }
 
@@ -237,11 +195,18 @@ export function useCalendarViewModel() {
     preferences: Partial<CalendarPreferences>,
     options?: { silent?: boolean },
   ): Promise<boolean> => {
-    const previous = calendarPreferences
-    setCalendarPreferences((prev) => ({
-      ...prev,
-      ...preferences,
-    }))
+    const isOptimistic = Boolean(options?.silent)
+    const rollbackValues: Partial<CalendarPreferences> = {}
+    if (isOptimistic) {
+      const currentSnapshot = calendarPreferencesRef.current
+      for (const key of Object.keys(preferences) as (keyof CalendarPreferences)[]) {
+        rollbackValues[key] = currentSnapshot[key]
+      }
+      setCalendarPreferences((prev) => ({
+        ...prev,
+        ...preferences,
+      }))
+    }
     try {
       setIsSavingPreferences(true)
       const response = await calendarApi.updatePreferences(preferences)
@@ -251,12 +216,17 @@ export function useCalendarViewModel() {
         ...(response.data?.preferences ?? {}),
       }))
       if (!options?.silent) {
-        showToast('Đã cập nhật cài đặt hiển thị lịch.', 'success')
+        showToast(t('calendar.settings.saveSuccess'), 'success')
       }
       return true
     } catch {
-      setCalendarPreferences(previous)
-      showToast('Không thể lưu cài đặt, vui lòng thử lại.', 'error')
+      if (isOptimistic) {
+        setCalendarPreferences((prev) => ({
+          ...prev,
+          ...rollbackValues,
+        }))
+      }
+      showToast(t('calendar.settings.saveError'), 'error')
       return false
     } finally {
       setIsSavingPreferences(false)
@@ -553,6 +523,74 @@ export function useCalendarViewModel() {
     }
     return true
   })
+
+  const lunarVisibleRange = viewMode === 'list'
+    ? getRangeForDateKeys(displayedEvents.map((event) => toLocalDateKey(new Date(event.startDate))))
+    : getVisibleLunarDateRange(viewMode, currentDate)
+  const lunarRangeFrom = lunarVisibleRange?.from ?? null
+  const lunarRangeTo = lunarVisibleRange?.to ?? null
+
+  useEffect(() => {
+    if (!isPreferencesLoaded || !calendarPreferences.showLunarCalendar) return
+    if (!lunarRangeFrom || !lunarRangeTo) return
+
+    const visibleRange = { from: lunarRangeFrom, to: lunarRangeTo }
+
+    // Gộp các lần chuyển ngày/tháng/năm liên tiếp thành một lần tải để không vượt giới hạn request.
+    const timer = window.setTimeout(() => {
+      if (isRangeInsideSupportedLunarYears(visibleRange)) {
+        isLunarOutOfRangeNoticeShownRef.current = false
+      } else if (!isLunarOutOfRangeNoticeShownRef.current) {
+        isLunarOutOfRangeNoticeShownRef.current = true
+        showToast(t('calendar.lunar.outOfRange'), 'info')
+      }
+
+      const supportedRange = clipRangeToSupportedLunarYears(visibleRange)
+      if (!supportedRange) return
+
+      const unavailableKeys = new Set<string>([
+        ...lunarDateCacheRef.current.keys(),
+        ...inFlightLunarDateKeysRef.current,
+      ])
+      const missingRanges = groupMissingDateRanges(supportedRange, unavailableKeys).flatMap((range) =>
+        chunkDateRange(range),
+      )
+
+      for (const missingRange of missingRanges) {
+        const requestedKeys = enumerateDateKeys(missingRange)
+        requestedKeys.forEach((dateKey) => inFlightLunarDateKeysRef.current.add(dateKey))
+
+        void calendarApi.getLunarDates(missingRange.from, missingRange.to)
+          .then((response) => {
+            for (const lunarDate of response.data?.dates ?? []) {
+              lunarDateCacheRef.current.set(lunarDate.solarDate, lunarDate)
+            }
+            setLunarDatesBySolarDate(Object.fromEntries(lunarDateCacheRef.current))
+          })
+          .catch((error: unknown) => {
+            if (error instanceof ApiError && error.code === LUNAR_OUT_OF_RANGE_CODE) {
+              showToast(t('calendar.lunar.outOfRange'), 'info')
+            } else if (error instanceof ApiError && error.status === 429) {
+              showToast(t('calendar.lunar.rateLimited'), 'info')
+            } else {
+              showToast(t('calendar.lunar.loadError'), 'error')
+            }
+          })
+          .finally(() => {
+            requestedKeys.forEach((dateKey) => inFlightLunarDateKeysRef.current.delete(dateKey))
+          })
+      }
+    }, LUNAR_FETCH_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [
+    calendarPreferences.showLunarCalendar,
+    isPreferencesLoaded,
+    lunarRangeFrom,
+    lunarRangeTo,
+    showToast,
+    t,
+  ])
 
   const getDateTitleLabel = (): string => {
     if (viewMode === 'day') {
