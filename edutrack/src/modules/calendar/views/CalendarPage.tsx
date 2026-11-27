@@ -6,7 +6,6 @@ import type {
   CalendarEvent,
   VietnameseHolidayItem,
 } from '@/modules/calendar/models/calendar.types'
-import { isFirstOrLastDayOfSolarMonth } from '@/modules/calendar/models/lunarCalendar'
 import {
   formatLunarDateLabel,
   getLunarDateTooltip,
