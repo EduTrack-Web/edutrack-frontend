@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '@/modules/auth/viewmodels/useAuth'
 import { useNotifications } from '@/modules/notifications/viewmodels/useNotifications'
-import { RecurringConfirmationDialog } from '@/modules/calendar/views/components/RecurringConfirmationDialog'
 import { formatAvatarUrl } from '@/shared/api/httpClient'
 import { useToast } from '@/shared/viewmodels/useToast'
 import { ConfirmLogoutModal } from '@/shared/components/ConfirmLogoutModal'
@@ -53,7 +52,7 @@ interface HeaderProps {
 
 export function Header({ onOpenSidebar }: HeaderProps) {
   const { user, logout } = useAuth()
-  const { confirmation, notifications, unreadCount, refresh, markAsRead, markAllAsRead, respondInvitation } =
+  const { notifications, unreadCount, refresh, markAsRead, markAllAsRead, respondInvitation, respondJoinRequest } =
     useNotifications()
   const { showToast } = useToast()
   const navigate = useNavigate()
@@ -254,6 +253,53 @@ export function Header({ onOpenSidebar }: HeaderProps) {
                             )}
                           </div>
                         )}
+
+                        {item.type === 'event_join_request' && item.eventId && typeof item.metadata?.requestId === 'string' && (
+                          <div className="ml-9 flex items-center gap-2 pt-1">
+                            {item.metadata?.status === 'approved' ? (
+                              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                ✓ Đã đồng ý yêu cầu
+                              </span>
+                            ) : item.metadata?.status === 'rejected' ? (
+                              <span className="text-[11px] font-bold text-rose-500">
+                                ✕ Đã từ chối yêu cầu
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-blue-700 active:scale-95"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void respondJoinRequest(
+                                      item.id,
+                                      item.eventId!,
+                                      String(item.metadata!.requestId),
+                                      'approved',
+                                    )
+                                  }}
+                                >
+                                  Đồng ý
+                                </button>
+                                <button
+                                  className="rounded-lg border border-palette-300 bg-white/50 px-2.5 py-1 text-[11px] font-semibold text-palette-700 transition hover:bg-palette-200/60 dark:border-white/10 dark:bg-white/10 dark:text-palette-200"
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void respondJoinRequest(
+                                      item.id,
+                                      item.eventId!,
+                                      String(item.metadata!.requestId),
+                                      'rejected',
+                                    )
+                                  }}
+                                >
+                                  Từ chối
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   }))}
@@ -351,7 +397,6 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         </div>
       </header>
 
-      {confirmation && <RecurringConfirmationDialog confirmation={confirmation} />}
       <ConfirmLogoutModal
         isLoading={isLoggingOut}
         isOpen={isLogoutModalOpen}

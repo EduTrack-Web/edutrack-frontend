@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
-import type { CalendarEvent } from '@/modules/calendar/models/calendar.types'
+import type { CalendarCategory, CalendarEvent } from '@/modules/calendar/models/calendar.types'
 import { isFirstOrLastDayOfSolarMonth } from '@/modules/calendar/models/lunarCalendar'
 import {
   formatHolidayTooltip,
@@ -12,6 +12,7 @@ import { useCalendarViewModel, type CalendarViewMode } from '@/modules/calendar/
 import { CalendarSidebar } from './components/CalendarSidebar'
 import { CalendarDateLabel } from './components/CalendarDateLabel'
 import { CalendarSettingsModal } from './components/CalendarSettingsModal'
+import { CalendarIcsModal } from './components/CalendarIcsModal'
 import { CategoryModal } from './components/CategoryModal'
 import { EventModal } from './components/EventModal'
 import { TaskTickButton } from './components/TaskTickButton'
@@ -21,6 +22,7 @@ import {
   buildEventsByDateMap,
   buildTimedSegmentsForDate,
   formatDateKey,
+  isFirstOccurrenceInSeries,
   layoutDayTimedSegments,
   unifyMultiDaySegmentWidths,
 } from '../utils/calendarLayout'
@@ -109,6 +111,7 @@ export function CalendarPage() {
   const [pendingToggleTask, setPendingToggleTask] = useState<CalendarEvent | null>(null)
   const [isTogglingTask, setIsTogglingTask] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
+  const [icsCategory, setIcsCategory] = useState<CalendarCategory | null>(null)
 
   const [pendingRecurringAction, setPendingRecurringAction] = useState<{
     event: CalendarEvent
@@ -126,6 +129,7 @@ export function CalendarPage() {
     initialY: number
     initialHeight: number
     currentHeight: number
+    previewEndDate: string
   } | null>(null)
 
   useEffect(() => {
@@ -136,7 +140,15 @@ export function CalendarPage() {
       const deltaY = e.clientY - resizingEvent.initialY
       const snappedDelta = Math.round(deltaY / 12) * 12
       const newHeight = Math.max(12, resizingEvent.initialHeight + snappedDelta)
-      setResizingEvent((prev) => (prev ? { ...prev, currentHeight: newHeight } : null))
+      const addedMinutes = Math.round(snappedDelta / 12) * 15
+      const origStart = new Date(resizingEvent.event.startDate)
+      const origEnd = new Date(resizingEvent.event.endDate)
+      const origDurationMs = Math.max(15 * 60000, origEnd.getTime() - origStart.getTime())
+      const newDurationMs = Math.max(15 * 60000, origDurationMs + addedMinutes * 60000)
+      const previewEnd = new Date(origStart.getTime() + newDurationMs).toISOString()
+      setResizingEvent((prev) =>
+        prev ? { ...prev, currentHeight: newHeight, previewEndDate: previewEnd } : null,
+      )
     }
 
     const handlePointerUp = async (e: PointerEvent) => {
@@ -209,8 +221,36 @@ export function CalendarPage() {
       initialY: e.clientY,
       initialHeight: initialH,
       currentHeight: initialH,
+      previewEndDate: event.endDate,
     })
   }
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return
+      const target = e.target as HTMLElement | null
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      if (
+        vm.isEventModalOpen ||
+        vm.isCategoryModalOpen ||
+        eventToDelete ||
+        pendingRecurringAction ||
+        pendingToggleTask ||
+        !vm.undoAction
+      ) {
+        return
+      }
+      e.preventDefault()
+      void vm.handleUndo()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    eventToDelete,
+    pendingRecurringAction,
+    pendingToggleTask,
+    vm,
+  ])
 
   const handleRequestToggleTask = (event: CalendarEvent) => {
     const isRecurring = Boolean(
@@ -265,7 +305,10 @@ export function CalendarPage() {
     return Math.max(0, Math.min(24 * 60 - 15, quarterIndex * 15))
   }
 
-  const handleTimedColumnDragOver = (e: React.DragEvent<HTMLDivElement>, columnKey: string) => {
+  const handleTimedColumnDragOver = (
+    e: React.DragEvent<HTMLDivElement>,
+    columnKey: string,
+  ) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
 
@@ -279,7 +322,7 @@ export function CalendarPage() {
     const label = `${formatMinutesToHHMM(startMin)} – ${formatMinutesToHHMM(endMin)}`
 
     setDragPreview((prev) => {
-      if (prev && prev.columnKey === columnKey && prev.startMin === startMin && prev.endMin === endMin) {
+      if (prev && prev.columnKey === columnKey && prev.startMin === startMin && prev.endMin === endMin && prev.label === label) {
         return prev
       }
       return { columnKey, startMin, endMin, label }
@@ -329,6 +372,11 @@ export function CalendarPage() {
       origStart.getFullYear() === newStart.getFullYear() &&
       origStart.getMonth() === newStart.getMonth() &&
       origStart.getDate() === newStart.getDate()
+
+    if (newStart.getTime() === origStart.getTime() && newEnd.getTime() === origEnd.getTime()) {
+      setDraggedEvent(null)
+      return
+    }
 
     if (isRecurring) {
       setPendingRecurringAction({
@@ -389,6 +437,11 @@ export function CalendarPage() {
       origStart.getMonth() === newStart.getMonth() &&
       origStart.getDate() === newStart.getDate()
 
+    if (newStart.getTime() === origStart.getTime() && newEnd.getTime() === origEnd.getTime()) {
+      setDraggedEvent(null)
+      return
+    }
+
     if (isRecurring) {
       setPendingRecurringAction({
         event: draggedEvent,
@@ -426,6 +479,16 @@ export function CalendarPage() {
     const newStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0)
     const newEnd = new Date(newStart.getTime() + durationMs)
 
+    if (
+      draggedEvent.isAllDay &&
+      origStart.getFullYear() === newStart.getFullYear() &&
+      origStart.getMonth() === newStart.getMonth() &&
+      origStart.getDate() === newStart.getDate()
+    ) {
+      setDraggedEvent(null)
+      return
+    }
+
     const isRecurring = Boolean(
       (draggedEvent.recurrence && draggedEvent.recurrence.frequency !== 'none') ||
       (draggedEvent as unknown as { _isOccurrence?: boolean })?._isOccurrence,
@@ -435,6 +498,11 @@ export function CalendarPage() {
       origStart.getFullYear() === newStart.getFullYear() &&
       origStart.getMonth() === newStart.getMonth() &&
       origStart.getDate() === newStart.getDate()
+
+    if (newStart.getTime() === origStart.getTime() && newEnd.getTime() === origEnd.getTime()) {
+      setDraggedEvent(null)
+      return
+    }
 
     if (isRecurring) {
       setPendingRecurringAction({
@@ -480,8 +548,12 @@ export function CalendarPage() {
     }
   }, [vm.viewMode])
 
+  const userCategoryIds = new Set(vm.categories.map((c) => c.id))
   const visibleEvents = vm.events.filter(
-    (event) => !event.calendarId || vm.selectedCategoryIds.includes(event.calendarId),
+    (event) =>
+      !event.calendarId ||
+      !userCategoryIds.has(event.calendarId) ||
+      vm.selectedCategoryIds.includes(event.calendarId),
   )
   const eventsByDate = buildEventsByDateMap(visibleEvents)
 
@@ -571,6 +643,7 @@ export function CalendarPage() {
           onOpenCreateCategory={vm.handleOpenCreateCategory}
           onOpenCreateEvent={() => vm.handleOpenCreateEvent()}
           onOpenEditCategory={vm.handleOpenEditCategory}
+          onOpenIcsModal={(cat) => setIcsCategory(cat)}
           onQuickChangeColor={vm.handleQuickChangeColor}
           onSelectDate={vm.handleSelectDate}
           onShowAllCategories={vm.handleShowAllCategories}
@@ -910,11 +983,17 @@ export function CalendarPage() {
                     const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, leftPct, widthPct, zIndex } = seg
                     const top = (startMin / 60) * HOUR_HEIGHT
                     const height = isZeroDuration ? 26 : Math.max(26, (durationMin / 60) * HOUR_HEIGHT)
-                    const cardHeight = resizingEvent?.segmentId === segmentId ? resizingEvent.currentHeight : height
+                    const isResizingThis = resizingEvent?.segmentId === segmentId
+                    const cardHeight = isResizingThis ? resizingEvent.currentHeight : height
                     const eventColor = event.color || event.calendar?.color || '#2563EB'
                     const isTask = event.entryType === 'task'
                     const isBeingDragged = draggedEvent?.id === event.id
-                    const segmentTimeLabel = formatEventTime(event.startDate, event.endDate, false)
+                    const effectiveEndIso = isResizingThis ? resizingEvent.previewEndDate : event.endDate
+                    const segmentTimeLabel = formatEventTime(event.startDate, effectiveEndIso, false)
+                    const resizeEndD = isResizingThis ? new Date(resizingEvent.previewEndDate) : null
+                    const resizePreviewLabel = resizeEndD
+                      ? formatMinutesToHHMM(resizeEndD.getHours() * 60 + resizeEndD.getMinutes())
+                      : ''
                     const roundedClass =
                       isStartSegment && isEndSegment
                         ? 'rounded-xl'
@@ -1004,7 +1083,9 @@ export function CalendarPage() {
                         {isEndSegment && (
                           <div
                             aria-label="Kéo đổi thời lượng"
-                            className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
+                            className={`absolute bottom-0 inset-x-0 h-2.5 cursor-ns-resize transition-opacity bg-black/20 flex items-center justify-center z-30 ${
+                              isResizingThis ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'
+                            }`}
                             onClick={(e) => {
                               e.stopPropagation()
                               e.preventDefault()
@@ -1012,7 +1093,13 @@ export function CalendarPage() {
                             onPointerDown={(e) => handleResizeStart(e, event, segmentId, height)}
                             title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
                           >
-                            <div className="h-0.5 w-6 rounded-full bg-white/80 pointer-events-none" />
+                            {isResizingThis ? (
+                              <span className="pointer-events-none -translate-y-3 rounded bg-slate-900/90 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                                → {resizePreviewLabel}
+                              </span>
+                            ) : (
+                              <div className="h-0.5 w-6 rounded-full bg-white/80 pointer-events-none" />
+                            )}
                           </div>
                         )}
                       </div>
@@ -1245,19 +1332,20 @@ export function CalendarPage() {
 
                         
                         {timedSegments.map((seg) => {
-                          const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, isMultiDay, leftPct, widthPct, zIndex } = seg
+                          const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, leftPct, widthPct, zIndex } = seg
                           const top = (startMin / 60) * HOUR_HEIGHT
                           const height = isZeroDuration ? 20 : Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
-                          const cardHeight = resizingEvent?.segmentId === segmentId ? resizingEvent.currentHeight : height
+                          const isResizingThis = resizingEvent?.segmentId === segmentId
+                          const cardHeight = isResizingThis ? resizingEvent.currentHeight : height
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
                           const isTask = event.entryType === 'task'
                           const isBeingDragged = draggedEvent?.id === event.id
-                          const startTimeText = isMultiDay
-                            ? formatEventTime(event.startDate, event.endDate, false)
-                            : formatMinutesToHHMM(startMin)
-                          const timeRangeText = isMultiDay
-                            ? formatEventTime(event.startDate, event.endDate, false)
-                            : startTimeText
+                          const effectiveEndIso = isResizingThis ? resizingEvent.previewEndDate : event.endDate
+                          const timeRangeText = formatEventTime(event.startDate, effectiveEndIso, false)
+                          const resizeEndD = isResizingThis ? new Date(resizingEvent.previewEndDate) : null
+                          const resizePreviewLabel = resizeEndD
+                            ? formatMinutesToHHMM(resizeEndD.getHours() * 60 + resizeEndD.getMinutes())
+                            : ''
                           const roundedClass =
                             isStartSegment && isEndSegment
                               ? 'rounded-md'
@@ -1306,7 +1394,7 @@ export function CalendarPage() {
                                       />
                                     )}
                                     <span className="font-bold opacity-80 shrink-0">
-                                      {startTimeText}
+                                      {timeRangeText}
                                     </span>
                                     <span className="truncate font-medium">{event.title}</span>
                                   </span>
@@ -1342,7 +1430,9 @@ export function CalendarPage() {
                               {isEndSegment && (
                                 <div
                                   aria-label="Kéo đổi thời lượng"
-                                  className="absolute bottom-0 inset-x-0 h-2 cursor-ns-resize opacity-0 group-hover/item:opacity-100 transition-opacity bg-black/20 flex items-center justify-center z-30"
+                                  className={`absolute bottom-0 inset-x-0 h-2 cursor-ns-resize transition-opacity bg-black/20 flex items-center justify-center z-30 ${
+                                    isResizingThis ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'
+                                  }`}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     e.preventDefault()
@@ -1350,7 +1440,13 @@ export function CalendarPage() {
                                   onPointerDown={(e) => handleResizeStart(e, event, segmentId, height)}
                                   title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
                                 >
-                                  <div className="h-0.5 w-4 rounded-full bg-white/80 pointer-events-none" />
+                                  {isResizingThis ? (
+                                    <span className="pointer-events-none -translate-y-3 rounded bg-slate-900/90 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+                                      → {resizePreviewLabel}
+                                    </span>
+                                  ) : (
+                                    <div className="h-0.5 w-4 rounded-full bg-white/80 pointer-events-none" />
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1440,8 +1536,8 @@ export function CalendarPage() {
                         />
 
                         {isDragTarget && draggedEvent && (
-                          <span className="rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">
-                            Thả vào đây
+                          <span className="rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 truncate max-w-full">
+                            {`${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')} • ${formatEventTime(draggedEvent.startDate, draggedEvent.endDate, draggedEvent.isAllDay)}`}
                           </span>
                         )}
 
@@ -1782,20 +1878,34 @@ export function CalendarPage() {
         categories={vm.categories.filter((category) => !category.settings?.archived || category.id === vm.editingEvent?.calendarId)}
         initialDate={vm.selectedModalDate}
         initialEvent={vm.editingEvent}
+        isFirstOccurrence={
+          vm.editingEvent
+            ? isFirstOccurrenceInSeries(vm.allExpandedEvents, vm.editingEvent, vm.selectedModalDate)
+            : true
+        }
         isOpen={vm.isEventModalOpen}
         onClose={vm.handleCloseEventModal}
         onOpenCreateCategory={vm.handleOpenCreateCategory}
-        onSaved={vm.refreshData}
+        onSaved={() => void vm.refreshData(true)}
       />
 
       <CategoryModal
         initialCategory={vm.editingCategory}
         isOpen={vm.isCategoryModalOpen}
         onClose={() => vm.setIsCategoryModalOpen(false)}
-        onSaved={vm.refreshData}
+        onSaved={() => void vm.refreshData(true)}
       />
 
-      {categoryToDelete && (
+      <CalendarIcsModal
+        category={icsCategory}
+        isOpen={Boolean(icsCategory)}
+        onClose={() => setIcsCategory(null)}
+        onImported={() => vm.refreshData(true)}
+      />
+
+      {categoryToDelete && (() => {
+        const deletingCategory = vm.categories.find((c) => c.id === categoryToDelete)
+        return (
         <div
           aria-modal="true"
           className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
@@ -1811,10 +1921,13 @@ export function CalendarPage() {
               </div>
               <div>
                 <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                  Xóa danh mục lịch?
+                  Xóa vĩnh viễn lịch?
                 </h4>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Bạn có chắc chắn muốn xóa lịch này không? Các sự kiện thuộc lịch sẽ được tách ra độc lập.
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Bạn sẽ xóa vĩnh viễn &quot;{deletingCategory?.name || 'lịch này'}&quot; đối với tất cả những người sử dụng lịch này. Bạn có muốn tiếp tục không?
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Toàn bộ sự kiện và nhiệm vụ thuộc lịch này cũng sẽ bị xóa vĩnh viễn.
                 </p>
               </div>
             </div>
@@ -1836,12 +1949,13 @@ export function CalendarPage() {
                 }}
                 className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition-colors"
               >
-                Xác nhận xóa
+                Xóa vĩnh viễn
               </button>
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {eventToDelete && (() => {
         const isEventToDeleteRecurring = Boolean(
@@ -1853,6 +1967,7 @@ export function CalendarPage() {
             <RecurrenceScopeModal
               action="delete"
               entryType={eventToDelete.entryType}
+              isFirstOccurrence={isFirstOccurrenceInSeries(vm.allExpandedEvents, eventToDelete)}
               isOpen={true}
               isSubmitting={isDeletingEvent}
               onCancel={() => setEventToDelete(null)}
@@ -1925,6 +2040,7 @@ export function CalendarPage() {
         <RecurrenceScopeModal
           action="update"
           entryType={pendingRecurringAction.event.entryType}
+          isFirstOccurrence={isFirstOccurrenceInSeries(vm.allExpandedEvents, pendingRecurringAction.event)}
           isOpen={true}
           onCancel={() => setPendingRecurringAction(null)}
           onConfirm={(mode) => void handleConfirmRecurringMove(mode)}
@@ -1937,6 +2053,7 @@ export function CalendarPage() {
         <RecurrenceScopeModal
           action={pendingToggleTask.isCompleted ? 'reopen' : 'complete'}
           entryType={pendingToggleTask.entryType}
+          isFirstOccurrence={isFirstOccurrenceInSeries(vm.allExpandedEvents, pendingToggleTask)}
           isOpen={true}
           isSubmitting={isTogglingTask}
           onCancel={() => setPendingToggleTask(null)}
@@ -1962,6 +2079,32 @@ export function CalendarPage() {
         onUpdatePreferences={vm.handleUpdateCalendarPreferences}
         preferences={vm.calendarPreferences}
       />
+
+      {vm.undoAction && (
+        <div
+          aria-live="polite"
+          className="fixed bottom-5 left-1/2 z-60 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-slate-700/80 bg-slate-900 px-4 py-2.5 text-xs font-medium text-white shadow-xl dark:border-white/15 dark:bg-slate-800"
+          role="status"
+        >
+          <span className="max-w-[240px] truncate">{vm.undoAction.label}</span>
+          <button
+            className="rounded-lg bg-blue-500/20 px-2.5 py-1 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/30 disabled:opacity-50"
+            disabled={vm.isUndoing}
+            onClick={() => void vm.handleUndo()}
+            type="button"
+          >
+            {vm.isUndoing ? 'Đang hoàn tác...' : 'Hoàn tác'}
+          </button>
+          <button
+            aria-label="Đóng thông báo hoàn tác"
+            className="rounded-md p-1 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+            onClick={vm.dismissUndo}
+            type="button"
+          >
+            <Icon className="size-3.5" name="close" />
+          </button>
+        </div>
+      )}
 
     </div>
   )

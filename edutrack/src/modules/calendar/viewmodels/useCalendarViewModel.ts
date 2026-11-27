@@ -30,6 +30,12 @@ import { useRecurringConfirmation } from './useRecurringConfirmation'
 
 export type CalendarViewMode = 'day' | 'week' | 'month' | 'year' | 'list'
 
+export interface CalendarUndoAction {
+  id: number
+  label: string
+  undo: () => Promise<void>
+}
+
 const LUNAR_FETCH_DEBOUNCE_MS = 300
 
 export function useCalendarViewModel() {
@@ -53,6 +59,43 @@ export function useCalendarViewModel() {
   const lunarDateCacheRef = useRef(new Map<string, VietnameseLunarDate>())
   const inFlightLunarDateKeysRef = useRef(new Set<string>())
   const holidayCacheRef = useRef(new Map<string, VietnameseHolidayItem[]>())
+  const [undoAction, setUndoAction] = useState<CalendarUndoAction | null>(null)
+  const [isUndoing, setIsUndoing] = useState(false)
+  const undoTimerRef = useRef<number | null>(null)
+
+  const dismissUndo = useCallback(() => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = null
+    }
+    setUndoAction(null)
+  }, [])
+
+  const pushUndoAction = useCallback((label: string, undo: () => Promise<void>) => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current)
+    }
+    setUndoAction({ id: Date.now(), label, undo })
+    undoTimerRef.current = window.setTimeout(() => {
+      setUndoAction(null)
+      undoTimerRef.current = null
+    }, 8000)
+  }, [])
+
+  const handleUndo = useCallback(async () => {
+    if (!undoAction || isUndoing) return
+    const actionToRun = undoAction
+    try {
+      setIsUndoing(true)
+      await actionToRun.undo()
+      dismissUndo()
+      showToast('Đã hoàn tác thao tác.', 'success')
+    } catch {
+      showToast('Không thể hoàn tác thao tác này.', 'error')
+    } finally {
+      setIsUndoing(false)
+    }
+  }, [dismissUndo, isUndoing, showToast, undoAction])
   const inFlightHolidayKeysRef = useRef(new Set<string>())
   const isLunarOutOfRangeNoticeShownRef = useRef(false)
 
@@ -416,10 +459,22 @@ export function useCalendarViewModel() {
     if (!mode && task.recurrence && task.recurrence.frequency !== 'none') {
       if (!await confirmRecurring(currentStatus ? 'reopen' : 'complete', task.entryType, task.title)) return
     }
+    const prevExceptions = [...(task.exceptionDates ?? [])]
     try {
       if (mode && mode !== 'all') {
-        await calendarApi.toggleTaskComplete(baseId, !currentStatus, mode, targetDate)
+        const res = await calendarApi.toggleTaskComplete(baseId, !currentStatus, mode, targetDate)
         await fetchData(true)
+        const createdId = res.data?.event?.id
+        if (mode === 'this' && createdId) {
+          pushUndoAction(
+            `${!currentStatus ? 'Đã hoàn thành' : 'Đã mở lại'} “${task.title}”`,
+            async () => {
+              await calendarApi.deleteEvent(createdId, 'all')
+              await calendarApi.updateEvent(baseId, { exceptionDates: prevExceptions })
+              await fetchData(true)
+            },
+          )
+        }
       } else {
         setEvents((prev) =>
           prev.map((e) =>
@@ -429,6 +484,13 @@ export function useCalendarViewModel() {
           ),
         )
         await calendarApi.toggleTaskComplete(baseId, !currentStatus)
+        pushUndoAction(
+          `${!currentStatus ? 'Đã hoàn thành' : 'Đã mở lại'} “${task.title}”`,
+          async () => {
+            await calendarApi.toggleTaskComplete(baseId, currentStatus)
+            await fetchData(true)
+          },
+        )
       }
     } catch (err) {
       console.error('Lỗi khi toggle task:', err)
@@ -442,13 +504,48 @@ export function useCalendarViewModel() {
     date?: string,
   ) => {
     const baseId = resolveBaseEventId(eventId)
+    const targetEvent = events.find((e) => e.id === baseId)
+    const prevExceptions = [...(targetEvent?.exceptionDates ?? [])]
     try {
       if (mode && mode !== 'all') {
         await calendarApi.deleteEvent(baseId, mode, date)
         await fetchData(true)
+        if (mode === 'this' && targetEvent) {
+          pushUndoAction(`Đã xóa lần diễn ra “${targetEvent.title}”`, async () => {
+            await calendarApi.updateEvent(baseId, { exceptionDates: prevExceptions })
+            await fetchData(true)
+          })
+        }
       } else {
         setEvents((prev) => prev.filter((e) => e.id !== baseId))
         await calendarApi.deleteEvent(baseId, mode, date)
+        if (targetEvent && (!targetEvent.recurrence || targetEvent.recurrence.frequency === 'none')) {
+          pushUndoAction(`Đã xóa “${targetEvent.title}”`, async () => {
+            await calendarApi.createEvent({
+              calendarId: targetEvent.calendarId ?? null,
+              entryType: targetEvent.entryType,
+              title: targetEvent.title,
+              description: targetEvent.description,
+              priority: targetEvent.priority,
+              startDate: targetEvent.startDate,
+              endDate: targetEvent.endDate,
+              deadline: targetEvent.deadline ?? null,
+              isAllDay: targetEvent.isAllDay,
+              location: targetEvent.location,
+              onlineMeetingUrl: targetEvent.onlineMeetingUrl,
+              submissionUrl: targetEvent.submissionUrl,
+              color: targetEvent.inheritsCalendarColor ? '' : targetEvent.color,
+              availability: targetEvent.availability,
+              visibility: targetEvent.visibility,
+              timeZone: targetEvent.timeZone,
+              guests: targetEvent.guests,
+              checklist: targetEvent.checklist,
+              reminders: targetEvent.reminders,
+              recurrence: targetEvent.recurrence,
+            })
+            await fetchData(true)
+          })
+        }
       }
     } catch (err) {
       console.error('Lỗi khi xóa sự kiện:', err)
@@ -468,6 +565,12 @@ export function useCalendarViewModel() {
     const prevEvents = [...events]
     const targetEvent = events.find((e) => e.id === baseId)
     if (!targetEvent) return
+
+    const prevStartDate = targetEvent.startDate
+    const prevEndDate = targetEvent.endDate
+    const prevIsAllDay = targetEvent.isAllDay
+    const prevDeadline = targetEvent.deadline ?? null
+    const prevExceptions = [...(targetEvent.exceptionDates ?? [])]
 
     let nextDeadlineIso: string | null | undefined = undefined
     if (targetEvent.deadline) {
@@ -490,6 +593,14 @@ export function useCalendarViewModel() {
 
       if (mode && mode !== 'all') {
         await fetchData(true)
+        const createdId = res.data?.event?.id
+        if (mode === 'this' && createdId) {
+          pushUndoAction(`Đã cập nhật “${targetEvent.title}”`, async () => {
+            await calendarApi.deleteEvent(createdId, 'all')
+            await calendarApi.updateEvent(baseId, { exceptionDates: prevExceptions })
+            await fetchData(true)
+          })
+        }
       } else {
         setEvents((prev) =>
           prev.map((e) => {
@@ -505,6 +616,15 @@ export function useCalendarViewModel() {
             return e
           }),
         )
+        pushUndoAction(`Đã cập nhật “${targetEvent.title}”`, async () => {
+          await calendarApi.updateEvent(baseId, {
+            startDate: prevStartDate,
+            endDate: prevEndDate,
+            isAllDay: prevIsAllDay,
+            deadline: prevDeadline,
+          })
+          await fetchData(true)
+        })
       }
     } catch (err) {
       console.error('Lỗi khi di chuyển sự kiện:', err)
@@ -562,7 +682,12 @@ export function useCalendarViewModel() {
     categories,
     selectedCategoryIds,
     events: displayedEvents,
+    allExpandedEvents: expandedEvents,
     allEventsCount: events.length,
+    undoAction,
+    isUndoing,
+    handleUndo,
+    dismissUndo,
     isLoading,
     calendarPreferences,
     isSavingPreferences,

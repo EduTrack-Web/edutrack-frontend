@@ -96,6 +96,10 @@ export interface CalendarCategory {
   isVisible: boolean
   isDefault: boolean
   sharedWith?: CategoryMember[]
+  isShared?: boolean
+  isSubscribed?: boolean
+  publicToken?: string | null
+  myRole?: 'owner' | 'viewer' | 'editor' | 'admin'
   createdAt?: string
   updatedAt?: string
 }
@@ -115,6 +119,34 @@ export interface UpdateCategoryInput {
   description?: string
   isVisible?: boolean
   sharedWith?: CategoryMember[]
+}
+
+export interface EventJoinRequestItem {
+  id: string
+  userId: string
+  email: string
+  fullName: string
+  message: string
+  status: 'pending' | 'approved' | 'rejected'
+  createdAt: string
+  respondedAt?: string | null
+}
+
+export interface SharedEventPreview {
+  id: string
+  title: string
+  description: string
+  startDate: string
+  endDate: string
+  isAllDay: boolean
+  location: string
+  onlineMeetingUrl: string
+  color: string
+  timeZone?: string
+  creator: { id: string; fullName: string }
+  recurrence?: RecurrenceConfig
+  viewerStatus: 'owner' | 'accepted' | 'pending_invite' | 'pending_request' | 'rejected' | 'none'
+  myRequestId?: string
 }
 
 export interface CalendarEvent {
@@ -147,6 +179,9 @@ export interface CalendarEvent {
   reminders: ReminderItem[]
   recurrence?: RecurrenceConfig
   exceptionDates?: string[]
+  shareToken?: string | null
+  isShareEnabled?: boolean
+  joinRequests?: EventJoinRequestItem[]
   createdAt?: string
   updatedAt?: string
 }
@@ -178,6 +213,7 @@ export interface UpdateEventInput extends Partial<CreateEventInput> {
   isCompleted?: boolean
   mode?: RecurringUpdateMode
   targetDate?: string
+  exceptionDates?: string[]
 }
 
 export interface EventQueryFilters {

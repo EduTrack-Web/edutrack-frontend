@@ -41,6 +41,14 @@ export const router = createBrowserRouter([
   },
   {
     hydrateFallbackElement: null,
+    path: '/calendar/public/:publicToken',
+    lazy: async () => {
+      const { PublicCalendarPage } = await import('@/modules/calendar/views/PublicCalendarPage')
+      return { Component: PublicCalendarPage }
+    },
+  },
+  {
+    hydrateFallbackElement: null,
     path: '/onboarding',
     lazy: async () => {
       const { ProfileSetupPage } = await import('@/modules/onboarding/views/ProfileSetupPage')
@@ -63,6 +71,13 @@ export const router = createBrowserRouter([
         lazy: async () => {
           const { CalendarPage } = await import('@/modules/calendar/views/CalendarPage')
           return { Component: CalendarPage }
+        },
+      },
+      {
+        path: '/calendar/shared/:shareToken',
+        lazy: async () => {
+          const { SharedEventPage } = await import('@/modules/calendar/views/SharedEventPage')
+          return { Component: SharedEventPage }
         },
       },
       {

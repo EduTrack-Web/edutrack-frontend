@@ -2,13 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { NotificationItem } from '../models/notification.types'
 import { notificationApi } from '../services/notificationApi'
 import { calendarApi } from '@/modules/calendar/services/calendarApi'
-import { useRecurringConfirmation } from '@/modules/calendar/viewmodels/useRecurringConfirmation'
 import { useToast } from '@/shared/viewmodels/useToast'
 
 export function useNotifications() {
-  const { confirmation, confirmRecurring } = useRecurringConfirmation()
-  const responding = useRef(false)
-  useEffect(() => () => { responding.current = false }, [])
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
@@ -109,28 +105,20 @@ export function useNotifications() {
     eventId: string,
     status: 'accepted' | 'declined',
   ) => {
-    if (responding.current) return
-    responding.current = true
     try {
-      const { data } = await calendarApi.getEventById(eventId)
-      if (!responding.current) return
-      const event = data.event
-      if (event.recurrence && event.recurrence.frequency !== 'none') {
-        if (!await confirmRecurring(status, event.entryType, event.title)) return
-      }
       await calendarApi.respondInvite(eventId, status)
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === notificationId || n.eventId === eventId
             ? {
-                ...n,
-                isRead: true,
-                metadata: {
-                  ...n.metadata,
-                  status,
-                  responded: true,
-                },
-              }
+              ...n,
+              isRead: true,
+              metadata: {
+                ...n.metadata,
+                status,
+                responded: true,
+              },
+            }
             : n,
         ),
       )
@@ -144,13 +132,45 @@ export function useNotifications() {
       window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Không thể phản hồi lời mời.', 'error')
-    } finally {
-      responding.current = false
+    }
+  }
+
+  const respondJoinRequest = async (
+    notificationId: string,
+    eventId: string,
+    requestId: string,
+    decision: 'approved' | 'rejected',
+  ) => {
+    try {
+      await calendarApi.respondJoinRequest(eventId, requestId, decision)
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notificationId
+            ? {
+                ...n,
+                isRead: true,
+                metadata: {
+                  ...n.metadata,
+                  status: decision,
+                },
+              }
+            : n,
+        ),
+      )
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+      showToast(
+        decision === 'approved'
+          ? 'Đã duyệt yêu cầu tham gia sự kiện.'
+          : 'Đã từ chối yêu cầu tham gia sự kiện.',
+        decision === 'approved' ? 'success' : 'info',
+      )
+      window.dispatchEvent(new CustomEvent('edutrack-calendar-refresh'))
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Không thể xử lý yêu cầu tham gia.', 'error')
     }
   }
 
   return {
-    confirmation,
     notifications,
     unreadCount,
     isLoading,
@@ -159,5 +179,6 @@ export function useNotifications() {
     markAllAsRead,
     deleteNotification,
     respondInvitation,
+    respondJoinRequest,
   }
 }

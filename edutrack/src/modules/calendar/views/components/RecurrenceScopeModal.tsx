@@ -15,6 +15,7 @@ interface RecurrenceScopeOption {
 function getRecurrenceScopeOptions(
   action: RecurrenceScopeAction,
   targetDate: Date,
+  isFirstOccurrence = false,
 ): RecurrenceScopeOption[] {
   const formattedDate = targetDate.toLocaleDateString('vi-VN', {
     day: '2-digit',
@@ -22,8 +23,10 @@ function getRecurrenceScopeOptions(
     year: 'numeric',
   })
 
+  let options: RecurrenceScopeOption[]
+
   if (action === 'delete') {
-    return [
+    options = [
       {
         value: 'this',
         label: 'Chỉ lần này',
@@ -40,10 +43,8 @@ function getRecurrenceScopeOptions(
         description: 'Xóa cho toàn bộ các lần xuất hiện trong chuỗi lặp.',
       },
     ]
-  }
-
-  if (action === 'complete') {
-    return [
+  } else if (action === 'complete') {
+    options = [
       {
         value: 'this',
         label: 'Chỉ lần này',
@@ -60,10 +61,8 @@ function getRecurrenceScopeOptions(
         description: 'Đánh dấu hoàn thành cho toàn bộ các lần xuất hiện trong chuỗi lặp.',
       },
     ]
-  }
-
-  if (action === 'reopen') {
-    return [
+  } else if (action === 'reopen') {
+    options = [
       {
         value: 'this',
         label: 'Chỉ lần này',
@@ -80,25 +79,27 @@ function getRecurrenceScopeOptions(
         description: 'Mở lại cho toàn bộ các lần xuất hiện trong chuỗi lặp.',
       },
     ]
+  } else {
+    options = [
+      {
+        value: 'this',
+        label: 'Chỉ lần này',
+        description: `Chỉ cập nhật cho lần diễn ra vào ngày ${formattedDate}.`,
+      },
+      {
+        value: 'following',
+        label: 'Lần này và các lần tiếp theo',
+        description: `Cập nhật từ ngày ${formattedDate} trở đi trong chuỗi lặp.`,
+      },
+      {
+        value: 'all',
+        label: 'Tất cả các lần trong chuỗi',
+        description: 'Cập nhật cho toàn bộ các lần xuất hiện trong chuỗi lặp.',
+      },
+    ]
   }
 
-  return [
-    {
-      value: 'this',
-      label: 'Chỉ lần này',
-      description: `Chỉ cập nhật cho lần diễn ra vào ngày ${formattedDate}.`,
-    },
-    {
-      value: 'following',
-      label: 'Lần này và các lần tiếp theo',
-      description: `Cập nhật từ ngày ${formattedDate} trở đi trong chuỗi lặp.`,
-    },
-    {
-      value: 'all',
-      label: 'Tất cả các lần trong chuỗi',
-      description: 'Cập nhật cho toàn bộ các lần xuất hiện trong chuỗi lặp.',
-    },
-  ]
+  return isFirstOccurrence ? options.filter((opt) => opt.value !== 'following') : options
 }
 
 interface RecurrenceScopeModalProps {
@@ -107,6 +108,7 @@ interface RecurrenceScopeModalProps {
   entryType: EntryType
   title: string
   targetDate: Date
+  isFirstOccurrence?: boolean
   initialMode?: RecurrenceScopeMode
   isSubmitting?: boolean
   onCancel: () => void
@@ -118,15 +120,17 @@ function RecurrenceScopeModalContent({
   entryType,
   title,
   targetDate,
+  isFirstOccurrence = false,
   initialMode = 'this',
   isSubmitting = false,
   onCancel,
   onConfirm,
 }: Omit<RecurrenceScopeModalProps, 'isOpen'>) {
-  const [selectedMode, setSelectedMode] = useState<RecurrenceScopeMode>(initialMode)
+  const safeInitialMode = isFirstOccurrence && initialMode === 'following' ? 'this' : initialMode
+  const [selectedMode, setSelectedMode] = useState<RecurrenceScopeMode>(safeInitialMode)
 
   const isDelete = action === 'delete'
-  const options = getRecurrenceScopeOptions(action, targetDate)
+  const options = getRecurrenceScopeOptions(action, targetDate, isFirstOccurrence)
   const itemLabel = entryType === 'task' ? 'nhiệm vụ' : 'sự kiện'
   const headingText =
     action === 'delete'
