@@ -4,6 +4,7 @@ import { validateEventTitle } from '../models/calendarValidation'
 import {
   buildEventsByDateMap,
   buildTimedSegmentsForDate,
+  isFirstOccurrenceInSeries,
   layoutDayTimedSegments,
   unifyMultiDaySegmentWidths,
 } from './calendarLayout'
@@ -185,6 +186,26 @@ describe('layoutDayTimedSegments overlap layout', () => {
     expect(posA.columnIndex).toBe(0)
     expect(posB.columnIndex).toBe(1)
     expect(posC.columnIndex).toBe(0)
+  })
+})
+
+describe('isFirstOccurrenceInSeries', () => {
+  it('treats the earliest active occurrence as first even when earlier dates were excluded', () => {
+    const base = makeEvent({
+      id: 'series-1',
+      startDate: new Date(2026, 11, 26, 9, 0).toISOString(),
+      endDate: new Date(2026, 11, 26, 10, 0).toISOString(),
+    })
+    const occ2 = makeEvent({
+      id: 'series-1__occ_0',
+      startDate: new Date(2026, 11, 27, 9, 0).toISOString(),
+      endDate: new Date(2026, 11, 27, 10, 0).toISOString(),
+    })
+    ;(occ2 as CalendarEvent & { _baseEventId?: string })._baseEventId = 'series-1'
+
+    expect(isFirstOccurrenceInSeries([base, occ2], base)).toBe(true)
+    expect(isFirstOccurrenceInSeries([base, occ2], occ2)).toBe(false)
+    expect(isFirstOccurrenceInSeries([occ2], occ2)).toBe(true)
   })
 })
 

@@ -3,6 +3,9 @@ export type NotificationType =
   | 'event_reminder'
   | 'event_update'
   | 'event_response'
+  | 'calendar_shared'
+  | 'event_join_request'
+  | 'event_join_response'
   | 'system'
 
 export interface NotificationItem {
@@ -15,7 +18,8 @@ export interface NotificationItem {
   isRead: boolean
   eventId?: string | null
   metadata?: {
-    status?: 'pending' | 'accepted' | 'declined'
+    status?: 'pending' | 'accepted' | 'declined' | 'approved' | 'rejected'
+    requestId?: string
     startDate?: string
     location?: string
     [key: string]: unknown

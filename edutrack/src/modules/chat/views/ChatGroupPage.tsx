@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { formatAvatarUrl } from '@/shared/api/httpClient'
 import { ChatActionIcon } from '@/modules/chat/components/ChatActionIcon'
 import { ChatComposerGuide } from '@/modules/chat/components/ChatComposerGuide'
+import { ChatMessageContent } from '@/modules/chat/components/ChatMessageContent'
 import type { ChatGroupDetail, ChatGroupMemberItem, ChatMessage } from '@/modules/chat/models/chat.types'
 import {
   endsMessageRun,
@@ -253,7 +254,7 @@ function MessageBubble({ message, isOwnMessage, showSender, showTime, highlighte
         : <span aria-hidden="true" className="size-9 shrink-0" />)}
       <div className={`max-w-[82%] rounded-2xl px-3 py-2 sm:max-w-[72%] ${isOwnMessage ? 'rounded-br-md bg-gradient-to-br from-palette-900 to-palette-700 text-white shadow-sm' : 'rounded-bl-md border border-palette-200/50 bg-white/92 text-palette-900 shadow-sm dark:border-white/8 dark:bg-white/10 dark:text-white'}`}>
         {!isOwnMessage && showSender && <p className="mb-1 text-xs font-extrabold text-palette-700 dark:text-palette-200">{message.sender.fullName}</p>}
-        <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.content}</p>
+        <ChatMessageContent content={message.content} isOwnMessage={isOwnMessage} />
         {showTime && <time className={`mt-0.5 block text-right text-[10px] ${isOwnMessage ? 'text-white/75' : 'text-slate-500 dark:text-slate-300'}`} dateTime={message.createdAt}>{formatMessageTime(message.createdAt, language)}</time>}
       </div>
     </article>
