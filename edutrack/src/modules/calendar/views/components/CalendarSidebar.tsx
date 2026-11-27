@@ -17,6 +17,7 @@ interface CalendarSidebarProps {
   onOpenCreateEvent: () => void
   onOpenCreateCategory: () => void
   onOpenEditCategory: (category: CalendarCategory) => void
+  onOpenIcsModal: (category: CalendarCategory) => void
   onQuickChangeColor: (categoryId: string, color: string) => void
   onDeleteCategory: (categoryId: string) => void
   onUpdatePreferences: (
@@ -40,6 +41,7 @@ export function CalendarSidebar({
   onOpenCreateEvent,
   onOpenCreateCategory,
   onOpenEditCategory,
+  onOpenIcsModal,
   onQuickChangeColor,
   onDeleteCategory,
   onUpdatePreferences,
@@ -327,10 +329,22 @@ export function CalendarSidebar({
                                 type="button"
                               >
                                 <Icon className="size-3.5" name="edit" />
-                                Chỉnh sửa lịch
+                                {!cat.isShared || cat.myRole === 'admin' ? 'Chỉnh sửa lịch' : 'Xem thông tin lịch'}
                               </button>
 
-                              {!cat.isDefault && (
+                              <button
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/10"
+                                onClick={() => {
+                                  setActiveMenuCatId(null)
+                                  onOpenIcsModal(cat)
+                                }}
+                                type="button"
+                              >
+                                <Icon className="size-3.5" name="calendar" />
+                                Nhập / Xuất .ics
+                              </button>
+
+                              {!cat.isShared && (
                                 <button
                                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
                                   onClick={() => {
@@ -345,26 +359,28 @@ export function CalendarSidebar({
                               )}
                             </div>
 
-                            <div className="pt-2">
-                              <span className="block px-2 text-[10px] font-bold text-slate-400 uppercase">
-                                Đổi màu nhanh
-                              </span>
-                              <div className="mt-1.5 grid grid-cols-6 gap-1 px-1">
-                                {EXTENDED_CALENDAR_COLORS.slice(0, 12).map((c) => (
-                                  <button
-                                    aria-label={`Đổi màu ${c}`}
-                                    className="size-4.5 rounded-full transition-transform hover:scale-120"
-                                    key={c}
-                                    onClick={() => {
-                                      onQuickChangeColor(cat.id, c)
-                                      setActiveMenuCatId(null)
-                                    }}
-                                    style={{ backgroundColor: c }}
-                                    type="button"
-                                  />
-                                ))}
+                            {(!cat.isShared || cat.myRole === 'admin') && (
+                              <div className="pt-2">
+                                <span className="block px-2 text-[10px] font-bold text-slate-400 uppercase">
+                                  Đổi màu nhanh
+                                </span>
+                                <div className="mt-1.5 grid grid-cols-6 gap-1 px-1">
+                                  {EXTENDED_CALENDAR_COLORS.slice(0, 12).map((c) => (
+                                    <button
+                                      aria-label={`Đổi màu ${c}`}
+                                      className="size-4.5 rounded-full transition-transform hover:scale-120"
+                                      key={c}
+                                      onClick={() => {
+                                        onQuickChangeColor(cat.id, c)
+                                        setActiveMenuCatId(null)
+                                      }}
+                                      style={{ backgroundColor: c }}
+                                      type="button"
+                                    />
+                                  ))}
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -374,18 +390,27 @@ export function CalendarSidebar({
               </div>
 
               {archivedCategories.length > 0 && (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-xs font-semibold">Lịch đã lưu trữ</summary>
-                  {archivedCategories.map((category) => (
-                    <button
-                      className="block min-h-11 w-full break-words text-left text-sm"
-                      key={category.id}
-                      onClick={() => onOpenEditCategory(category)}
-                      type="button"
-                    >
-                      {category.name}
-                    </button>
-                  ))}
+                <details className="mt-3 border-t border-slate-100 pt-2 dark:border-white/10">
+                  <summary className="cursor-pointer px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                    Lịch đã lưu trữ ({archivedCategories.length})
+                  </summary>
+                  <div className="mt-1 space-y-1">
+                    {archivedCategories.map((category) => (
+                      <button
+                        className="flex min-h-9 w-full items-center gap-2.5 rounded-xl px-2 py-1 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+                        key={category.id}
+                        onClick={() => onOpenEditCategory(category)}
+                        title={category.name}
+                        type="button"
+                      >
+                        <span
+                          className="size-3 shrink-0 rounded-full opacity-75"
+                          style={{ backgroundColor: category.color }}
+                        />
+                        <span className="truncate">{category.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </details>
               )}
             </>
