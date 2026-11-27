@@ -3,7 +3,11 @@ import type { CalendarPreferences, VietnameseHolidayItem } from './calendar.type
 import {
   DEFAULT_CALENDAR_PREFERENCES,
   filterHolidaysByPreferences,
+  formatHolidayLunarSubtitle,
+  formatHolidaySolarDate,
   formatHolidayTooltip,
+  getHolidayNote,
+  getVisibleHolidayDateRange,
   groupHolidaysByDate,
 } from './vietnameseHolidays'
 
@@ -65,6 +69,44 @@ describe('vietnamese holidays view helpers', () => {
 
     expect(Object.keys(grouped)).toEqual(['2026-04-26'])
     expect(formatHolidayTooltip(sampleHolidays[0]!)).toBe('Ngày nghỉ lễ: Giỗ Tổ Hùng Vương (10/3 Âm lịch)')
+    expect(formatHolidayTooltip(sampleHolidays[0]!, false)).toBe('Ngày nghỉ lễ: Giỗ Tổ Hùng Vương')
     expect(formatHolidayTooltip(sampleHolidays[1]!)).toBe('Ngày lễ / Kỷ niệm: Ngày Nhà giáo Việt Nam')
+  })
+
+  it('formats solar dates, lunar Can Chi subtitles, and concise holiday notes', () => {
+    expect(formatHolidaySolarDate('2026-04-26')).toMatch(/^Chủ [Nn]hật, 26 tháng 4, 2026$/)
+    expect(
+      formatHolidayLunarSubtitle({
+        ...sampleHolidays[0]!,
+        lunarDate: { day: 10, month: 3, year: 2026, isLeapMonth: false, yearCanChi: 'Bính Ngọ' },
+      }),
+    ).toBe('Nhằm ngày 10 tháng 3 Âm lịch, năm Bính Ngọ')
+    expect(
+      formatHolidayLunarSubtitle(
+        {
+          ...sampleHolidays[0]!,
+          lunarDate: { day: 10, month: 3, year: 2026, isLeapMonth: false, yearCanChi: 'Bính Ngọ' },
+        },
+        false,
+      ),
+    ).toBeNull()
+    expect(getHolidayNote(sampleHolidays[0]!)).toBe('Ngày nghỉ lễ')
+    expect(getHolidayNote(sampleHolidays[1]!)).toBe('Ngày lễ / Kỷ niệm')
+    expect(
+      getHolidayNote({
+        ...sampleHolidays[0]!,
+        calendarType: 'compensatory',
+      }),
+    ).toBe('Ngày nghỉ bù / hoán đổi')
+    expect(
+      getHolidayNote({
+        ...sampleHolidays[0]!,
+        notes: 'Nghỉ theo công văn mới',
+      }),
+    ).toBe('Nghỉ theo công văn mới')
+    expect(getVisibleHolidayDateRange('list', new Date(2026, 10, 26))).toEqual({
+      from: '2026-01-01',
+      to: '2026-12-31',
+    })
   })
 })

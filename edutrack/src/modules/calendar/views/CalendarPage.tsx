@@ -1,20 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
-import type { CalendarCategory, CalendarEvent } from '@/modules/calendar/models/calendar.types'
+import type {
+  CalendarCategory,
+  CalendarEvent,
+  VietnameseHolidayItem,
+} from '@/modules/calendar/models/calendar.types'
 import { isFirstOrLastDayOfSolarMonth } from '@/modules/calendar/models/lunarCalendar'
 import {
+  formatLunarDateLabel,
+  getLunarDateTooltip,
+  isFirstOrLastDayOfSolarMonth,
+  toLocalDateKey,
+} from '@/modules/calendar/models/lunarCalendar'
+import {
+  formatHolidayLunarSubtitle,
   formatHolidayTooltip,
+  getHolidayNote,
   VIETNAM_HOLIDAY_BADGE_CLASSES,
   VIETNAM_HOLIDAY_DOT_CLASS,
 } from '@/modules/calendar/models/vietnameseHolidays'
 import { useCalendarViewModel, type CalendarViewMode } from '@/modules/calendar/viewmodels/useCalendarViewModel'
+import { useTranslation } from '@/modules/i18n/viewmodels/useTranslation'
 import { CalendarSidebar } from './components/CalendarSidebar'
 import { CalendarDateLabel } from './components/CalendarDateLabel'
 import { CalendarSettingsModal } from './components/CalendarSettingsModal'
 import { CalendarIcsModal } from './components/CalendarIcsModal'
 import { CategoryModal } from './components/CategoryModal'
 import { EventModal } from './components/EventModal'
+import { HolidayDetailModal } from './components/HolidayDetailModal'
 import { TaskTickButton } from './components/TaskTickButton'
 import { RecurringConfirmationDialog } from './components/RecurringConfirmationDialog'
 import { RecurrenceScopeModal, type RecurrenceScopeMode } from './components/RecurrenceScopeModal'
@@ -83,8 +97,11 @@ function getTimeZoneOffsetLabel(tz?: string): string {
 
 function formatDayHeader(dateStr: string): string {
   try {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'numeric' })
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+    const d = match
+      ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+      : new Date(dateStr)
+    return d.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' })
   } catch {
     return dateStr
   }
@@ -92,8 +109,13 @@ function formatDayHeader(dateStr: string): string {
 
 export function CalendarPage() {
   const vm = useCalendarViewModel()
+  const { t } = useTranslation()
   const timeGridRef = useRef<HTMLDivElement>(null)
   const dayGridRef = useRef<HTMLDivElement>(null)
+  const listContainerRef = useRef<HTMLDivElement>(null)
+  const listAnchorRef = useRef<HTMLDivElement>(null)
+  const shouldAutoScrollListRef = useRef(true)
+  const isProgrammaticListScrollRef = useRef(false)
   const [hoveredDateCell, setHoveredDateCell] = useState<string | null>(null)
   const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null)
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null)
@@ -522,6 +544,7 @@ export function CalendarPage() {
     }
   }
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false)
+  const [selectedHoliday, setSelectedHoliday] = useState<VietnameseHolidayItem | null>(null)
   const currentYear = vm.currentDate.getFullYear()
   const currentMonth = vm.currentDate.getMonth()
   const today = new Date()
@@ -534,6 +557,13 @@ export function CalendarPage() {
   const weekdays = GOOGLE_WEEKDAYS
   const shortWeekdays = GOOGLE_SHORT_WEEKDAYS
   const timeZoneHeaderLabel = getTimeZoneOffsetLabel(selectedSettings?.timeZone)
+
+  const listAnchorKey = toLocalDateKey(vm.currentDate)
+  const todayKey = toLocalDateKey(today)
+
+  useEffect(() => {
+    shouldAutoScrollListRef.current = true
+  }, [vm.viewMode, listAnchorKey])
 
   useEffect(() => {
     if (vm.viewMode === 'week' || vm.viewMode === 'day') {
@@ -582,6 +612,7 @@ export function CalendarPage() {
 
   const selectedDayKey = `${vm.currentDate.getFullYear()}-${vm.currentDate.getMonth() + 1 < 10 ? `0${vm.currentDate.getMonth() + 1}` : vm.currentDate.getMonth() + 1}-${vm.currentDate.getDate() < 10 ? `0${vm.currentDate.getDate()}` : vm.currentDate.getDate()}`
   const selectedDayEvents = eventsByDate[selectedDayKey] ?? []
+  const selectedDayHolidays = vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[selectedDayKey] ?? [])
   const selectedDayAllDayEvents = selectedDayEvents.filter((e) => e.isAllDay)
   const selectedDayTimedSegments = (() => {
     const dayDateKeys = new Set<string>([selectedDayKey])
@@ -628,9 +659,45 @@ export function CalendarPage() {
   const currentMinuteRatio = today.getHours() * 60 + today.getMinutes()
   const currentIndicatorTop = (currentMinuteRatio / 60) * HOUR_HEIGHT
 
-  const hasAnyWeekAllDay = weekDays.some((wd) => (eventsByDate[wd.dateKey] ?? []).some((e) => e.isAllDay))
+  const hasAnyWeekAllDay = weekDays.some(
+    (wd) =>
+      (eventsByDate[wd.dateKey] ?? []).some((e) => e.isAllDay) ||
+      (vm.activeFilterTab !== 'task' && (vm.holidaysBySolarDate[wd.dateKey] ?? []).length > 0),
+  )
 
-  const sortedListDates = Object.keys(eventsByDate).sort()
+  const listDateSet = new Set<string>(Object.keys(eventsByDate))
+  listDateSet.add(listAnchorKey)
+  if (vm.activeFilterTab !== 'task') {
+    const yearPrefix = `${currentYear}-`
+    for (const dateKey of Object.keys(vm.holidaysBySolarDate)) {
+      if (dateKey.startsWith(yearPrefix) && (vm.holidaysBySolarDate[dateKey]?.length ?? 0) > 0) {
+        listDateSet.add(dateKey)
+      }
+    }
+  }
+  const sortedListDates = Array.from(listDateSet).sort()
+  const listScrollTargetKey =
+    sortedListDates.find((dateKey) => dateKey >= listAnchorKey) ??
+    sortedListDates[sortedListDates.length - 1] ??
+    null
+  const holidayCacheCount = Object.keys(vm.holidaysBySolarDate).length
+
+  useEffect(() => {
+    if (vm.viewMode !== 'list' || vm.isLoading || !shouldAutoScrollListRef.current) return
+    const container = listContainerRef.current
+    const anchorEl = listAnchorRef.current
+    if (!container || !anchorEl) return
+
+    const frameId = window.requestAnimationFrame(() => {
+      isProgrammaticListScrollRef.current = true
+      container.scrollTop = Math.max(0, anchorEl.offsetTop - 8)
+      window.setTimeout(() => {
+        isProgrammaticListScrollRef.current = false
+      }, 50)
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [vm.viewMode, vm.isLoading, listAnchorKey, listScrollTargetKey, holidayCacheCount])
 
   return (
     <div className="mx-auto max-w-(--breakpoint-2xl) space-y-3 sm:space-y-4">
@@ -774,14 +841,14 @@ export function CalendarPage() {
               </div>
 
               <button
-                aria-label="Cài đặt lịch"
-                className="inline-flex size-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 2xl:w-auto 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                aria-label={t('calendar.settings.openAria')}
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 lg:min-h-9 lg:min-w-9 2xl:w-auto 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                 onClick={() => setIsCalendarSettingsOpen(true)}
-                title="Cài đặt lịch"
+                title={t('calendar.settings.openAria')}
                 type="button"
               >
                 <Settings aria-hidden="true" className="size-4" />
-                <span className="hidden 2xl:inline">Cài đặt</span>
+                <span className="hidden 2xl:inline">{t('calendar.settings.button')}</span>
               </button>
 
             </div>
@@ -814,18 +881,8 @@ export function CalendarPage() {
                     </span>
                   )}
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    ({selectedDayEvents.length} mục)
+                    ({selectedDayEvents.length + selectedDayHolidays.length} mục)
                   </span>
-                  {(vm.holidaysBySolarDate[selectedDayKey] ?? []).map((holiday) => (
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
-                      key={holiday.id}
-                      title={formatHolidayTooltip(holiday)}
-                    >
-                      <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
-                      <span>{holiday.name}</span>
-                    </span>
-                  ))}
                 </div>
                 <button
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700"
@@ -837,7 +894,7 @@ export function CalendarPage() {
               </div>
 
               
-              {(selectedDayAllDayEvents.length > 0 || Boolean(draggedEvent)) && (
+              {(selectedDayAllDayEvents.length > 0 || selectedDayHolidays.length > 0 || Boolean(draggedEvent)) && (
                 <div
                   className={`flex items-center border-b border-slate-200 bg-slate-50/30 p-2 sm:px-3 transition-colors dark:border-white/10 dark:bg-white/2 ${
                     dragOverTarget === 'day-allday'
@@ -858,6 +915,21 @@ export function CalendarPage() {
                     Cả ngày
                   </span>
                   <div className="flex flex-1 flex-wrap items-center gap-1.5 min-h-[28px]">
+                    {selectedDayHolidays.map((holiday) => (
+                      <button
+                        className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold shadow-2xs transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-green-600 ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                        key={holiday.id}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setSelectedHoliday(holiday)
+                        }}
+                        title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
+                        type="button"
+                      >
+                        <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                        <span className="min-w-0 truncate text-left">{holiday.name}</span>
+                      </button>
+                    ))}
                     {selectedDayAllDayEvents.map((event) => {
                       const eventColor = event.color || event.calendar?.color || '#2563EB'
                       const isTaskItem = event.entryType === 'task'
@@ -1148,19 +1220,6 @@ export function CalendarPage() {
                             variant="week"
                           />
                         </span>
-                        {(vm.holidaysBySolarDate[wd.dateKey] ?? []).length > 0 && (
-                          <div className="mt-1 space-y-0.5">
-                            {(vm.holidaysBySolarDate[wd.dateKey] ?? []).slice(0, 2).map((holiday) => (
-                              <div
-                                className={`truncate rounded border px-1 py-0.5 text-[10px] font-semibold ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
-                                key={holiday.id}
-                                title={formatHolidayTooltip(holiday)}
-                              >
-                                {holiday.name}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     )
                   })}
@@ -1176,6 +1235,7 @@ export function CalendarPage() {
                   <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 px-0.5 dark:divide-white/10">
                     {weekDays.map((wd) => {
                       const dayAllDays = (eventsByDate[wd.dateKey] ?? []).filter((e) => e.isAllDay)
+                      const dayHolidays = vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[wd.dateKey] ?? [])
                       const allDayKey = `week-allday-${wd.dateKey}`
                       const isOver = dragOverTarget === allDayKey
                       return (
@@ -1194,6 +1254,21 @@ export function CalendarPage() {
                           }}
                           onDrop={(e) => handleDropOnAllDaySlot(e, wd.date)}
                         >
+                          {dayHolidays.map((holiday) => (
+                            <button
+                              className={`flex w-full cursor-pointer items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[11px] font-semibold shadow-2xs transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-green-600 ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                              key={holiday.id}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setSelectedHoliday(holiday)
+                              }}
+                              title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
+                              type="button"
+                            >
+                              <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                              <span className="min-w-0 flex-1 truncate">{holiday.name}</span>
+                            </button>
+                          ))}
                           {dayAllDays.map((event) => {
                             const eventColor = event.color || event.calendar?.color || '#2563EB'
                             const isTaskItem = event.entryType === 'task'
@@ -1555,15 +1630,20 @@ export function CalendarPage() {
                       </div>
 
                       <div className="flex-1 space-y-1 overflow-hidden">
-                        {(vm.holidaysBySolarDate[dateKey] ?? []).slice(0, 2).map((holiday) => (
-                          <div
-                            className={`flex items-center gap-1 truncate rounded border px-1 py-0.5 text-[9px] font-bold sm:px-1.5 sm:text-[10px] ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                        {(vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[dateKey] ?? [])).slice(0, 2).map((holiday) => (
+                          <button
+                            className={`flex w-full cursor-pointer items-center gap-1 rounded-md border px-1 py-0.5 text-left text-[10px] font-semibold transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-green-600 sm:gap-1.5 sm:px-1.5 sm:text-[11px] ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
                             key={holiday.id}
-                            title={formatHolidayTooltip(holiday)}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setSelectedHoliday(holiday)
+                            }}
+                            title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
+                            type="button"
                           >
                             <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
-                            <span className="truncate">{holiday.name}</span>
-                          </div>
+                            <span className="min-w-0 flex-1 truncate">{holiday.name}</span>
+                          </button>
                         ))}
                         {dayEvents.slice(0, 3).map((event) => {
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
@@ -1662,20 +1742,15 @@ export function CalendarPage() {
                         const mStr = mIdx + 1 < 10 ? `0${mIdx + 1}` : mIdx + 1
                         const dStr = dNum < 10 ? `0${dNum}` : dNum
                         const key = `${currentYear}-${mStr}-${dStr}`
-                        const dayItems = eventsByDate[key] ?? []
-                        const hasEvents = dayItems.length > 0
-                        const dayTasks = dayItems.filter((item) => item.entryType === 'task')
-                        const allTasksDone = dayTasks.length > 0 && dayTasks.every((item) => item.isCompleted)
                         const isCurrentDay =
                           today.getDate() === dNum && today.getMonth() === mIdx && today.getFullYear() === currentYear
-                        const dayHolidays = vm.holidaysBySolarDate[key] ?? []
-                        const taskTooltip = dayTasks.length > 0
-                          ? allTasksDone
-                            ? 'Đã hoàn thành tất cả nhiệm vụ'
-                            : 'Còn nhiệm vụ chưa hoàn thành'
-                          : ''
-                        const holidayTooltip = dayHolidays.map(formatHolidayTooltip).join(' • ')
-                        const yearCellTooltip = [holidayTooltip, taskTooltip].filter(Boolean).join('\n') || undefined
+                        const dayHolidays = vm.calendarPreferences.showVietnameseHolidays
+                          ? (vm.holidaysBySolarDate[key] ?? [])
+                          : []
+                        const yearCellTooltip =
+                          dayHolidays
+                            .map((holiday) => formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar))
+                            .join(' • ') || undefined
 
                         return (
                         <div
@@ -1684,7 +1759,6 @@ export function CalendarPage() {
                           title={yearCellTooltip}
                         >
                           <CalendarDateLabel
-                            hasEvents={hasEvents}
                             isToday={isCurrentDay}
                             lunarDate={vm.lunarDatesBySolarDate[key]}
                             showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
@@ -1700,7 +1774,15 @@ export function CalendarPage() {
               })}
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 pt-2 dark:divide-white/5">
+            <div
+              className="relative max-h-[620px] divide-y divide-slate-100 overflow-y-auto pt-2 pr-1 dark:divide-white/5"
+              onScroll={() => {
+                if (!isProgrammaticListScrollRef.current) {
+                  shouldAutoScrollListRef.current = false
+                }
+              }}
+              ref={listContainerRef}
+            >
               {sortedListDates.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="grid size-12 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-white/10">
@@ -1711,14 +1793,93 @@ export function CalendarPage() {
               ) : (
                 sortedListDates.map((dateKey) => {
                   const dayEvents = eventsByDate[dateKey] ?? []
+                  const listLunarDate = vm.lunarDatesBySolarDate[dateKey]
+                  const listLunarTooltip = listLunarDate
+                    ? getLunarDateTooltip(listLunarDate, {
+                        prefix: t('calendar.lunar.tooltipPrefix'),
+                        leapSuffix: t('calendar.lunar.leapSuffix'),
+                      })
+                    : ''
+                  const dayHolidays = vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[dateKey] ?? [])
+                  const isTodayRow = dateKey === todayKey
+                  const isAnchorRow = dateKey === listScrollTargetKey
+                  const hasAnyItems = dayHolidays.length > 0 || dayEvents.length > 0
 
                   return (
-                    <div className="py-4 first:pt-2" key={dateKey}>
-                      <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        {formatDayHeader(dateKey)}
+                    <div
+                      className="py-4 first:pt-2"
+                      key={dateKey}
+                      ref={isAnchorRow ? listAnchorRef : undefined}
+                    >
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        <span className={isTodayRow ? 'text-blue-600 dark:text-blue-400' : undefined}>
+                          {formatDayHeader(dateKey)}
+                        </span>
+                        {isTodayRow && (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold normal-case tracking-normal text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                            Hôm nay
+                          </span>
+                        )}
+                        {vm.calendarPreferences.showLunarCalendar && listLunarDate && (
+                          <span
+                            aria-label={listLunarTooltip}
+                            className="rounded-md bg-[#C1E8FF]/35 px-1.5 py-0.5 text-[11px] font-semibold normal-case tracking-normal text-[#052659] dark:bg-[#548383]/25 dark:text-[#C1E8FF]"
+                            title={listLunarTooltip}
+                          >
+                            {t('calendar.lunar.tooltipPrefix')}: {formatLunarDateLabel(listLunarDate, true)}
+                            {listLunarDate.isLeapMonth && (
+                              <span className="sr-only">{t('calendar.lunar.leapSrOnly')}</span>
+                            )}
+                          </span>
+                        )}
                       </div>
 
+                      {!hasAnyItems ? (
+                        <p className="rounded-xl border border-dashed border-slate-200/80 px-3 py-2.5 text-xs text-slate-400 dark:border-white/10 dark:text-slate-500">
+                          {t('calendar.holiday.emptyToday')}
+                        </p>
+                      ) : (
                       <div className="space-y-2">
+                        {dayHolidays.map((holiday) => {
+                          const lunarSubtitle = formatHolidayLunarSubtitle(
+                            holiday,
+                            vm.calendarPreferences.showLunarCalendar,
+                          )
+                          const noteText = getHolidayNote(holiday, {
+                            typePublic: t('calendar.holiday.typePublic'),
+                            typeCompensatory: t('calendar.holiday.typeCompensatory'),
+                            typeObservance: t('calendar.holiday.typeObservance'),
+                          })
+                          return (
+                            <button
+                              className={`group flex w-full cursor-pointer items-center justify-between rounded-xl border p-3 text-left transition-all hover:opacity-90 sm:px-4 ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                              key={holiday.id}
+                              onClick={() => setSelectedHoliday(holiday)}
+                              type="button"
+                            >
+                              <div className="flex items-center gap-3.5">
+                                <span className={`size-3 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-semibold">
+                                      {holiday.name}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-current/25 bg-white/70 px-2 py-0.5 text-[11px] font-semibold dark:bg-black/20">
+                                      {t('calendar.holiday.calendarName')}
+                                    </span>
+                                    <span className="rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-bold dark:bg-black/20">
+                                      {noteText}
+                                    </span>
+                                  </div>
+                                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs opacity-85">
+                                    <span>{t('calendar.holiday.allDay')}</span>
+                                    {lunarSubtitle && <span>• {lunarSubtitle}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          )
+                        })}
                         {dayEvents.map((event) => {
                           const isTask = event.entryType === 'task'
                           const eventColor = event.color || event.calendar?.color || '#2563EB'
@@ -1864,6 +2025,7 @@ export function CalendarPage() {
                           )
                         })}
                       </div>
+                      )}
                     </div>
                   )
                 })
@@ -2105,6 +2267,11 @@ export function CalendarPage() {
           </button>
         </div>
       )}
+      <HolidayDetailModal
+        holiday={selectedHoliday}
+        onClose={() => setSelectedHoliday(null)}
+        showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+      />
 
     </div>
   )

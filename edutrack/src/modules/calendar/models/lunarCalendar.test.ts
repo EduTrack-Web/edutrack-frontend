@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  chunkDateRange,
   clipRangeToSupportedLunarYears,
   enumerateDateKeys,
   formatLunarDateLabel,
   getLunarDateTooltip,
+  getRangeForDateKeys,
   getVisibleLunarDateRange,
   groupMissingDateRanges,
   isFirstOrLastDayOfSolarMonth,
@@ -129,5 +131,32 @@ describe('lunar calendar view helpers', () => {
       },
     })
     expect(tooltip).toBe('Âm lịch: 1/1/1968 (Miền Nam: 30/12/1967)')
+  })
+
+  it('supports localized tooltip labels for English interface mode', () => {
+    const tooltip = getLunarDateTooltip(
+      {
+        solarDate: '2025-08-23',
+        lunarDay: 1,
+        lunarMonth: 7,
+        lunarYear: 2025,
+        isLeapMonth: true,
+      },
+      { prefix: 'Lunar', leapSuffix: ' leap' },
+    )
+    expect(tooltip).toBe('Lunar: 1/7 leap/2025')
+  })
+
+  it('derives bounding ranges for list view date keys and splits oversized spans into chunks', () => {
+    expect(getRangeForDateKeys([])).toBeNull()
+    expect(getRangeForDateKeys(['2026-11-24', '2026-02-17', '2026-12-01'])).toEqual({
+      from: '2026-02-17',
+      to: '2026-12-01',
+    })
+    expect(chunkDateRange({ from: '2026-01-01', to: '2026-01-10' }, 4)).toEqual([
+      { from: '2026-01-01', to: '2026-01-04' },
+      { from: '2026-01-05', to: '2026-01-08' },
+      { from: '2026-01-09', to: '2026-01-10' },
+    ])
   })
 })

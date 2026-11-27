@@ -16,6 +16,14 @@ export interface CalendarPreferences {
 export type HolidayCategory = 'public_holiday' | 'observance'
 export type HolidayCalendarType = 'solar' | 'lunar' | 'compensatory'
 
+export interface HolidayLunarDateInfo {
+  day: number
+  month: number
+  year: number
+  isLeapMonth: boolean
+  yearCanChi: string
+}
+
 export interface VietnameseHolidayItem {
   id: string
   solarDate: string
@@ -24,6 +32,9 @@ export interface VietnameseHolidayItem {
   calendarType: HolidayCalendarType
   isDayOff: boolean
   lunarDateLabel?: string
+  lunarDate?: HolidayLunarDateInfo
+  notes?: string
+  sourceGroup?: 'rule' | 'official'
 }
 
 export interface VietnameseLunarDate {
@@ -32,6 +43,7 @@ export interface VietnameseLunarDate {
   lunarMonth: number
   lunarYear: number
   isLeapMonth: boolean
+  timeZoneOffset?: 7 | 8
   alternateLunar?: {
     label: string
     lunarDay: number
