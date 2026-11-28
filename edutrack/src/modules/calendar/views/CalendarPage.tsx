@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
 import { getCalendarEventCardColors } from '@/modules/calendar/utils/calendarEventColors'
-=======
 import type {
   CalendarCategory,
   CalendarEvent,
