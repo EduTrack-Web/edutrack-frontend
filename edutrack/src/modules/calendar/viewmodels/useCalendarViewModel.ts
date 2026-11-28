@@ -564,6 +564,7 @@ export function useCalendarViewModel() {
         await calendarApi.deleteEvent(baseId, mode, date, googleDeleteScope)
         if (googleDeleteScope === 'both') {
           await fetchData(true)
+        }
         if (targetEvent && (!targetEvent.recurrence || targetEvent.recurrence.frequency === 'none')) {
           pushUndoAction(`Đã xóa “${targetEvent.title}”`, async () => {
             await calendarApi.createEvent({
@@ -598,7 +599,6 @@ export function useCalendarViewModel() {
       await fetchData(true)
     }
   }
-
   const handleMoveEvent = async (
     eventId: string,
     newStartDateIso: string,
