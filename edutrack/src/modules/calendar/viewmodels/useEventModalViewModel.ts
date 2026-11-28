@@ -241,8 +241,8 @@ export function useEventModalViewModel({
   const isGoogleReadOnly = Boolean(initialEvent?.isGoogleReadOnly)
   const isGoogleLinked = Boolean(
     initialEvent?.syncOrigin === 'google' ||
-      initialEvent?.hasGoogleMappings ||
-      initialEvent?.googleSource,
+    initialEvent?.hasGoogleMappings ||
+    initialEvent?.googleSource,
   )
   const canModify = (isOwner || isCategoryEditor || Boolean(currentGuest?.canModify)) && !isGoogleReadOnly
   const canInviteOthers =
@@ -853,9 +853,9 @@ export function useEventModalViewModel({
     (entryType === 'task'
       ? PRIORITY_CONFIG[priority]?.color || '#3B82F6'
       : initialEvent?.googleSource?.calendarColor ||
-        selectedCategory?.color ||
-        (initialEvent?.calendarId === calendarId && initialEvent?.calendar?.color) ||
-        '#2563EB')
+      selectedCategory?.color ||
+      (initialEvent?.calendarId === calendarId && initialEvent?.calendar?.color) ||
+      '#2563EB')
 
   const handleSelectPriority = (newPriority: EventPriority) => {
     if (newPriority === priority) return
@@ -1235,7 +1235,7 @@ export function useEventModalViewModel({
         (origRecurrence.interval ?? 1) === (nextRecurrence.interval ?? 1) &&
         JSON.stringify(origRecurrence.daysOfWeek ?? []) === JSON.stringify(nextRecurrence.daysOfWeek ?? []) &&
         (origRecurrence.until ? new Date(origRecurrence.until).toISOString().slice(0, 10) : null) ===
-          (nextRecurrence.until ? new Date(nextRecurrence.until).toISOString().slice(0, 10) : null) &&
+        (nextRecurrence.until ? new Date(nextRecurrence.until).toISOString().slice(0, 10) : null) &&
         (origRecurrence.count ?? null) === (nextRecurrence.count ?? null)
 
       const hasChanges =
