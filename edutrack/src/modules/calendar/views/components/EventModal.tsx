@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from '@/modules/i18n/viewmodels/useTranslation'
 import { Icon } from '../../../../shared/components/Icon'
 import type { CalendarCategory, CalendarEvent, EventPriority, RecurrenceFrequency, ReminderMethod } from '../../models/calendar.types'
 import {
-  EXTENDED_CALENDAR_COLORS,
+  UNIFIED_EVENT_COLORS,
   useEventModalViewModel,
   type ReminderUnit,
 } from '../../viewmodels/useEventModalViewModel'
 import { COMMON_TIMEZONES, PRIORITY_CONFIG } from '../../models/calendarConstants'
 import { RecurringConfirmationDialog } from './RecurringConfirmationDialog'
 import { RecurrenceScopeModal } from './RecurrenceScopeModal'
+import { ConfirmDeleteGoogleEventModal } from './ConfirmDeleteGoogleEventModal'
+import { ReadOnlyEventDetailCard } from './ReadOnlyEventDetailCard'
 
 interface EventModalProps {
   isOpen: boolean
@@ -40,7 +43,11 @@ const WEEKDAY_BUTTONS: { day: number; label: string }[] = [
 export function EventModal(props: EventModalProps) {
   const { isOpen, initialEvent, onClose, onOpenCreateCategory } = props
   const vm = useEventModalViewModel(props)
+  const { t } = useTranslation()
   const [showTooltip, setShowTooltip] = useState(false)
+  const [pendingGoogleDeleteScope, setPendingGoogleDeleteScope] = useState<
+    'local_only' | 'both' | null
+  >(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -60,6 +67,192 @@ export function EventModal(props: EventModalProps) {
 
   const isTask = vm.entryType === 'task'
   const isEditing = Boolean(initialEvent)
+  const isReadOnlyDetail = Boolean(isEditing && initialEvent && !vm.canModify && !vm.canInviteOthers)
+  const googleSource = initialEvent?.googleSource
+  const googlePeople = googleSource ? [
+    { label: t('calendar.google.organizer'), person: googleSource.organizer },
+    { label: t('calendar.google.creator'), person: googleSource.creator },
+  ] : []
+
+  const sharedActionModals = (
+    <>
+      {vm.confirmation && <RecurringConfirmationDialog confirmation={vm.confirmation} />}
+
+      {vm.showDeleteConfirm && vm.isGoogleLinked && !pendingGoogleDeleteScope && (
+        <ConfirmDeleteGoogleEventModal
+          isDeleting={vm.isDeleting}
+          isOpen={true}
+          isReadOnly={vm.isGoogleReadOnly}
+          onClose={() => {
+            setPendingGoogleDeleteScope(null)
+            vm.setShowDeleteConfirm(false)
+          }}
+          onConfirm={(scope) => {
+            if (!vm.isRecurring) {
+              void vm.handleDeleteEvent('all', scope)
+              return
+            }
+            setPendingGoogleDeleteScope(scope)
+          }}
+          title={vm.title || (isTask ? 'nhiệm vụ' : 'sự kiện')}
+        />
+      )}
+
+      {vm.showDeleteConfirm && vm.isRecurring && (!vm.isGoogleLinked || pendingGoogleDeleteScope !== null) && initialEvent && (
+        <RecurrenceScopeModal
+          action="delete"
+          entryType={vm.entryType}
+          isOpen={vm.showDeleteConfirm}
+          isSubmitting={vm.isDeleting}
+          onCancel={() => {
+            setPendingGoogleDeleteScope(null)
+            vm.setShowDeleteConfirm(false)
+          }}
+          onConfirm={(mode) => {
+            const scope = pendingGoogleDeleteScope ?? undefined
+            setPendingGoogleDeleteScope(null)
+            void vm.handleDeleteEvent(mode, scope)
+          }}
+          targetDate={props.initialDate ?? new Date(initialEvent.startDate)}
+          title={vm.title}
+        />
+      )}
+
+      {vm.showDeleteConfirm && !vm.isRecurring && !vm.isGoogleLinked && (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+          role="dialog"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                <Icon className="size-5" name="trash" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {`Xóa ${isTask ? 'nhiệm vụ' : 'sự kiện'} này?`}
+                </h4>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {`Bạn có chắc chắn muốn xóa "${vm.title || (isTask ? 'nhiệm vụ' : 'sự kiện')}" không? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
+              <button
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+                disabled={vm.isDeleting}
+                onClick={() => vm.setShowDeleteConfirm(false)}
+                type="button"
+              >
+                Hủy
+              </button>
+              <button
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                disabled={vm.isDeleting}
+                onClick={() => void vm.handleDeleteEvent('all')}
+                type="button"
+              >
+                {vm.isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {vm.showLeaveConfirm && (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
+          role="dialog"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+                <Icon className="size-5" name="close" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {vm.isRecurring ? 'Rời khỏi cả chuỗi lặp?' : 'Rời khỏi mục này?'}
+                </h4>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {vm.isRecurring ? 'Bạn sẽ rời tất cả các lần của' : 'Bạn sẽ rời'} {isTask ? 'nhiệm vụ' : 'sự kiện'} <strong>“{vm.title}”</strong>. Người tạo sẽ nhận được thông báo.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
+              <button
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
+                disabled={vm.isDeleting}
+                onClick={() => vm.setShowLeaveConfirm(false)}
+                type="button"
+              >
+                Hủy
+              </button>
+              <button
+                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                disabled={vm.isDeleting}
+                onClick={() => void vm.handleConfirmLeaveEvent()}
+                type="button"
+              >
+                {vm.isDeleting ? 'Đang rời...' : 'Xác nhận rời'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+
+  if (isReadOnlyDetail && initialEvent) {
+    const calendarLabel =
+      googleSource?.calendarName ||
+      googleSource?.accountEmail ||
+      props.categories.find((c) => c.id === vm.calendarId)?.name ||
+      initialEvent.calendar?.name ||
+      'Lịch cá nhân'
+    const resolvedTimeZone = vm.timeZone || initialEvent.timeZone || 'Asia/Ho_Chi_Minh'
+    const hasChildDialogOpen = Boolean(
+      vm.showDeleteConfirm ||
+        vm.showLeaveConfirm ||
+        vm.confirmation ||
+        pendingGoogleDeleteScope,
+    )
+
+    return (
+      <>
+        <ReadOnlyEventDetailCard
+          activeTimeZone={resolvedTimeZone}
+          calendarLabel={calendarLabel}
+          canRemove={Boolean(vm.isOwner)}
+          canSeeGuestList={vm.canSeeGuestList}
+          color={vm.activeColor}
+          event={initialEvent}
+          guests={vm.guests}
+          guestStatus={vm.guestStatus}
+          hasChildDialogOpen={hasChildDialogOpen}
+          isDeleting={vm.isDeleting}
+          isGuest={vm.isGuest}
+          isSubmitting={vm.isSubmitting}
+          onClose={onClose}
+          onRequestDelete={() => vm.setShowDeleteConfirm(true)}
+          onRequestLeave={() => vm.setShowLeaveConfirm(true)}
+          onRespondInvite={(status) => void vm.handleRespondInvite(status)}
+          recurrenceLabel={vm.recurrenceFreq !== 'none' ? vm.getRecurrenceLabel() : undefined}
+          removeLabel={vm.isGoogleLinked ? 'Xóa khỏi EduTrack' : 'Xóa sự kiện'}
+        />
+        {sharedActionModals}
+      </>
+    )
+  }
 
   return (
     <div
@@ -71,7 +264,7 @@ export function EventModal(props: EventModalProps) {
         className="relative flex max-h-[92vh] w-full max-w-2xl flex-col rounded-2xl border border-slate-200/80 bg-white shadow-2xl dark:border-white/10 dark:bg-[#021024]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-3.5 dark:border-white/10">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-3.5 dark:border-white/10">
           <div className="flex items-center gap-2">
             <button
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${!isTask
@@ -109,7 +302,13 @@ export function EventModal(props: EventModalProps) {
           </button>
         </div>
 
-        <form className="flex-1 space-y-4 overflow-y-auto p-6" noValidate onSubmit={vm.handleSubmit}>
+        <form className="gcal-scrollbar flex-1 space-y-4 overflow-y-auto p-4 sm:p-6" noValidate onSubmit={vm.handleSubmit}>
+          {vm.isGoogleReadOnly && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-200">
+              Sự kiện từ Google Calendar đang ở chế độ <strong>chỉ xem</strong> (read-only). Bạn không thể chỉnh sửa nội dung; nếu muốn ẩn khỏi EduTrack, chọn Xóa để gỡ bản sao cục bộ.
+            </div>
+          )}
+
           {vm.generalError && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-600 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300">
               {vm.generalError}
@@ -737,9 +936,9 @@ export function EventModal(props: EventModalProps) {
             <span className="mt-1 grid size-8 shrink-0 place-items-center text-slate-400">
               <Icon className="size-4.5" name="bell" />
             </span>
-            <div className="flex-1 space-y-2">
+            <div className="min-w-0 flex-1 space-y-2">
               {vm.reminders.map((rem) => (
-                <div className="flex items-center gap-2" key={rem.id}>
+                <div className="flex flex-wrap items-center gap-2" key={rem.id}>
                   <select
                     className="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white"
                     onChange={(e) => vm.handleUpdateReminder(rem.id, 'method', e.target.value as ReminderMethod)}
@@ -798,8 +997,22 @@ export function EventModal(props: EventModalProps) {
               <span className="grid size-8 shrink-0 place-items-center text-slate-400">
                 <Icon className="size-4.5" name="calendar" />
               </span>
-              <div className="relative flex flex-1 items-center gap-2">
-                {!isTask && (
+              <div className="relative flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex-nowrap">
+                {googleSource && (
+                  <div
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold dark:border-white/10"
+                    title={googleSource.calendarName ? `${googleSource.accountEmail} — ${googleSource.calendarName}` : googleSource.accountEmail}
+                  >
+                    <img alt="" className="size-4 shrink-0" src="/google-g-logo.png" />
+                    <span className="truncate" title={googleSource.accountEmail}>{googleSource.accountEmail}</span>
+                    <span
+                      aria-hidden="true"
+                      className="size-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: googleSource.calendarColor || initialEvent?.color }}
+                    />
+                  </div>
+                )}
+                {!isTask && !googleSource && (
                 <select
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                   disabled={!vm.canModify}
@@ -820,7 +1033,7 @@ export function EventModal(props: EventModalProps) {
                 <div className="relative">
                   <button
                     aria-label="Chọn màu thẻ"
-                    className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs transition-all hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-2 text-xs transition-all hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 disabled:opacity-75 disabled:cursor-not-allowed"
                     disabled={!vm.canModify}
                     onClick={() => vm.setIsColorPickerOpen(!vm.isColorPickerOpen)}
                     title="Tùy chỉnh màu sắc thẻ sự kiện"
@@ -835,7 +1048,7 @@ export function EventModal(props: EventModalProps) {
 
                   {vm.isColorPickerOpen && (
                     <div
-                      className="absolute right-0 bottom-full z-30 mb-2 w-56 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-white/10 dark:bg-[#021024]"
+                      className="gcal-scrollbar absolute right-0 bottom-full z-30 mb-2 max-h-64 w-60 max-w-[calc(100vw-3rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-white/10 dark:bg-[#021024]"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-center justify-between pb-2 text-[11px] font-bold text-slate-600 dark:text-slate-300">
@@ -853,20 +1066,21 @@ export function EventModal(props: EventModalProps) {
                         </button>
                       </div>
                       <div className="grid grid-cols-6 gap-2">
-                        {EXTENDED_CALENDAR_COLORS.map((hex) => {
-                          const isSelected = vm.color.toLowerCase() === hex.toLowerCase()
+                        {UNIFIED_EVENT_COLORS.map((item) => {
+                          const isSelected = vm.color.toLowerCase() === item.hex.toLowerCase()
                           return (
                             <button
-                              aria-label={`Chọn màu ${hex}`}
+                              aria-label={item.label ? `Chọn màu ${item.label} (${item.hex})` : `Chọn màu ${item.hex}`}
                               aria-pressed={isSelected}
                               className={`size-6 rounded-full transition-transform hover:scale-110 ${isSelected ? 'ring-2 ring-blue-600 ring-offset-2' : ''
                                 }`}
-                              key={hex}
+                              key={item.hex}
                               onClick={() => {
-                                vm.setColor(hex)
+                                vm.setColor(item.hex)
                                 vm.setIsColorPickerOpen(false)
                               }}
-                              style={{ backgroundColor: hex }}
+                              style={{ backgroundColor: item.hex }}
+                              title={item.label || item.hex}
                               type="button"
                             />
                           )
@@ -876,7 +1090,7 @@ export function EventModal(props: EventModalProps) {
                   )}
                 </div>
 
-                {onOpenCreateCategory && vm.canModify && !isTask && (
+                {onOpenCreateCategory && vm.canModify && !isTask && !googleSource && (
                   <button
                     className="shrink-0 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400"
                     onClick={onOpenCreateCategory}
@@ -887,13 +1101,13 @@ export function EventModal(props: EventModalProps) {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2 pl-11 text-xs">
+            <div className="flex min-w-0 items-center gap-2 pl-0 sm:pl-11 text-xs">
               <span className="text-slate-500 shrink-0 font-medium dark:text-slate-400">
                 Múi giờ:
               </span>
               <select
                 aria-label="Múi giờ sự kiện"
-                className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                 disabled={!vm.canModify}
                 onChange={(e) => vm.handleTimeZoneChange(e.target.value)}
                 value={vm.timeZone}
@@ -915,19 +1129,32 @@ export function EventModal(props: EventModalProps) {
               <span className="mt-0.5 grid size-8 shrink-0 place-items-center text-slate-400">
                 <Icon className="size-4.5" name="account" />
               </span>
-              <div className="flex-1 space-y-2">
-                {vm.creatorEmail && (
+              <div className="min-w-0 flex-1 space-y-2">
+                {googlePeople.map(({ label, person }) => (
+                  person?.email || person?.displayName ? (
+                    <div className="flex flex-wrap items-baseline gap-1.5 text-xs text-slate-500 dark:text-slate-400" key={label}>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{label}:</span>
+                      <span className="break-all font-medium text-blue-600 dark:text-blue-400">
+                        {person.displayName || person.email}
+                      </span>
+                      {person.displayName && person.email && person.displayName !== person.email && (
+                        <span className="break-all">({person.email})</span>
+                      )}
+                    </div>
+                  ) : null
+                ))}
+                {!googleSource && vm.creatorEmail && (
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <span className="font-semibold text-slate-700 dark:text-slate-300">Người tạo:</span>
                     <span className="font-medium text-blue-600 dark:text-blue-400">{vm.creatorEmail}</span>
                   </div>
                 )}
                 {vm.canInviteOthers ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                     <input
                       aria-describedby={vm.guestEmailError ? 'guest-email-error' : undefined}
                       aria-invalid={Boolean(vm.guestEmailError)}
-                      className={`flex-1 rounded-xl border bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 outline-hidden transition-all focus:bg-white dark:bg-white/5 dark:text-white ${
+                      className={`min-w-0 flex-1 rounded-xl border bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 outline-hidden transition-all focus:bg-white dark:bg-white/5 dark:text-white ${
                         vm.guestEmailError
                           ? 'border-rose-500 focus:border-rose-500'
                           : 'border-slate-200 focus:border-blue-600 dark:border-white/10'
@@ -1059,7 +1286,7 @@ export function EventModal(props: EventModalProps) {
             <span className="grid size-8 shrink-0 place-items-center text-slate-400">
               <Icon className="size-4.5" name="briefcase" />
             </span>
-            <div className="flex flex-1 items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               <select
                 className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                 disabled={!vm.canModify}
@@ -1071,7 +1298,7 @@ export function EventModal(props: EventModalProps) {
               </select>
 
               <select
-                className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
+                className="min-w-0 max-w-full flex-1 sm:flex-initial rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                 disabled={!vm.canModify}
                 onChange={(e) => vm.setVisibility(e.target.value as 'default' | 'public' | 'private')}
                 value={isTask && vm.visibility === 'default' ? 'private' : vm.visibility}
@@ -1115,7 +1342,7 @@ export function EventModal(props: EventModalProps) {
           </div>
         </form>
 
-        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-3 bg-slate-50/50 dark:border-white/10 dark:bg-white/2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/50 px-4 py-3 sm:px-6 dark:border-white/10 dark:bg-white/2">
           {isEditing && vm.isOwner ? (
             <button
               className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 transition-colors"
@@ -1322,66 +1549,7 @@ export function EventModal(props: EventModalProps) {
           </div>
         )}
 
-        {vm.confirmation && <RecurringConfirmationDialog confirmation={vm.confirmation} />}
-
-        {vm.showDeleteConfirm && vm.isRecurring && initialEvent && (
-          <RecurrenceScopeModal
-            action="delete"
-            entryType={vm.entryType}
-            isOpen={vm.showDeleteConfirm}
-            isSubmitting={vm.isDeleting}
-            onCancel={() => vm.setShowDeleteConfirm(false)}
-            onConfirm={(mode) => void vm.handleDeleteEvent(mode)}
-            targetDate={props.initialDate ?? new Date(initialEvent.startDate)}
-            title={vm.title}
-          />
-        )}
-
-        {vm.showDeleteConfirm && !vm.isRecurring && (
-          <div
-            aria-modal="true"
-            className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
-            role="dialog"
-          >
-            <div
-              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-start gap-3">
-                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
-                  <Icon className="size-5" name="trash" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {`Xóa ${isTask ? 'nhiệm vụ' : 'sự kiện'} này?`}
-                  </h4>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {`Bạn có chắc chắn muốn xóa "${vm.title || (isTask ? 'nhiệm vụ' : 'sự kiện')}" không? Thao tác này sẽ xóa vĩnh viễn và không thể hoàn tác.`}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
-                <button
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
-                  disabled={vm.isDeleting}
-                  onClick={() => vm.setShowDeleteConfirm(false)}
-                  type="button"
-                >
-                  Hủy
-                </button>
-                <button
-                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 transition-colors"
-                  disabled={vm.isDeleting}
-                  onClick={() => void vm.handleDeleteEvent('all')}
-                  type="button"
-                >
-                  {vm.isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {sharedActionModals}
 
         <RecurrenceScopeModal
           action="update"
@@ -1393,52 +1561,6 @@ export function EventModal(props: EventModalProps) {
           targetDate={props.initialDate ?? (initialEvent ? new Date(initialEvent.startDate) : new Date())}
           title={vm.title}
         />
-
-        {vm.showLeaveConfirm && (
-          <div
-            aria-modal="true"
-            className="fixed inset-0 z-70 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-2xs"
-            role="dialog"
-          >
-            <div
-              className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/10 dark:bg-[#021024] space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-start gap-3">
-                <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
-                  <Icon className="size-5" name="close" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {vm.isRecurring ? 'Rời khỏi cả chuỗi lặp?' : 'Rời khỏi mục này?'}
-                  </h4>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {vm.isRecurring ? 'Bạn sẽ rời tất cả các lần của' : 'Bạn sẽ rời'} {isTask ? 'nhiệm vụ' : 'sự kiện'} <strong>“{vm.title}”</strong>. Người tạo sẽ nhận được thông báo.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-white/10">
-                <button
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 transition-colors"
-                  disabled={vm.isDeleting}
-                  onClick={() => vm.setShowLeaveConfirm(false)}
-                  type="button"
-                >
-                  Hủy
-                </button>
-                <button
-                  className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-rose-700 disabled:opacity-50 transition-colors"
-                  disabled={vm.isDeleting}
-                  onClick={() => void vm.handleConfirmLeaveEvent()}
-                  type="button"
-                >
-                  {vm.isDeleting ? 'Đang rời...' : 'Xác nhận rời'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {Boolean(vm.guestToRemove) && (
           <div

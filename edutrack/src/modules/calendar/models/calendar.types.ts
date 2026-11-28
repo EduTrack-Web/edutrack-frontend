@@ -134,6 +134,22 @@ export interface CalendarEvent {
   userId: string
   creator?: { id: string; email: string; fullName: string }
   creatorEmail?: string
+  googleSource?: {
+    integrationId?: string
+    calendarConnectionId?: string
+    accountEmail: string
+    calendarName?: string
+    eventColorId?: string
+    eventLabelId?: string
+    eventColor?: string
+    calendarColor: string
+    accessRole?: GoogleCalendarAccessRole
+    creator?: { email?: string; displayName?: string }
+    organizer?: { email?: string; displayName?: string }
+  }
+  isGoogleReadOnly?: boolean
+  syncOrigin?: 'local' | 'google'
+  hasGoogleMappings?: boolean
   calendarId?: string | null
   calendar?: CalendarCategory | null
   entryType: EntryType
@@ -200,4 +216,126 @@ export interface EventQueryFilters {
   calendarIds?: string[]
   isCompleted?: boolean
   q?: string
+}
+
+export type GoogleCalendarConnectionState = 'connected' | 'reconnect_required'
+export type GoogleCalendarSyncStatus = 'idle' | 'syncing' | 'success' | 'partial_conflict' | 'error'
+export type GoogleSubCalendarSyncState =
+  | 'unselected'
+  | 'initial_sync_pending'
+  | 'initial_sync_running'
+  | 'initial_sync_failed'
+  | 'active'
+  | 'error'
+
+export type GoogleCalendarAccessRole = 'owner' | 'writer' | 'reader' | 'freeBusyReader'
+
+export interface GoogleCalendarProgress {
+  syncedCount: number
+  pagesProcessed: number
+  completedAt: string | null
+}
+
+export interface GoogleCalendarConnectionItem {
+  id: string
+  integrationId: string
+  googleCalendarId: string
+  summary: string
+  description: string
+  timeZone: string
+  backgroundColor: string
+  foregroundColor: string
+  accessRole: GoogleCalendarAccessRole
+  isPrimary: boolean
+  isSelected: boolean
+  isVisible: boolean
+  syncStatus: GoogleSubCalendarSyncState
+  lastSyncedAt: string | null
+  nextSyncAt?: string | null
+  lastSyncError: string
+  fullSyncProgress: GoogleCalendarProgress
+}
+
+export interface GoogleCalendarIntegrationStatus {
+  id: string
+  status: GoogleCalendarConnectionState
+  googleSub: string
+  googleEmail: string
+  displayName: string
+  avatarUrl: string
+  isPrimarySyncAccount: boolean
+  syncToGoogleEnabled: boolean
+  syncFromGoogleEnabled: boolean
+  lastSyncedAt: string | null
+  lastError: string
+  pendingConflictsCount: number
+  calendars: GoogleCalendarConnectionItem[]
+}
+
+export type GoogleSyncJobType =
+  | 'full_sync'
+  | 'incremental_sync'
+  | 'event_push'
+  | 'event_delete'
+  | 'conflict_resolve'
+export type GoogleSyncJobStatus =
+  | 'pending'
+  | 'running'
+  | 'retry_wait'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export interface GoogleSyncJobItem {
+  id: string
+  integrationId: string
+  calendarConnectionId: string | null
+  eventId: string | null
+  jobType: GoogleSyncJobType
+  status: GoogleSyncJobStatus
+  retriesUsed: number
+  maxRetries: number
+  nextRetryAt: string | null
+  lastErrorCode: string
+  lastErrorMessage: string
+  updatedAt: string
+}
+
+export interface GoogleIntegrationsPayload {
+  isConfigured: boolean
+  integrations: GoogleCalendarIntegrationStatus[]
+  jobs: GoogleSyncJobItem[]
+}
+
+export interface GoogleSyncConflictVersion {
+  title: string
+  description: string
+  startDate: string
+  endDate: string
+  isAllDay: boolean
+  location: string
+  onlineMeetingUrl: string
+  availability: EventAvailability
+  visibility: EventVisibility
+  timeZone: string
+  recurrence?: RecurrenceConfig
+  exceptionDates?: string[]
+  etag?: string
+  updatedAt: string
+}
+
+export interface GoogleCalendarConflictItem {
+  id: string
+  integrationId: string | null
+  calendarConnectionId: string | null
+  accountEmail: string
+  calendarName: string
+  eventId: string
+  googleEventId: string
+  conflictedFields: string[]
+  status?: string
+  baseVersion?: GoogleSyncConflictVersion
+  localVersion: GoogleSyncConflictVersion
+  googleVersion: GoogleSyncConflictVersion
+  createdAt: string
 }

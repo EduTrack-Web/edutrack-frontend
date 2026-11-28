@@ -7,6 +7,8 @@ import type {
   CreateCategoryInput,
   CreateEventInput,
   EventQueryFilters,
+  GoogleCalendarConflictItem,
+  GoogleIntegrationsPayload,
   UpdateCategoryInput,
   UpdateEventInput,
   VietnameseHolidayItem,
@@ -133,10 +135,16 @@ export const calendarApi = {
     })
   },
 
-  deleteEvent: (eventId: string, mode?: 'this' | 'following' | 'all', date?: string) => {
+  deleteEvent: (
+    eventId: string,
+    mode?: 'this' | 'following' | 'all',
+    date?: string,
+    googleDeleteScope?: 'local_only' | 'both',
+  ) => {
     const params = new URLSearchParams()
     if (mode) params.set('mode', mode)
     if (date) params.set('date', date)
+    if (googleDeleteScope) params.set('googleDeleteScope', googleDeleteScope)
     const suffix = params.size > 0 ? `?${params.toString()}` : ''
     return request<ApiSuccess<null>>(`/calendar/events/${eventId}${suffix}`, {
       method: 'DELETE',
@@ -167,5 +175,109 @@ export const calendarApi = {
   leaveEvent: (eventId: string) =>
     request<ApiSuccess<null>>(`/calendar/events/${eventId}/attendees/me`, {
       method: 'DELETE',
+    }),
+
+  getGoogleSyncStreamUrl: () => `${API_BASE_URL}/calendar/google/stream`,
+
+  createGoogleAuthorization: (options?: { mode?: 'add' | 'reconnect'; integrationId?: string }) =>
+    request<ApiSuccess<{ authorizationUrl: string }>>('/calendar/google/authorizations', {
+      method: 'POST',
+      body: JSON.stringify(options ?? { mode: 'add' }),
+    }),
+
+  getGoogleIntegrations: () =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>('/calendar/google/integrations'),
+
+  updateGoogleIntegrationSettings: (
+    integrationId: string,
+    payload: {
+      isPrimarySyncAccount?: boolean
+      syncToGoogleEnabled?: boolean
+      syncFromGoogleEnabled?: boolean
+    },
+  ) =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>(
+      `/calendar/google/integrations/${integrationId}/settings`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      },
+    ),
+
+  refreshGoogleCalendars: (integrationId: string) =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>(
+      `/calendar/google/integrations/${integrationId}/calendars/refresh`,
+      {
+        method: 'POST',
+      },
+    ),
+
+  updateGoogleCalendarSelection: (
+    integrationId: string,
+    payload: {
+      selectedCalendarIds: string[]
+      removedActions?: Array<{ calendarConnectionId: string; action: 'keep' | 'delete' }>
+    },
+  ) =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>(
+      `/calendar/google/integrations/${integrationId}/calendars/selection`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      },
+    ),
+
+  syncGoogleIntegration: (integrationId: string) =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>(
+      `/calendar/google/integrations/${integrationId}/sync`,
+      {
+        method: 'POST',
+      },
+    ),
+
+  unlinkGoogleIntegration: (integrationId: string) =>
+    request<
+      ApiSuccess<GoogleIntegrationsPayload & { revocation?: 'confirmed' | 'legacy_local_only' }>
+    >(`/calendar/google/integrations/${integrationId}`, {
+      method: 'DELETE',
+    }),
+
+  toggleGoogleCalendarVisibility: (calendarConnectionId: string, isVisible: boolean) =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>(
+      `/calendar/google/calendars/${calendarConnectionId}/visibility`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ isVisible }),
+      },
+    ),
+
+  syncSingleGoogleCalendar: (calendarConnectionId: string) =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>(
+      `/calendar/google/calendars/${calendarConnectionId}/sync`,
+      {
+        method: 'POST',
+      },
+    ),
+
+  retryGoogleSyncJob: (jobId: string) =>
+    request<ApiSuccess<GoogleIntegrationsPayload>>(`/calendar/google/jobs/${jobId}/retry`, {
+      method: 'POST',
+    }),
+
+  getGoogleConflicts: () =>
+    request<ApiSuccess<{ conflicts: GoogleCalendarConflictItem[] }>>('/calendar/google/conflicts'),
+
+  resolveGoogleConflict: (
+    conflictId: string,
+    payload: {
+      choice?: 'local' | 'google'
+      fieldChoices?: Record<string, 'local' | 'google'>
+    },
+  ) =>
+    request<
+      ApiSuccess<GoogleIntegrationsPayload & { conflicts: GoogleCalendarConflictItem[] }>
+    >(`/calendar/google/conflicts/${conflictId}/resolution`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 }

@@ -26,6 +26,20 @@ import { calendarApi } from '../services/calendarApi'
 import { useRecurringConfirmation } from './useRecurringConfirmation'
 import { useAuth } from '@/modules/auth/viewmodels/useAuth'
 
+export const GOOGLE_CALENDAR_EVENT_COLORS = [
+  { id: '1', label: 'Oải hương', hex: '#7986CB' },
+  { id: '2', label: 'Xô thơm', hex: '#33B679' },
+  { id: '3', label: 'Nho', hex: '#8E24AA' },
+  { id: '4', label: 'Hồng hạc', hex: '#E67C73' },
+  { id: '5', label: 'Chuối', hex: '#F6BF26' },
+  { id: '6', label: 'Quýt', hex: '#F4511E' },
+  { id: '7', label: 'Khổng tước', hex: '#039BE5' },
+  { id: '8', label: 'Than chì', hex: '#616161' },
+  { id: '9', label: 'Việt quất', hex: '#3F51B5' },
+  { id: '10', label: 'Húng quế', hex: '#0B8043' },
+  { id: '11', label: 'Cà chua', hex: '#D50000' },
+] as const
+
 export const EXTENDED_CALENDAR_COLORS = [
   '#2563EB',
   '#0284C7',
@@ -46,6 +60,34 @@ export const EXTENDED_CALENDAR_COLORS = [
   '#475569',
   '#57534E',
 ]
+
+export interface EventColorOption {
+  hex: string
+  label?: string
+}
+
+export const UNIFIED_EVENT_COLORS: readonly EventColorOption[] = (() => {
+  const seen = new Set<string>()
+  const merged: EventColorOption[] = []
+
+  for (const hex of EXTENDED_CALENDAR_COLORS) {
+    const key = hex.toLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push({ hex })
+    }
+  }
+
+  for (const item of GOOGLE_CALENDAR_EVENT_COLORS) {
+    const key = item.hex.toLowerCase()
+    if (!seen.has(key)) {
+      seen.add(key)
+      merged.push({ hex: item.hex, label: item.label })
+    }
+  }
+
+  return merged
+})()
 
 export type ReminderUnit = 'minutes' | 'hours' | 'days' | 'weeks'
 
@@ -188,8 +230,14 @@ export function useEventModalViewModel({
     (g) => Boolean(user?.email && g.email.toLowerCase() === user.email.toLowerCase()),
   )
   const isGuest = Boolean(!isOwner && currentGuest)
-  const canModify = isOwner || Boolean(currentGuest?.canModify)
-  const canInviteOthers = isOwner || Boolean(currentGuest?.canInviteOthers ?? true)
+  const isGoogleReadOnly = Boolean(initialEvent?.isGoogleReadOnly)
+  const isGoogleLinked = Boolean(
+    initialEvent?.syncOrigin === 'google' ||
+      initialEvent?.hasGoogleMappings ||
+      initialEvent?.googleSource,
+  )
+  const canModify = (isOwner || Boolean(currentGuest?.canModify)) && !isGoogleReadOnly
+  const canInviteOthers = (isOwner || Boolean(currentGuest?.canInviteOthers ?? true)) && !isGoogleReadOnly
   const canSeeGuestList = isOwner || Boolean(currentGuest?.canSeeGuestList ?? true)
 
   const [guestStatus, setGuestStatus] = useState<'pending' | 'accepted' | 'declined'>('pending')
@@ -737,7 +785,10 @@ export function useEventModalViewModel({
     color ||
     (entryType === 'task'
       ? PRIORITY_CONFIG[priority]?.color || '#3B82F6'
-      : selectedCategory?.color || (initialEvent?.calendarId === calendarId && initialEvent?.calendar?.color) || '#2563EB')
+      : initialEvent?.googleSource?.calendarColor ||
+        selectedCategory?.color ||
+        (initialEvent?.calendarId === calendarId && initialEvent?.calendar?.color) ||
+        '#2563EB')
 
   const handleSelectPriority = (newPriority: EventPriority) => {
     if (newPriority === priority) return
@@ -1151,7 +1202,10 @@ export function useEventModalViewModel({
     setPendingSavePayload(null)
   }
 
-  const handleDeleteEvent = async (mode?: 'this' | 'following' | 'all') => {
+  const handleDeleteEvent = async (
+    mode?: 'this' | 'following' | 'all',
+    googleDeleteScope?: 'local_only' | 'both',
+  ) => {
     if (!initialEvent) return
     try {
       setIsDeleting(true)
@@ -1162,9 +1216,14 @@ export function useEventModalViewModel({
       const targetDate = initialDate?.toISOString() ?? initialEvent.startDate
 
       if (isRecurring) {
-        await calendarApi.deleteEvent(realEventId, mode ?? deleteRecurringMode, targetDate)
+        await calendarApi.deleteEvent(
+          realEventId,
+          mode ?? deleteRecurringMode,
+          targetDate,
+          googleDeleteScope,
+        )
       } else {
-        await calendarApi.deleteEvent(realEventId, 'all')
+        await calendarApi.deleteEvent(realEventId, 'all', undefined, googleDeleteScope)
       }
 
       onSaved()
@@ -1313,6 +1372,8 @@ export function useEventModalViewModel({
     handleSubmit,
     isOwner,
     isGuest,
+    isGoogleReadOnly,
+    isGoogleLinked,
     currentGuest,
     guestStatus,
     setGuestStatus,
