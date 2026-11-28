@@ -1,0 +1,64 @@
+.gcal-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.gcal-scrollbar:hover,
+.gcal-scrollbar:focus-within,
+.gcal-scrollbar[data-scrolling='true'] {
+  scrollbar-color: rgba(148, 163, 184, 0.62) transparent;
+}
+
+.dark .gcal-scrollbar:hover,
+.dark .gcal-scrollbar:focus-within,
+.dark .gcal-scrollbar[data-scrolling='true'] {
+  scrollbar-color: rgba(148, 163, 184, 0.38) transparent;
+}
+
+.gcal-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.gcal-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.gcal-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 4px;
+}
+
+.gcal-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.gcal-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 180ms ease;
+}
+
+.gcal-scrollbar:hover::-webkit-scrollbar-thumb,
+.gcal-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.gcal-scrollbar[data-scrolling='true']::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.62);
+}
+
+.gcal-scrollbar::-webkit-scrollbar-thumb:hover,
+.gcal-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: rgba(100, 116, 139, 0.82);
+}
+
+.dark .gcal-scrollbar:hover::-webkit-scrollbar-thumb,
+.dark .gcal-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.dark .gcal-scrollbar[data-scrolling='true']::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.38);
+}
+
+.dark .gcal-scrollbar::-webkit-scrollbar-thumb:hover,
+.dark .gcal-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: rgba(148, 163, 184, 0.62);
+}

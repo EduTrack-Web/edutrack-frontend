@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Settings } from 'lucide-react'
+import { RefreshCw, Settings } from 'lucide-react'
 import { Icon } from '@/shared/components/Icon'
 import type {
   CalendarCategory,
   CalendarEvent,
   VietnameseHolidayItem,
 } from '@/modules/calendar/models/calendar.types'
+import { getCalendarEventCardColors } from '@/modules/calendar/utils/calendarEventColors'
 import {
   formatLunarDateLabel,
   getLunarDateTooltip,
@@ -19,18 +20,25 @@ import {
   VIETNAM_HOLIDAY_BADGE_CLASSES,
   VIETNAM_HOLIDAY_DOT_CLASS,
 } from '@/modules/calendar/models/vietnameseHolidays'
+import { CALENDAR_KEYS } from '@/modules/calendar/models/calendarI18nKeys'
 import { useCalendarViewModel, type CalendarViewMode } from '@/modules/calendar/viewmodels/useCalendarViewModel'
+import { interfaceLocale, type TranslationKey } from '@/modules/i18n/services/translator'
 import { useTranslation } from '@/modules/i18n/viewmodels/useTranslation'
 import { CalendarSidebar } from './components/CalendarSidebar'
 import { CalendarDateLabel } from './components/CalendarDateLabel'
 import { CalendarSettingsModal } from './components/CalendarSettingsModal'
 import { CalendarIcsModal } from './components/CalendarIcsModal'
 import { CategoryModal } from './components/CategoryModal'
+import { ConfirmDeleteGoogleEventModal } from './components/ConfirmDeleteGoogleEventModal'
+import { ConfirmUnlinkGoogleCalendarModal } from './components/ConfirmUnlinkGoogleCalendarModal'
 import { EventModal } from './components/EventModal'
+import { GoogleCalendarSelectModal } from './components/GoogleCalendarSelectModal'
 import { HolidayDetailModal } from './components/HolidayDetailModal'
+import { GoogleSyncConflictModal } from './components/GoogleSyncConflictModal'
 import { TaskTickButton } from './components/TaskTickButton'
 import { RecurringConfirmationDialog } from './components/RecurringConfirmationDialog'
 import { RecurrenceScopeModal, type RecurrenceScopeMode } from './components/RecurrenceScopeModal'
+import '../styles/calendarScrollbar.css'
 import {
   buildEventsByDateMap,
   buildTimedSegmentsForDate,
@@ -40,8 +48,25 @@ import {
   unifyMultiDaySegmentWidths,
 } from '../utils/calendarLayout'
 
-const GOOGLE_WEEKDAYS = ['CN', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7']
-const GOOGLE_SHORT_WEEKDAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+const WEEKDAY_KEYS = [
+  CALENDAR_KEYS.WEEKDAY_SUN,
+  CALENDAR_KEYS.WEEKDAY_MON,
+  CALENDAR_KEYS.WEEKDAY_TUE,
+  CALENDAR_KEYS.WEEKDAY_WED,
+  CALENDAR_KEYS.WEEKDAY_THU,
+  CALENDAR_KEYS.WEEKDAY_FRI,
+  CALENDAR_KEYS.WEEKDAY_SAT,
+] as const
+
+const SHORT_WEEKDAY_KEYS = [
+  CALENDAR_KEYS.WEEKDAY_SHORT_SUN,
+  CALENDAR_KEYS.WEEKDAY_SHORT_MON,
+  CALENDAR_KEYS.WEEKDAY_SHORT_TUE,
+  CALENDAR_KEYS.WEEKDAY_SHORT_WED,
+  CALENDAR_KEYS.WEEKDAY_SHORT_THU,
+  CALENDAR_KEYS.WEEKDAY_SHORT_FRI,
+  CALENDAR_KEYS.WEEKDAY_SHORT_SAT,
+] as const
 
 const HOUR_HEIGHT = 48
 const HOURS_24 = Array.from({ length: 24 }, (_, i) => ({
@@ -49,12 +74,12 @@ const HOURS_24 = Array.from({ length: 24 }, (_, i) => ({
   label: i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`,
 }))
 
-const VIEW_OPTIONS: { mode: CalendarViewMode; label: string }[] = [
-  { mode: 'day', label: 'Ngày' },
-  { mode: 'week', label: 'Tuần' },
-  { mode: 'month', label: 'Tháng' },
-  { mode: 'year', label: 'Năm' },
-  { mode: 'list', label: 'Danh sách' },
+const VIEW_OPTIONS: ReadonlyArray<{ mode: CalendarViewMode; labelKey: TranslationKey }> = [
+  { mode: 'day', labelKey: CALENDAR_KEYS.VIEW_DAY },
+  { mode: 'week', labelKey: CALENDAR_KEYS.VIEW_WEEK },
+  { mode: 'month', labelKey: CALENDAR_KEYS.VIEW_MONTH },
+  { mode: 'year', labelKey: CALENDAR_KEYS.VIEW_YEAR },
+  { mode: 'list', labelKey: CALENDAR_KEYS.VIEW_LIST },
 ]
 
 function formatMinutesToHHMM(totalMinutes: number): string {
@@ -64,11 +89,16 @@ function formatMinutesToHHMM(totalMinutes: number): string {
   return `${hh < 10 ? `0${hh}` : hh}:${mm < 10 ? `0${mm}` : mm}`
 }
 
-function formatEventTime(startStr: string, endStr: string, isAllDay: boolean): string {
+function formatEventTime(
+  startStr: string,
+  endStr: string,
+  isAllDay: boolean,
+  allDayText = 'All day',
+): string {
   try {
     const start = new Date(startStr)
     const end = new Date(endStr)
-    if (isAllDay) return 'Cả ngày'
+    if (isAllDay) return allDayText
     const timeStart = start.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })
     const timeEnd = end.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })
     if (timeStart === timeEnd && start.toDateString() === end.toDateString()) {
@@ -94,13 +124,13 @@ function getTimeZoneOffsetLabel(tz?: string): string {
   }
 }
 
-function formatDayHeader(dateStr: string): string {
+function formatDayHeader(dateStr: string, locale = 'vi-VN'): string {
   try {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
     const d = match
       ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
       : new Date(dateStr)
-    return d.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' })
+    return d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' })
   } catch {
     return dateStr
   }
@@ -108,7 +138,9 @@ function formatDayHeader(dateStr: string): string {
 
 export function CalendarPage() {
   const vm = useCalendarViewModel()
-  const { t } = useTranslation()
+  const { language, t } = useTranslation()
+  const locale = interfaceLocale(language)
+  const allDayLabel = t(CALENDAR_KEYS.ALL_DAY)
   const timeGridRef = useRef<HTMLDivElement>(null)
   const dayGridRef = useRef<HTMLDivElement>(null)
   const listContainerRef = useRef<HTMLDivElement>(null)
@@ -128,6 +160,9 @@ export function CalendarPage() {
   const isSuppressClickRef = useRef(false)
 
   const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null)
+  const [pendingListGoogleDeleteScope, setPendingListGoogleDeleteScope] = useState<
+    'local_only' | 'both' | null
+  >(null)
   const [isDeletingEvent, setIsDeletingEvent] = useState(false)
   const [pendingToggleTask, setPendingToggleTask] = useState<CalendarEvent | null>(null)
   const [isTogglingTask, setIsTogglingTask] = useState(false)
@@ -152,6 +187,42 @@ export function CalendarPage() {
     currentHeight: number
     previewEndDate: string
   } | null>(null)
+
+  useEffect(() => {
+    const timers = new WeakMap<HTMLElement, number>()
+    const activeElements = new Set<HTMLElement>()
+
+    const handleScrollCapture = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement) || !target.classList.contains('gcal-scrollbar')) return
+
+      target.dataset.scrolling = 'true'
+      activeElements.add(target)
+
+      const existingTimer = timers.get(target)
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer)
+      }
+
+      const nextTimer = window.setTimeout(() => {
+        delete target.dataset.scrolling
+        activeElements.delete(target)
+        timers.delete(target)
+      }, 850)
+      timers.set(target, nextTimer)
+    }
+
+    document.addEventListener('scroll', handleScrollCapture, { capture: true, passive: true })
+    return () => {
+      document.removeEventListener('scroll', handleScrollCapture, { capture: true })
+      for (const el of activeElements) {
+        const timerId = timers.get(el)
+        if (timerId !== undefined) window.clearTimeout(timerId)
+        delete el.dataset.scrolling
+      }
+      activeElements.clear()
+    }
+  }, [])
 
   useEffect(() => {
     if (!resizingEvent) return
@@ -227,6 +298,7 @@ export function CalendarPage() {
     segmentId: string,
     segmentHeight?: number,
   ) => {
+    if (event.isGoogleReadOnly) return
     e.stopPropagation()
     e.preventDefault()
     isSuppressClickRef.current = true
@@ -300,6 +372,10 @@ export function CalendarPage() {
   }
 
   const handleDragStart = (e: React.DragEvent, event: CalendarEvent) => {
+    if (event.isGoogleReadOnly) {
+      e.preventDefault()
+      return
+    }
     e.stopPropagation()
     isSuppressClickRef.current = true
     const rect = e.currentTarget.getBoundingClientRect()
@@ -543,6 +619,7 @@ export function CalendarPage() {
     }
   }
   const [isCalendarSettingsOpen, setIsCalendarSettingsOpen] = useState(false)
+  const [isReturnToSettingsOnSelectClose, setIsReturnToSettingsOnSelectClose] = useState(false)
   const [selectedHoliday, setSelectedHoliday] = useState<VietnameseHolidayItem | null>(null)
   const currentYear = vm.currentDate.getFullYear()
   const currentMonth = vm.currentDate.getMonth()
@@ -553,8 +630,8 @@ export function CalendarPage() {
     : undefined
 
   const weekStartsOn = 0
-  const weekdays = GOOGLE_WEEKDAYS
-  const shortWeekdays = GOOGLE_SHORT_WEEKDAYS
+  const weekdays = WEEKDAY_KEYS.map((key) => t(key))
+  const shortWeekdays = SHORT_WEEKDAY_KEYS.map((key) => t(key))
   const timeZoneHeaderLabel = getTimeZoneOffsetLabel(selectedSettings?.timeZone)
 
   const listAnchorKey = toLocalDateKey(vm.currentDate)
@@ -580,6 +657,7 @@ export function CalendarPage() {
   const userCategoryIds = new Set(vm.categories.map((c) => c.id))
   const visibleEvents = vm.events.filter(
     (event) =>
+      Boolean(event.googleSource) ||
       !event.calendarId ||
       !userCategoryIds.has(event.calendarId) ||
       vm.selectedCategoryIds.includes(event.calendarId),
@@ -699,41 +777,63 @@ export function CalendarPage() {
   }, [vm.viewMode, vm.isLoading, listAnchorKey, listScrollTargetKey, holidayCacheCount])
 
   return (
-    <div className="mx-auto max-w-(--breakpoint-2xl) space-y-3 sm:space-y-4">
-      <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:gap-5">
+    <div className="mx-auto w-full max-w-[1920px] lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+      <div className="flex flex-col gap-3 sm:gap-4 lg:min-h-0 lg:flex-1 lg:flex-row lg:items-stretch lg:gap-4">
         <CalendarSidebar
           categories={vm.categories}
           currentDate={vm.currentDate}
+          googleIntegrations={vm.googleIntegrations}
+          googleSyncJobs={vm.googleSyncJobs}
+          isGoogleConfigured={vm.isGoogleConfigured}
           isSavingPreferences={vm.isSavingPreferences}
           onDeleteCategory={(catId) => setCategoryToDelete(catId)}
+          onOpenCalendarSettings={() => setIsCalendarSettingsOpen(true)}
           onOpenCreateCategory={vm.handleOpenCreateCategory}
           onOpenCreateEvent={() => vm.handleOpenCreateEvent()}
           onOpenEditCategory={vm.handleOpenEditCategory}
+          onOpenGoogleConflicts={() => vm.setIsConflictModalOpen(true)}
           onOpenIcsModal={(cat) => setIcsCategory(cat)}
+          onOpenSelectGoogleCalendars={(integration) => {
+            setIsReturnToSettingsOnSelectClose(false)
+            vm.setSelectingCalendarsIntegrationId(integration.id)
+          }}
+          onOpenUnlinkGoogleModal={(integration) => vm.setUnlinkingIntegration(integration)}
           onQuickChangeColor={vm.handleQuickChangeColor}
+          onReconnectGoogleAccount={(integrationId) =>
+            vm.handleStartGoogleSyncLink({ mode: 'reconnect', integrationId })
+          }
+          onRetryGoogleJob={(jobId) => void vm.handleRetryGoogleSyncJob(jobId)}
           onSelectDate={vm.handleSelectDate}
           onShowAllCategories={vm.handleShowAllCategories}
           onShowOnlyCategory={vm.handleShowOnlyCategory}
+          onStartGoogleSyncLink={() => vm.handleStartGoogleSyncLink({ mode: 'add' })}
+          onSyncGoogleIntegration={(integrationId) =>
+            void vm.handleSyncGoogleIntegration(integrationId)
+          }
           onToggleCategoryVisibility={vm.handleToggleCategoryVisibility}
+          onToggleGoogleCalendarVisibility={(calendarConnectionId, isVisible) =>
+            void vm.handleToggleGoogleCalendarVisibility(calendarConnectionId, isVisible)
+          }
           onUpdatePreferences={vm.handleUpdateCalendarPreferences}
           preferences={vm.calendarPreferences}
           selectedCategoryIds={vm.selectedCategoryIds}
+          syncingGoogleIntegrationId={vm.syncingGoogleIntegrationId}
         />
 
-        <main className="min-w-0 flex-1 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-xs sm:p-4 lg:p-5 dark:border-white/10 dark:bg-white/5">
-          <div className="flex flex-col gap-2.5 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between sm:pb-4 dark:border-white/10">
-            <div className="flex min-w-0 items-center gap-1.5 2xl:gap-2.5">
+        <main className="flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-200/80 bg-white p-2.5 shadow-xs sm:p-3.5 lg:min-h-0 lg:overflow-hidden lg:p-4 dark:border-white/10 dark:bg-white/5">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 sm:pb-3 dark:border-white/10">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 2xl:gap-2.5">
               <button
-                className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 2xl:px-3.5 2xl:py-1.5 2xl:text-xs dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+                className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold whitespace-nowrap text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 2xl:px-3.5 2xl:py-1.5 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
                 onClick={vm.handleToday}
                 type="button"
               >
-                Hôm nay
+                {t(CALENDAR_KEYS.TODAY)}
               </button>
 
               <div className="flex shrink-0 items-center gap-0.5">
                 <button
-                  aria-label="Trước"
+                  aria-label={t(CALENDAR_KEYS.PREV_ARIA)}
                   className="grid size-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100 2xl:size-8 dark:text-slate-400 dark:hover:bg-white/10"
                   onClick={vm.handlePrev}
                   type="button"
@@ -741,7 +841,7 @@ export function CalendarPage() {
                   <Icon className="size-4" name="arrowLeft" />
                 </button>
                 <button
-                  aria-label="Sau"
+                  aria-label={t(CALENDAR_KEYS.NEXT_ARIA)}
                   className="grid size-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100 2xl:size-8 dark:text-slate-400 dark:hover:bg-white/10"
                   onClick={vm.handleNext}
                   type="button"
@@ -750,103 +850,168 @@ export function CalendarPage() {
                 </button>
               </div>
 
-              <h2 className="min-w-0 truncate text-sm font-bold capitalize text-slate-900 2xl:text-lg dark:text-white">
+              <h2 className="min-w-0 truncate text-sm font-bold whitespace-nowrap capitalize text-slate-900 sm:text-base 2xl:text-lg dark:text-white">
                 {vm.dateTitleLabel}
               </h2>
             </div>
 
-            <div className="flex shrink-0 items-center justify-between gap-1.5 sm:justify-end 2xl:gap-2.5">
-              {/* Mobile, foldable & iPad (< xl): dropdown gọn để giữ 1 dòng duy nhất */}
+            <div className="flex w-full flex-wrap items-center justify-between gap-1.5 sm:w-auto sm:justify-end 2xl:gap-2">
               <div className="flex items-center gap-1.5 xl:hidden">
                 <select
-                  aria-label="Chế độ xem lịch"
+                  aria-label={t(CALENDAR_KEYS.VIEW_SELECT_ARIA)}
                   className="h-8 rounded-lg border border-slate-200 bg-slate-100 px-2 text-xs font-bold text-slate-800 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
                   onChange={(event) => vm.setViewMode(event.target.value as CalendarViewMode)}
                   value={vm.viewMode}
                 >
                   {VIEW_OPTIONS.map((opt) => (
                     <option key={opt.mode} value={opt.mode}>
-                      {opt.label}
+                      {t(opt.labelKey)}
                     </option>
                   ))}
                 </select>
 
                 <select
-                  aria-label="Lọc loại mục"
+                  aria-label={t(CALENDAR_KEYS.FILTER_SELECT_ARIA)}
                   className="h-8 rounded-lg border border-slate-200 bg-slate-100 px-2 text-xs font-semibold text-slate-700 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-slate-800 dark:text-white"
                   onChange={(event) => vm.setActiveFilterTab(event.target.value as 'all' | 'event' | 'task')}
                   value={vm.activeFilterTab}
                 >
-                  <option value="all">Tất cả</option>
-                  <option value="event">Sự kiện</option>
-                  <option value="task">Nhiệm vụ</option>
+                  <option value="all">{t(CALENDAR_KEYS.FILTER_ALL)}</option>
+                  <option value="event">{t(CALENDAR_KEYS.FILTER_EVENT)}</option>
+                  <option value="task">{t(CALENDAR_KEYS.FILTER_TASK)}</option>
                 </select>
               </div>
 
-              {/* Laptop & màn hình lớn (xl+): nhóm nút đầy đủ trên cùng 1 dòng */}
-              <div className="hidden items-center gap-1.5 xl:flex 2xl:gap-2.5">
+              <div className="hidden items-center gap-1.5 xl:flex 2xl:gap-2">
                 <div className="flex rounded-xl bg-slate-100 p-0.5 2xl:p-1 dark:bg-white/10">
                   {VIEW_OPTIONS.map((opt) => (
                     <button
-                      className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-bold transition-all 2xl:px-2.5 2xl:text-xs ${
-                        vm.viewMode === opt.mode
-                          ? 'bg-white text-blue-600 shadow-xs dark:bg-slate-800 dark:text-blue-400'
-                          : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                      }`}
+                      className={`shrink-0 rounded-lg px-2 py-1 text-xs font-bold whitespace-nowrap transition-all 2xl:px-2.5 ${vm.viewMode === opt.mode
+                        ? 'bg-white text-blue-600 shadow-xs dark:bg-slate-800 dark:text-blue-400'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                        }`}
                       key={opt.mode}
                       onClick={() => vm.setViewMode(opt.mode)}
                       type="button"
                     >
-                      {opt.label}
+                      {t(opt.labelKey)}
                     </button>
                   ))}
                 </div>
 
                 <div className="flex rounded-xl bg-slate-100 p-0.5 2xl:p-1 dark:bg-white/10">
                   <button
-                    className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-semibold transition-all 2xl:px-2 2xl:text-xs ${
-                      vm.activeFilterTab === 'all'
-                        ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                    }`}
+                    className={`shrink-0 rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap transition-all ${vm.activeFilterTab === 'all'
+                      ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                      }`}
                     onClick={() => vm.setActiveFilterTab('all')}
                     type="button"
                   >
-                    Tất cả
+                    {t(CALENDAR_KEYS.FILTER_ALL)}
                   </button>
                   <button
-                    className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-semibold transition-all 2xl:px-2 2xl:text-xs ${
-                      vm.activeFilterTab === 'event'
-                        ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                    }`}
+                    className={`shrink-0 rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap transition-all ${vm.activeFilterTab === 'event'
+                      ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                      }`}
                     onClick={() => vm.setActiveFilterTab('event')}
                     type="button"
                   >
-                    Sự kiện
+                    {t(CALENDAR_KEYS.FILTER_EVENT)}
                   </button>
                   <button
-                    className={`shrink-0 rounded-lg px-1.5 py-1 text-[11px] font-semibold transition-all 2xl:px-2 2xl:text-xs ${
-                      vm.activeFilterTab === 'task'
-                        ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
-                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                    }`}
+                    className={`shrink-0 rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap transition-all ${vm.activeFilterTab === 'task'
+                      ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                      }`}
                     onClick={() => vm.setActiveFilterTab('task')}
                     type="button"
                   >
-                    Nhiệm vụ
+                    {t(CALENDAR_KEYS.FILTER_TASK)}
                   </button>
                 </div>
               </div>
 
+              {vm.googleConflicts.length > 0 && (
+                <button
+                  aria-label={t('calendar.google.resolveConflicts')}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-2.5 text-xs font-bold whitespace-nowrap text-amber-800 shadow-2xs transition-colors hover:bg-amber-100 dark:border-amber-700/60 dark:bg-amber-950/50 dark:text-amber-200"
+                  onClick={() => vm.setIsConflictModalOpen(true)}
+                  type="button"
+                >
+                  <Icon className="size-3.5 shrink-0" name="warning" />
+                  <span className="hidden sm:inline">{t(CALENDAR_KEYS.CONFLICTS_BADGE)}</span>
+                  <span>({vm.googleConflicts.length})</span>
+                </button>
+              )}
+
+              {(() => {
+                const connectedIntegrations = vm.googleIntegrations.filter(
+                  (acc) => acc.status === 'connected',
+                )
+                const reconnectAccount = vm.googleIntegrations.find(
+                  (acc) => acc.status === 'reconnect_required',
+                )
+                const primaryOrFirst = connectedIntegrations[0]
+                const isSyncingAny =
+                  vm.isSyncingAllGoogle || Boolean(vm.syncingGoogleIntegrationId)
+                const syncButtonTitle =
+                  connectedIntegrations.length > 1
+                    ? t(CALENDAR_KEYS.SYNC_ALL_TITLE, { count: connectedIntegrations.length })
+                    : primaryOrFirst
+                      ? t(CALENDAR_KEYS.SYNC_ONE_TITLE, { email: primaryOrFirst.googleEmail })
+                      : t('calendar.google.syncNow')
+
+                return (
+                  <>
+                    {primaryOrFirst && (
+                      <button
+                        aria-label={syncButtonTitle}
+                        className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2 text-xs font-bold whitespace-nowrap text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                        disabled={isSyncingAny}
+                        onClick={() => void vm.handleSyncAllGoogleIntegrations()}
+                        title={syncButtonTitle}
+                        type="button"
+                      >
+                        <RefreshCw
+                          aria-hidden="true"
+                          className={`size-3.5 shrink-0 ${isSyncingAny ? 'animate-spin text-blue-600' : ''}`}
+                        />
+                        <span className="hidden 2xl:inline">
+                          {isSyncingAny ? t(CALENDAR_KEYS.SYNCING_BUTTON) : t(CALENDAR_KEYS.SYNC_BUTTON)}
+                        </span>
+                      </button>
+                    )}
+
+                    {reconnectAccount && (
+                      <button
+                        aria-label={t('calendar.google.reauthorize')}
+                        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-2.5 text-xs font-bold whitespace-nowrap text-rose-700 shadow-2xs transition-colors hover:bg-rose-100 dark:border-rose-700/60 dark:bg-rose-950/40 dark:text-rose-200"
+                        disabled={!vm.isGoogleConfigured}
+                        onClick={() =>
+                          vm.handleStartGoogleSyncLink({
+                            mode: 'reconnect',
+                            integrationId: reconnectAccount.id,
+                          })
+                        }
+                        type="button"
+                      >
+                        <span>{t(CALENDAR_KEYS.RECONNECT_BUTTON)}</span>
+                      </button>
+                    )}
+                  </>
+                )
+              })()}
+
               <button
                 aria-label={t('calendar.settings.openAria')}
-                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white text-xs font-bold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 lg:min-h-9 lg:min-w-9 2xl:w-auto 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
+                className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2 text-xs font-bold whitespace-nowrap text-slate-700 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 lg:h-8 lg:min-h-8 lg:min-w-8 2xl:px-3 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                 onClick={() => setIsCalendarSettingsOpen(true)}
                 title={t('calendar.settings.openAria')}
                 type="button"
               >
-                <Settings aria-hidden="true" className="size-4" />
+                <Settings aria-hidden="true" className="size-4 shrink-0" />
                 <span className="hidden 2xl:inline">{t('calendar.settings.button')}</span>
               </button>
 
@@ -854,14 +1019,14 @@ export function CalendarPage() {
           </div>
 
           {vm.isLoading ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center py-20 text-center">
               <Icon className="size-8 animate-spin text-blue-600" name="clock" />
-              <p className="mt-3 text-xs font-semibold text-slate-400">Đang đồng bộ dữ liệu lịch...</p>
+              <p className="mt-3 text-xs font-semibold text-slate-400">{t(CALENDAR_KEYS.LOADING)}</p>
             </div>
           ) : vm.viewMode === 'day' ? (
-            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
-              
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/60 p-2.5 sm:px-4 dark:border-white/10 dark:bg-white/5">
+            <div className="mt-2.5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
+
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/60 p-2.5 sm:px-4 dark:border-white/10 dark:bg-white/5">
                 <div className="flex flex-wrap items-center gap-2">
                   <CalendarDateLabel
                     isToday={isSelectedDateToday}
@@ -872,34 +1037,35 @@ export function CalendarPage() {
                     variant="day"
                   />
                   <h3 className="text-sm font-bold capitalize text-slate-900 sm:text-base dark:text-white">
-                    {vm.currentDate.toLocaleDateString('vi-VN', { weekday: 'long' })}
+                    {vm.currentDate.toLocaleDateString(locale, { weekday: 'long' })}
                   </h3>
                   {isSelectedDateToday && (
-                    <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                      Hôm nay
+                    <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                      {t(CALENDAR_KEYS.TODAY)}
                     </span>
                   )}
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    ({selectedDayEvents.length + selectedDayHolidays.length} mục)
+                  <span className="text-xs whitespace-nowrap text-slate-500 dark:text-slate-400">
+                    {t(CALENDAR_KEYS.ITEMS_COUNT, {
+                      count: selectedDayEvents.length + selectedDayHolidays.length,
+                    })}
                   </span>
                 </div>
                 <button
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold whitespace-nowrap text-white shadow-2xs transition-colors hover:bg-blue-700"
                   onClick={() => vm.handleOpenCreateEvent(vm.currentDate)}
                   type="button"
                 >
-                  + Thêm mục vào ngày này
+                  {t(CALENDAR_KEYS.ADD_ITEM_TO_DAY)}
                 </button>
               </div>
 
-              
+
               {(selectedDayAllDayEvents.length > 0 || selectedDayHolidays.length > 0 || Boolean(draggedEvent)) && (
                 <div
-                  className={`flex items-center border-b border-slate-200 bg-slate-50/30 p-2 sm:px-3 transition-colors dark:border-white/10 dark:bg-white/2 ${
-                    dragOverTarget === 'day-allday'
-                      ? 'bg-blue-100/60 ring-2 ring-inset ring-blue-500 dark:bg-blue-950/40'
-                      : ''
-                  }`}
+                  className={`flex items-center border-b border-slate-200 bg-slate-50/30 p-2 sm:px-3 transition-colors dark:border-white/10 dark:bg-white/2 ${dragOverTarget === 'day-allday'
+                    ? 'bg-blue-100/60 ring-2 ring-inset ring-blue-500 dark:bg-blue-950/40'
+                    : ''
+                    }`}
                   onDragLeave={() => {
                     if (dragOverTarget === 'day-allday') setDragOverTarget(null)
                   }}
@@ -910,8 +1076,8 @@ export function CalendarPage() {
                   }}
                   onDrop={(e) => handleDropOnAllDaySlot(e, vm.currentDate)}
                 >
-                  <span className="w-11 sm:w-16 shrink-0 pr-1.5 sm:pr-2 text-right text-[10px] font-semibold text-slate-400">
-                    Cả ngày
+                  <span className="w-11 sm:w-16 shrink-0 pr-1.5 sm:pr-2 text-right text-[10px] font-semibold whitespace-nowrap text-slate-400">
+                    {allDayLabel}
                   </span>
                   <div className="flex flex-1 flex-wrap items-center gap-1.5 min-h-[28px]">
                     {selectedDayHolidays.map((holiday) => (
@@ -930,19 +1096,18 @@ export function CalendarPage() {
                       </button>
                     ))}
                     {selectedDayAllDayEvents.map((event) => {
-                      const eventColor = event.color || event.calendar?.color || '#2563EB'
+                      const cardColors = getCalendarEventCardColors(event.color || event.calendar?.color)
                       const isTaskItem = event.entryType === 'task'
                       const isBeingDragged = draggedEvent?.id === event.id
                       return (
                         <div
-                          className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-white shadow-2xs transition-all hover:scale-[1.01] ${
-                            event.isCompleted ? 'opacity-55' : ''
-                          } ${
-                            isBeingDragged
-                              ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                          className={`flex max-w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold shadow-2xs transition-all hover:scale-[1.01] ${isBeingDragged
+                            ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                            : event.isGoogleReadOnly
+                              ? 'cursor-pointer'
                               : 'cursor-grab active:cursor-grabbing'
-                          }`}
-                          draggable={true}
+                            }`}
+                          draggable={!event.isGoogleReadOnly}
                           key={event.id}
                           onClick={(e) => {
                             e.stopPropagation()
@@ -951,7 +1116,7 @@ export function CalendarPage() {
                           }}
                           onDragEnd={handleDragEnd}
                           onDragStart={(e) => handleDragStart(e, event)}
-                          style={{ backgroundColor: eventColor }}
+                          style={cardColors}
                         >
                           {isTaskItem && (
                             <TaskTickButton
@@ -975,12 +1140,12 @@ export function CalendarPage() {
                 </div>
               )}
 
-              
+
               <div
-                className="relative flex max-h-[620px] select-none overflow-y-auto"
+                className="gcal-scrollbar relative flex max-h-[560px] flex-1 select-none overflow-y-auto lg:max-h-none lg:min-h-0"
                 ref={dayGridRef}
               >
-                
+
                 <div className="w-11 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
                   {HOURS_24.map((h, i) => (
                     <div className="relative h-[48px]" key={h.hour}>
@@ -993,7 +1158,7 @@ export function CalendarPage() {
                   ))}
                 </div>
 
-                
+
                 <div
                   className="relative flex-1"
                   onDragLeave={(e) => {
@@ -1038,7 +1203,7 @@ export function CalendarPage() {
                     </div>
                   )}
 
-                  
+
                   {isSelectedDateToday && (
                     <div
                       className="pointer-events-none absolute inset-x-0 z-30 flex items-center"
@@ -1049,14 +1214,14 @@ export function CalendarPage() {
                     </div>
                   )}
 
-                  
+
                   {selectedDayTimedSegments.map((seg) => {
                     const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, leftPct, widthPct, zIndex } = seg
                     const top = (startMin / 60) * HOUR_HEIGHT
                     const height = isZeroDuration ? 26 : Math.max(26, (durationMin / 60) * HOUR_HEIGHT)
                     const isResizingThis = resizingEvent?.segmentId === segmentId
                     const cardHeight = isResizingThis ? resizingEvent.currentHeight : height
-                    const eventColor = event.color || event.calendar?.color || '#2563EB'
+                    const cardColors = getCalendarEventCardColors(event.color || event.calendar?.color)
                     const isTask = event.entryType === 'task'
                     const isBeingDragged = draggedEvent?.id === event.id
                     const effectiveEndIso = isResizingThis ? resizingEvent.previewEndDate : event.endDate
@@ -1076,14 +1241,14 @@ export function CalendarPage() {
 
                     return (
                       <div
-                        className={`group/item absolute overflow-hidden border-[1.5px] border-white dark:border-[#021024] px-2.5 py-1 text-white shadow-sm transition-all hover:z-30! hover:shadow-md ${roundedClass} ${
-                          event.isCompleted ? 'line-through opacity-50' : ''
-                        } ${
-                          isBeingDragged
+                        className={`group/item absolute overflow-hidden border-[1.5px] border-white dark:border-[#021024] px-2.5 py-1 shadow-sm transition-all hover:z-30! hover:shadow-md ${roundedClass} ${event.isCompleted ? 'line-through' : ''
+                          } ${isBeingDragged
                             ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
-                            : 'cursor-grab active:cursor-grabbing'
-                        }`}
-                        draggable={true}
+                            : event.isGoogleReadOnly
+                              ? 'cursor-pointer'
+                              : 'cursor-grab active:cursor-grabbing'
+                          }`}
+                        draggable={!event.isGoogleReadOnly}
                         key={segmentId}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -1098,11 +1263,11 @@ export function CalendarPage() {
                           left: `calc(${leftPct}% + 4px)`,
                           width: `calc(${widthPct}% - 8px)`,
                           zIndex,
-                          backgroundColor: eventColor,
+                          ...cardColors,
                         }}
                         title={`${event.title} (${formatEventTime(event.startDate, event.endDate, false)})`}
                       >
-                        <div className="flex h-full items-center justify-between text-xs font-semibold leading-tight opacity-90">
+                        <div className="flex h-full items-center justify-between text-xs font-semibold leading-tight">
                           <span className="flex min-w-0 items-center gap-1.5">
                             {isTask && (
                               <TaskTickButton
@@ -1110,24 +1275,24 @@ export function CalendarPage() {
                                 onToggle={() => handleRequestToggleTask(event)}
                               />
                             )}
-                            <Icon className="size-3 text-white/80 shrink-0" name="clock" />
-                            <span className="font-bold opacity-90 shrink-0">
+                            <Icon className="size-3 shrink-0" name="clock" />
+                            <span className="font-bold shrink-0">
                               {segmentTimeLabel}
                             </span>
                             <span className="truncate">{event.title}</span>
                           </span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {widthPct >= 50 && event.calendar ? (
-                              <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-bold">
+                              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-current/30 ring-inset">
                                 {event.calendar.name}
                               </span>
                             ) : widthPct >= 50 && isTask ? (
-                              <span className="rounded-sm bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">
+                              <span className="rounded-sm px-1.5 py-0.5 text-[10px] font-bold ring-1 ring-current/30 ring-inset">
                                 Độc lập
                               </span>
                             ) : null}
                             {widthPct >= 50 && isTask && event.calendar && (
-                              <span className="rounded-sm bg-white/25 px-1.5 py-0.5 text-[10px] font-bold">
+                              <span className="rounded-sm px-1.5 py-0.5 text-[10px] font-bold ring-1 ring-current/30 ring-inset">
                                 Nhiệm vụ
                               </span>
                             )}
@@ -1139,19 +1304,19 @@ export function CalendarPage() {
                         </div>
 
                         {height >= 70 && event.location && (
-                          <div className="mt-1 flex items-center gap-1 truncate text-xs opacity-90">
+                          <div className="mt-1 flex items-center gap-1 truncate text-xs">
                             <Icon className="size-3 shrink-0" name="mapPin" />
                             <span>{event.location}</span>
                           </div>
                         )}
 
                         {height >= 95 && event.description && (
-                          <p className="mt-1 line-clamp-2 text-xs opacity-85">
+                          <p className="mt-1 line-clamp-2 text-xs">
                             {event.description}
                           </p>
                         )}
 
-                        {isEndSegment && (
+                        {isEndSegment && !event.isGoogleReadOnly && (
                           <div
                             aria-label="Kéo đổi thời lượng"
                             className={`absolute bottom-0 inset-x-0 h-2.5 cursor-ns-resize transition-opacity bg-black/20 flex items-center justify-center z-30 ${
@@ -1169,7 +1334,7 @@ export function CalendarPage() {
                                 → {resizePreviewLabel}
                               </span>
                             ) : (
-                              <div className="h-0.5 w-6 rounded-full bg-white/80 pointer-events-none" />
+                              <div className="h-0.5 w-6 rounded-full bg-current pointer-events-none" />
                             )}
                           </div>
                         )}
@@ -1180,82 +1345,455 @@ export function CalendarPage() {
               </div>
             </div>
           ) : vm.viewMode === 'week' ? (
-            <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
-              <div className="min-w-[520px] sm:min-w-0">
-              
-              <div className="flex border-b border-slate-200 bg-slate-50/50 dark:border-white/10 dark:bg-white/5">
-                
-                <div className="flex w-11 sm:w-16 shrink-0 select-none items-end justify-center border-r border-slate-200/70 pb-2 text-[10px] sm:text-[11px] font-semibold text-slate-400 dark:border-white/10">
-                  {timeZoneHeaderLabel}
-                </div>
+            <div className="gcal-scrollbar mt-2.5 flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-transparent">
+              <div className="flex min-h-0 min-w-[520px] flex-1 flex-col sm:min-w-0">
 
-                
-                <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 py-2 sm:py-2.5 text-center dark:divide-white/10">
-                  {weekDays.map((wd, weekIndex) => {
-                    const isCurrentDay =
-                      today.getDate() === wd.dayNum &&
-                      today.getMonth() === wd.date.getMonth() &&
-                      today.getFullYear() === wd.date.getFullYear()
+                <div className="flex shrink-0 border-b border-slate-200 bg-slate-50/50 dark:border-white/10 dark:bg-white/5">
 
-                    return (
-                      <div className="px-0.5 sm:px-1" key={wd.dateKey}>
-                        <span
-                          className={`block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider ${
-                            isCurrentDay
+                  <div className="flex w-11 sm:w-16 shrink-0 select-none items-end justify-center border-r border-slate-200/70 pb-2 text-[10px] sm:text-[11px] font-semibold text-slate-400 dark:border-white/10">
+                    {timeZoneHeaderLabel}
+                  </div>
+
+
+                  <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 py-2 sm:py-2.5 text-center dark:divide-white/10">
+                    {weekDays.map((wd, weekIndex) => {
+                      const isCurrentDay =
+                        today.getDate() === wd.dayNum &&
+                        today.getMonth() === wd.date.getMonth() &&
+                        today.getFullYear() === wd.date.getFullYear()
+
+                      return (
+                        <div className="px-0.5 sm:px-1" key={wd.dateKey}>
+                          <span
+                            className={`block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider ${isCurrentDay
                               ? 'font-bold text-blue-600 dark:text-blue-400'
                               : 'text-slate-500 dark:text-slate-400'
-                          }`}
-                        >
-                          <span className="sm:hidden">{shortWeekdays[weekIndex]}</span>
-                          <span className="hidden sm:inline">{wd.weekdayLabel}</span>
-                        </span>
-                        <span className="mt-0.5 inline-flex justify-center">
-                          <CalendarDateLabel
-                            isToday={isCurrentDay}
-                            lunarDate={vm.lunarDatesBySolarDate[wd.dateKey]}
-                            showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
-                            showLunarMonth={weekIndex === 0}
-                            solarDay={wd.dayNum}
-                            variant="week"
-                          />
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              
-              {(hasAnyWeekAllDay || Boolean(draggedEvent)) && (
-                <div className="flex border-b border-slate-200 bg-slate-50/30 py-1 dark:border-white/10 dark:bg-white/2">
-                  <div className="flex w-11 sm:w-16 shrink-0 items-center justify-end border-r border-slate-200/70 pr-1.5 sm:pr-2 text-[10px] font-medium text-slate-400 dark:border-white/10">
-                    Cả ngày
+                              }`}
+                          >
+                            <span className="sm:hidden">{shortWeekdays[weekIndex]}</span>
+                            <span className="hidden sm:inline">{wd.weekdayLabel}</span>
+                          </span>
+                          <span className="mt-0.5 inline-flex justify-center">
+                            <CalendarDateLabel
+                              isToday={isCurrentDay}
+                              lunarDate={vm.lunarDatesBySolarDate[wd.dateKey]}
+                              showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                              showLunarMonth={weekIndex === 0}
+                              solarDay={wd.dayNum}
+                              variant="week"
+                            />
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
-                  <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 px-0.5 dark:divide-white/10">
+                </div>
+
+
+                {(hasAnyWeekAllDay || Boolean(draggedEvent)) && (
+                  <div className="flex shrink-0 border-b border-slate-200 bg-slate-50/30 py-1 dark:border-white/10 dark:bg-white/2">
+                    <div className="flex w-11 sm:w-16 shrink-0 items-center justify-end border-r border-slate-200/70 pr-1.5 sm:pr-2 text-[10px] font-medium whitespace-nowrap text-slate-400 dark:border-white/10">
+                      {allDayLabel}
+                    </div>
+                    <div className="grid flex-1 grid-cols-7 divide-x divide-slate-200/70 px-0.5 dark:divide-white/10">
+                      {weekDays.map((wd) => {
+                        const dayAllDays = (eventsByDate[wd.dateKey] ?? []).filter((e) => e.isAllDay)
+                        const dayHolidays = vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[wd.dateKey] ?? [])
+                        const allDayKey = `week-allday-${wd.dateKey}`
+                        const isOver = dragOverTarget === allDayKey
+                        return (
+                          <div
+                            className={`min-h-[26px] space-y-1 rounded px-1 transition-colors ${isOver ? 'bg-blue-100/70 ring-1 ring-blue-500 dark:bg-blue-900/40' : ''
+                              }`}
+                            key={`allday-${wd.dateKey}`}
+                            onDragLeave={() => {
+                              if (dragOverTarget === allDayKey) setDragOverTarget(null)
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault()
+                              e.dataTransfer.dropEffect = 'move'
+                              setDragOverTarget(allDayKey)
+                            }}
+                            onDrop={(e) => handleDropOnAllDaySlot(e, wd.date)}
+                          >
+                            {dayHolidays.map((holiday) => (
+                              <button
+                                className={`flex w-full cursor-pointer items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[11px] font-semibold shadow-2xs transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-green-600 ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                                key={holiday.id}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setSelectedHoliday(holiday)
+                                }}
+                                title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
+                                type="button"
+                              >
+                                <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                                <span className="min-w-0 flex-1 truncate">{holiday.name}</span>
+                              </button>
+                            ))}
+                            {dayAllDays.map((event) => {
+                              const cardColors = getCalendarEventCardColors(event.color || event.calendar?.color)
+                              const isTaskItem = event.entryType === 'task'
+                              const isBeingDragged = draggedEvent?.id === event.id
+                              return (
+                                <div
+                                  className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold shadow-2xs hover:shadow-md ${isBeingDragged
+                                    ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                                    : event.isGoogleReadOnly
+                                      ? 'cursor-pointer'
+                                      : 'cursor-grab active:cursor-grabbing'
+                                    }`}
+                                  draggable={!event.isGoogleReadOnly}
+                                  key={event.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
+                                    vm.handleOpenEditEvent(event)
+                                  }}
+                                  onDragEnd={handleDragEnd}
+                                  onDragStart={(e) => handleDragStart(e, event)}
+                                  style={cardColors}
+                                >
+                                  {isTaskItem && (
+                                    <TaskTickButton
+                                      isCompleted={event.isCompleted}
+                                      onToggle={() => handleRequestToggleTask(event)}
+                                      size="sm"
+                                    />
+                                  )}
+                                  <span className={`min-w-0 flex-1 truncate text-left ${event.isCompleted ? 'line-through' : ''}`}>
+                                    {event.title}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                            {isOver && dayAllDays.length === 0 && (
+                              <span className="block text-center text-[9px] font-bold text-blue-600 dark:text-blue-400">
+                                + Cả ngày
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+
+                <div
+                  className="gcal-scrollbar relative flex max-h-[560px] flex-1 select-none overflow-y-auto lg:max-h-none lg:min-h-0"
+                  ref={timeGridRef}
+                >
+
+                  <div className="w-11 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
+                    {HOURS_24.map((h, i) => (
+                      <div className="relative h-[48px]" key={h.hour}>
+                        {i > 0 && (
+                          <span className="absolute -top-2.5 right-1.5 sm:right-2 select-none text-[10px] font-medium text-slate-400">
+                            {h.label}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+
+                  <div className="relative grid flex-1 grid-cols-7 divide-x divide-slate-100 dark:divide-white/5">
                     {weekDays.map((wd) => {
-                      const dayAllDays = (eventsByDate[wd.dateKey] ?? []).filter((e) => e.isAllDay)
-                      const dayHolidays = vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[wd.dateKey] ?? [])
-                      const allDayKey = `week-allday-${wd.dateKey}`
-                      const isOver = dragOverTarget === allDayKey
+                      const isCurrentDay =
+                        today.getDate() === wd.dayNum &&
+                        today.getMonth() === wd.date.getMonth() &&
+                        today.getFullYear() === wd.date.getFullYear()
+
+                      const timedSegments = weekTimedSegmentsByDate[wd.dateKey] ?? []
+
+                      const columnKey = `week-col-${wd.dateKey}`
+
                       return (
                         <div
-                          className={`min-h-[26px] space-y-1 rounded px-1 transition-colors ${
-                            isOver ? 'bg-blue-100/70 ring-1 ring-blue-500 dark:bg-blue-900/40' : ''
-                          }`}
-                          key={`allday-${wd.dateKey}`}
-                          onDragLeave={() => {
-                            if (dragOverTarget === allDayKey) setDragOverTarget(null)
+                          className="relative"
+                          key={wd.dateKey}
+                          onDragLeave={(e) => {
+                            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                              setDragPreview((prev) => (prev?.columnKey === columnKey ? null : prev))
+                            }
                           }}
-                          onDragOver={(e) => {
-                            e.preventDefault()
-                            e.dataTransfer.dropEffect = 'move'
-                            setDragOverTarget(allDayKey)
-                          }}
-                          onDrop={(e) => handleDropOnAllDaySlot(e, wd.date)}
+                          onDragOver={(e) => handleTimedColumnDragOver(e, columnKey)}
+                          onDrop={(e) => handleDropOnTimedColumn(e, wd.date)}
                         >
-                          {dayHolidays.map((holiday) => (
+                          {HOURS_24.map((h) => (
+                            <div
+                              className="relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5"
+                              key={h.hour}
+                              onClick={() => {
+                                const clickD = new Date(
+                                  wd.date.getFullYear(),
+                                  wd.date.getMonth(),
+                                  wd.date.getDate(),
+                                  h.hour,
+                                  0,
+                                  0,
+                                )
+                                vm.handleOpenCreateEvent(clickD)
+                              }}
+                              title={`Thêm lịch trình lúc ${h.label}`}
+                            />
+                          ))}
+
+                          {dragPreview?.columnKey === columnKey && draggedEvent && (
+                            <div
+                              className="pointer-events-none absolute inset-x-0.5 z-30 flex items-center gap-1 rounded border-2 border-dashed border-blue-500 bg-blue-600/20 px-1.5 text-[10px] font-bold text-blue-950 dark:text-blue-100 shadow-sm backdrop-blur-2xs"
+                              style={{
+                                top: `${(dragPreview.startMin / 60) * HOUR_HEIGHT}px`,
+                                height: `${Math.max(20, ((dragPreview.endMin - dragPreview.startMin) / 60) * HOUR_HEIGHT)}px`,
+                              }}
+                            >
+                              <span className="shrink-0 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-extrabold text-white">
+                                {dragPreview.label}
+                              </span>
+                              <span className="truncate">{draggedEvent.title}</span>
+                            </div>
+                          )}
+
+
+                          {isCurrentDay && (
+                            <div
+                              className="pointer-events-none absolute inset-x-0 z-30 flex items-center"
+                              style={{ top: `${currentIndicatorTop}px` }}
+                            >
+                              <div className="-ml-1.5 size-2.5 rounded-full bg-red-500 shadow-xs" />
+                              <div className="flex-1 border-t-2 border-red-500" />
+                            </div>
+                          )}
+
+
+                          {timedSegments.map((seg) => {
+                            const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, leftPct, widthPct, zIndex } = seg
+                            const top = (startMin / 60) * HOUR_HEIGHT
+                            const height = isZeroDuration ? 20 : Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
+                            const isResizingThis = resizingEvent?.segmentId === segmentId
+                            const cardHeight = isResizingThis ? resizingEvent.currentHeight : height
+                            const cardColors = getCalendarEventCardColors(event.color || event.calendar?.color)
+                            const isTask = event.entryType === 'task'
+                            const isBeingDragged = draggedEvent?.id === event.id
+                            const effectiveEndIso = isResizingThis ? resizingEvent.previewEndDate : event.endDate
+                            const timeRangeText = formatEventTime(event.startDate, effectiveEndIso, false)
+                            const resizeEndD = isResizingThis ? new Date(resizingEvent.previewEndDate) : null
+                            const resizePreviewLabel = resizeEndD
+                              ? formatMinutesToHHMM(resizeEndD.getHours() * 60 + resizeEndD.getMinutes())
+                              : ''
+                            const roundedClass =
+                              isStartSegment && isEndSegment
+                                ? 'rounded-md'
+                                : isStartSegment
+                                  ? 'rounded-t-md rounded-b-xs'
+                                  : isEndSegment
+                                    ? 'rounded-b-md rounded-t-xs'
+                                    : 'rounded-xs'
+
+                            return (
+                              <div
+                                className={`group/item absolute overflow-hidden border-[1.5px] border-white dark:border-[#021024] px-1.5 py-0.5 shadow-sm transition-all hover:z-30! hover:shadow-md ${roundedClass} ${event.isCompleted ? 'line-through' : ''
+                                  } ${isBeingDragged
+                                    ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                                    : event.isGoogleReadOnly
+                                      ? 'cursor-pointer'
+                                      : 'cursor-grab active:cursor-grabbing'
+                                  }`}
+                                draggable={!event.isGoogleReadOnly}
+                                key={segmentId}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
+                                  vm.handleOpenEditEvent(event)
+                                }}
+                                onDragEnd={handleDragEnd}
+                                onDragStart={(e) => handleDragStart(e, event)}
+                                style={{
+                                  top: `${top}px`,
+                                  height: `${cardHeight}px`,
+                                  left: `calc(${leftPct}% + 2px)`,
+                                  width: `calc(${widthPct}% - 4px)`,
+                                  zIndex,
+                                  ...cardColors,
+                                }}
+                                title={`${event.title} (${formatEventTime(event.startDate, event.endDate, event.isAllDay, allDayLabel)})`}
+                              >
+                                {height < 32 ? (
+                                  <div className="flex h-full items-center justify-between text-[10px] font-semibold leading-tight">
+                                    <span className="flex min-w-0 items-center gap-1">
+                                      {isTask && (
+                                        <TaskTickButton
+                                          isCompleted={event.isCompleted}
+                                          onToggle={() => handleRequestToggleTask(event)}
+                                          size="sm"
+                                        />
+                                      )}
+                                      <span className="font-bold shrink-0">
+                                        {timeRangeText}
+                                      </span>
+                                      <span className="truncate font-medium">{event.title}</span>
+                                    </span>
+                                    {isTask && (
+                                      <span className={`ml-1 size-1.5 shrink-0 rounded-xs ${event.deadline ? 'bg-amber-300' : 'bg-current'}`} />
+                                    )}
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center justify-between text-[10px] font-semibold leading-tight">
+                                      <span className="flex min-w-0 items-center gap-1">
+                                        {isTask && (
+                                          <TaskTickButton
+                                            isCompleted={event.isCompleted}
+                                            onToggle={() => handleRequestToggleTask(event)}
+                                            size="sm"
+                                          />
+                                        )}
+                                        <span className="truncate">
+                                          {timeRangeText}
+                                        </span>
+                                      </span>
+                                      {isTask && (
+                                        <span className={`ml-1 size-1.5 shrink-0 rounded-xs ${event.deadline ? 'bg-amber-300' : 'bg-current'}`} />
+                                      )}
+                                    </div>
+                                    <div className="mt-0.5 truncate text-xs font-bold leading-tight">
+                                      {event.title}
+                                    </div>
+                                  </>
+                                )}
+
+                                {isEndSegment && !event.isGoogleReadOnly && (
+                                  <div
+                                    aria-label="Kéo đổi thời lượng"
+                                    className={`absolute bottom-0 inset-x-0 h-2 cursor-ns-resize transition-opacity bg-black/20 flex items-center justify-center z-30 ${
+                                      isResizingThis ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'
+                                    }`}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      e.preventDefault()
+                                    }}
+                                    onPointerDown={(e) => handleResizeStart(e, event, segmentId, height)}
+                                    title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
+                                  >
+                                    {isResizingThis ? (
+                                      <span className="pointer-events-none -translate-y-3 rounded bg-slate-900/90 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
+                                        → {resizePreviewLabel}
+                                      </span>
+                                    ) : (
+                                      <div className="h-0.5 w-4 rounded-full bg-current pointer-events-none" />
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : vm.viewMode === 'month' ? (
+            <div className="mt-2.5 flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="grid shrink-0 grid-cols-7 border-b border-slate-200 pb-2 text-center text-[11px] font-bold text-slate-600 sm:text-xs dark:border-white/10 dark:text-slate-400">
+                {weekdays.map((wd, idx) => (
+                  <div key={`${wd}-${idx}`}>
+                    <span className="sm:hidden">{shortWeekdays[idx]}</span>
+                    <span className="hidden sm:inline">{wd}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="gcal-scrollbar min-h-0 flex-1 overflow-y-auto">
+                <div className="grid min-h-full grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100 border-b border-slate-100 dark:divide-white/5 dark:border-white/5">
+                  {Array.from({ length: totalGridCells }).map((_, idx) => {
+                    let cellDate: Date
+                    let isCurrentMonth = true
+
+                    if (idx < startOffset) {
+                      const prevD = prevMonthLastDay - startOffset + idx + 1
+                      cellDate = new Date(currentYear, currentMonth - 1, prevD)
+                      isCurrentMonth = false
+                    } else if (idx >= startOffset + daysInCurrentMonth) {
+                      const nextD = idx - (startOffset + daysInCurrentMonth) + 1
+                      cellDate = new Date(currentYear, currentMonth + 1, nextD)
+                      isCurrentMonth = false
+                    } else {
+                      const dNum = idx - startOffset + 1
+                      cellDate = new Date(currentYear, currentMonth, dNum)
+                    }
+
+                    const y = cellDate.getFullYear()
+                    const m = cellDate.getMonth() + 1
+                    const d = cellDate.getDate()
+                    const dateKey = `${y}-${m < 10 ? `0${m}` : m}-${d < 10 ? `0${d}` : d}`
+
+                    const isCurrentDay =
+                      today.getDate() === d &&
+                      today.getMonth() === cellDate.getMonth() &&
+                      today.getFullYear() === cellDate.getFullYear()
+
+                    const dayEvents = eventsByDate[dateKey] ?? []
+                    const isHovered = hoveredDateCell === dateKey
+
+                    const isDragTarget = dragOverTarget === dateKey
+                    return (
+                      <div
+                        className={`group relative flex min-h-[68px] min-w-0 flex-col p-1 transition-colors sm:min-h-[78px] sm:p-1.5 2xl:min-h-[96px] 2xl:p-2 ${isDragTarget
+                          ? 'bg-blue-50/80 ring-2 ring-inset ring-blue-500 dark:bg-blue-950/40'
+                          : isCurrentMonth
+                            ? 'bg-white hover:bg-slate-50/70 dark:bg-transparent dark:hover:bg-white/5'
+                            : 'bg-slate-50/40 text-slate-300 dark:bg-white/2 dark:text-slate-600'
+                          }`}
+                        key={dateKey}
+                        onDragLeave={() => {
+                          if (dragOverTarget === dateKey) setDragOverTarget(null)
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                          setDragOverTarget(dateKey)
+                        }}
+                        onDrop={(e) => handleDropOnMonthDay(e, cellDate)}
+                        onMouseEnter={() => setHoveredDateCell(dateKey)}
+                        onMouseLeave={() => setHoveredDateCell(null)}
+                      >
+                        <div className="relative flex items-center justify-center pb-0.5">
+                          <CalendarDateLabel
+                            isMuted={!isCurrentMonth}
+                            isToday={isCurrentDay}
+                            lunarDate={vm.lunarDatesBySolarDate[dateKey]}
+                            showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                            showLunarMonth={isCurrentMonth && isFirstOrLastDayOfSolarMonth(cellDate)}
+                            solarDay={d}
+                            variant="month"
+                          />
+
+                          {isDragTarget && draggedEvent && (
+                            <span className="max-w-full truncate rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">
+                              {`${String(d).padStart(2, '0')}/${String(cellDate.getMonth() + 1).padStart(2, '0')} • ${formatEventTime(draggedEvent.startDate, draggedEvent.endDate, draggedEvent.isAllDay, allDayLabel)}`}
+                            </span>
+                          )}
+
+                          {isHovered && isCurrentMonth && !isDragTarget && (
                             <button
-                              className={`flex w-full cursor-pointer items-center gap-1 rounded border px-1.5 py-0.5 text-left text-[11px] font-semibold shadow-2xs transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-green-600 ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                              aria-label={t(CALENDAR_KEYS.ADD_EVENT_ON_DAY, { day: d })}
+                              className="absolute top-0 right-0 grid size-5 place-items-center rounded-full bg-slate-200/80 text-slate-700 hover:bg-blue-600 hover:text-white dark:bg-white/10 dark:text-white dark:hover:bg-blue-600"
+                              onClick={() => vm.handleOpenCreateEvent(cellDate)}
+                              title={t(CALENDAR_KEYS.ADD_EVENT_ON_DAY, { day: d })}
+                              type="button"
+                            >
+                              <Icon className="size-3" name="plus" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex-1 space-y-0.5 overflow-hidden">
+                          {(vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[dateKey] ?? [])).slice(0, 2).map((holiday) => (
+                            <button
+                              className={`flex w-full cursor-pointer items-center gap-1 rounded-md border px-1 py-0.5 text-left text-[10px] font-semibold transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-green-600 sm:gap-1.5 sm:px-1.5 sm:text-[11px] ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
                               key={holiday.id}
                               onClick={(event) => {
                                 event.stopPropagation()
@@ -1268,20 +1806,20 @@ export function CalendarPage() {
                               <span className="min-w-0 flex-1 truncate">{holiday.name}</span>
                             </button>
                           ))}
-                          {dayAllDays.map((event) => {
-                            const eventColor = event.color || event.calendar?.color || '#2563EB'
-                            const isTaskItem = event.entryType === 'task'
+                          {dayEvents.slice(0, 3).map((event) => {
+                            const cardColors = getCalendarEventCardColors(event.color || event.calendar?.color)
+                            const isTask = event.entryType === 'task'
                             const isBeingDragged = draggedEvent?.id === event.id
+
                             return (
                               <div
-                                className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-2xs hover:brightness-105 ${
-                                  event.isCompleted ? 'opacity-55' : ''
-                                } ${
-                                  isBeingDragged
-                                    ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                                className={`group/chip flex w-full items-center gap-1 rounded-md px-1 py-0.5 text-left text-[10px] font-semibold shadow-2xs transition-all hover:scale-[1.02] sm:gap-1.5 sm:px-1.5 sm:text-[11px] ${isBeingDragged
+                                  ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
+                                  : event.isGoogleReadOnly
+                                    ? 'cursor-pointer'
                                     : 'cursor-grab active:cursor-grabbing'
-                                }`}
-                                draggable={true}
+                                  }`}
+                                draggable={!event.isGoogleReadOnly}
                                 key={event.id}
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -1290,426 +1828,50 @@ export function CalendarPage() {
                                 }}
                                 onDragEnd={handleDragEnd}
                                 onDragStart={(e) => handleDragStart(e, event)}
-                                style={{ backgroundColor: eventColor }}
+                                style={cardColors}
                               >
-                                {isTaskItem && (
+                                {isTask ? (
                                   <TaskTickButton
                                     isCompleted={event.isCompleted}
                                     onToggle={() => handleRequestToggleTask(event)}
                                     size="sm"
                                   />
+                                ) : (
+                                  <span className="size-1.5 shrink-0 rounded-full bg-current" />
                                 )}
                                 <span className={`min-w-0 flex-1 truncate text-left ${event.isCompleted ? 'line-through' : ''}`}>
+                                  {!event.isAllDay && (
+                                    <span className="mr-1">
+                                      {new Date(event.startDate).toLocaleTimeString('vi-VN', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: false,
+                                      })}
+                                    </span>
+                                  )}
                                   {event.title}
                                 </span>
                               </div>
                             )
                           })}
-                          {isOver && dayAllDays.length === 0 && (
-                            <span className="block text-center text-[9px] font-bold text-blue-600 dark:text-blue-400">
-                              + Cả ngày
-                            </span>
+
+                          {dayEvents.length > 3 && (
+                            <div className="px-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 dark:text-slate-400">
+                              {t(CALENDAR_KEYS.MORE_ITEMS, { count: dayEvents.length - 3 })}
+                            </div>
                           )}
                         </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              
-              <div
-                className="relative flex max-h-[620px] select-none overflow-y-auto"
-                ref={timeGridRef}
-              >
-                
-                <div className="w-11 sm:w-16 shrink-0 border-r border-slate-200/70 bg-white dark:border-white/10 dark:bg-transparent">
-                  {HOURS_24.map((h, i) => (
-                    <div className="relative h-[48px]" key={h.hour}>
-                      {i > 0 && (
-                        <span className="absolute -top-2.5 right-1.5 sm:right-2 select-none text-[10px] font-medium text-slate-400">
-                          {h.label}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                
-                <div className="relative grid flex-1 grid-cols-7 divide-x divide-slate-100 dark:divide-white/5">
-                  {weekDays.map((wd) => {
-                    const isCurrentDay =
-                      today.getDate() === wd.dayNum &&
-                      today.getMonth() === wd.date.getMonth() &&
-                      today.getFullYear() === wd.date.getFullYear()
-
-                    const timedSegments = weekTimedSegmentsByDate[wd.dateKey] ?? []
-
-                    const columnKey = `week-col-${wd.dateKey}`
-
-                    return (
-                      <div
-                        className="relative"
-                        key={wd.dateKey}
-                        onDragLeave={(e) => {
-                          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                            setDragPreview((prev) => (prev?.columnKey === columnKey ? null : prev))
-                          }
-                        }}
-                        onDragOver={(e) => handleTimedColumnDragOver(e, columnKey)}
-                        onDrop={(e) => handleDropOnTimedColumn(e, wd.date)}
-                      >
-                        {HOURS_24.map((h) => (
-                          <div
-                            className="relative h-[48px] cursor-pointer border-b border-slate-100 transition-colors hover:bg-blue-50/20 dark:border-white/5 dark:hover:bg-white/5"
-                            key={h.hour}
-                            onClick={() => {
-                              const clickD = new Date(
-                                wd.date.getFullYear(),
-                                wd.date.getMonth(),
-                                wd.date.getDate(),
-                                h.hour,
-                                0,
-                                0,
-                              )
-                              vm.handleOpenCreateEvent(clickD)
-                            }}
-                            title={`Thêm lịch trình lúc ${h.label}`}
-                          />
-                        ))}
-
-                        {dragPreview?.columnKey === columnKey && draggedEvent && (
-                          <div
-                            className="pointer-events-none absolute inset-x-0.5 z-30 flex items-center gap-1 rounded border-2 border-dashed border-blue-500 bg-blue-600/20 px-1.5 text-[10px] font-bold text-blue-950 dark:text-blue-100 shadow-sm backdrop-blur-2xs"
-                            style={{
-                              top: `${(dragPreview.startMin / 60) * HOUR_HEIGHT}px`,
-                              height: `${Math.max(20, ((dragPreview.endMin - dragPreview.startMin) / 60) * HOUR_HEIGHT)}px`,
-                            }}
-                          >
-                            <span className="shrink-0 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-extrabold text-white">
-                              {dragPreview.label}
-                            </span>
-                            <span className="truncate">{draggedEvent.title}</span>
-                          </div>
-                        )}
-
-                        
-                        {isCurrentDay && (
-                          <div
-                            className="pointer-events-none absolute inset-x-0 z-30 flex items-center"
-                            style={{ top: `${currentIndicatorTop}px` }}
-                          >
-                            <div className="-ml-1.5 size-2.5 rounded-full bg-red-500 shadow-xs" />
-                            <div className="flex-1 border-t-2 border-red-500" />
-                          </div>
-                        )}
-
-                        
-                        {timedSegments.map((seg) => {
-                          const { event, segmentId, startMin, durationMin, isZeroDuration, isStartSegment, isEndSegment, leftPct, widthPct, zIndex } = seg
-                          const top = (startMin / 60) * HOUR_HEIGHT
-                          const height = isZeroDuration ? 20 : Math.max(20, (durationMin / 60) * HOUR_HEIGHT)
-                          const isResizingThis = resizingEvent?.segmentId === segmentId
-                          const cardHeight = isResizingThis ? resizingEvent.currentHeight : height
-                          const eventColor = event.color || event.calendar?.color || '#2563EB'
-                          const isTask = event.entryType === 'task'
-                          const isBeingDragged = draggedEvent?.id === event.id
-                          const effectiveEndIso = isResizingThis ? resizingEvent.previewEndDate : event.endDate
-                          const timeRangeText = formatEventTime(event.startDate, effectiveEndIso, false)
-                          const resizeEndD = isResizingThis ? new Date(resizingEvent.previewEndDate) : null
-                          const resizePreviewLabel = resizeEndD
-                            ? formatMinutesToHHMM(resizeEndD.getHours() * 60 + resizeEndD.getMinutes())
-                            : ''
-                          const roundedClass =
-                            isStartSegment && isEndSegment
-                              ? 'rounded-md'
-                              : isStartSegment
-                                ? 'rounded-t-md rounded-b-xs'
-                                : isEndSegment
-                                  ? 'rounded-b-md rounded-t-xs'
-                                  : 'rounded-xs'
-
-                          return (
-                            <div
-                              className={`group/item absolute overflow-hidden border-[1.5px] border-white dark:border-[#021024] px-1.5 py-0.5 text-white shadow-sm transition-all hover:z-30! hover:shadow-md ${roundedClass} ${
-                                event.isCompleted ? 'line-through opacity-50' : ''
-                              } ${
-                                isBeingDragged
-                                  ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
-                                  : 'cursor-grab active:cursor-grabbing'
-                              }`}
-                              draggable={true}
-                              key={segmentId}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
-                                vm.handleOpenEditEvent(event)
-                              }}
-                              onDragEnd={handleDragEnd}
-                              onDragStart={(e) => handleDragStart(e, event)}
-                              style={{
-                                top: `${top}px`,
-                                height: `${cardHeight}px`,
-                                left: `calc(${leftPct}% + 2px)`,
-                                width: `calc(${widthPct}% - 4px)`,
-                                zIndex,
-                                backgroundColor: eventColor,
-                              }}
-                              title={`${event.title} (${formatEventTime(event.startDate, event.endDate, event.isAllDay)})`}
-                            >
-                              {height < 32 ? (
-                                <div className="flex h-full items-center justify-between text-[10px] font-semibold leading-tight opacity-90">
-                                  <span className="flex min-w-0 items-center gap-1">
-                                    {isTask && (
-                                      <TaskTickButton
-                                        isCompleted={event.isCompleted}
-                                        onToggle={() => handleRequestToggleTask(event)}
-                                        size="sm"
-                                      />
-                                    )}
-                                    <span className="font-bold opacity-80 shrink-0">
-                                      {timeRangeText}
-                                    </span>
-                                    <span className="truncate font-medium">{event.title}</span>
-                                  </span>
-                                  {isTask && (
-                                    <span className={`ml-1 size-1.5 shrink-0 rounded-xs ${event.deadline ? 'bg-amber-300' : 'bg-white/90'}`} />
-                                  )}
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="flex items-center justify-between text-[10px] font-semibold leading-tight opacity-90">
-                                    <span className="flex min-w-0 items-center gap-1">
-                                      {isTask && (
-                                        <TaskTickButton
-                                          isCompleted={event.isCompleted}
-                                          onToggle={() => handleRequestToggleTask(event)}
-                                          size="sm"
-                                        />
-                                      )}
-                                      <span className="truncate">
-                                        {timeRangeText}
-                                      </span>
-                                    </span>
-                                    {isTask && (
-                                      <span className={`ml-1 size-1.5 shrink-0 rounded-xs ${event.deadline ? 'bg-amber-300' : 'bg-white/90'}`} />
-                                    )}
-                                  </div>
-                                  <div className="mt-0.5 truncate text-xs font-bold leading-tight">
-                                    {event.title}
-                                  </div>
-                                </>
-                              )}
-
-                              {isEndSegment && (
-                                <div
-                                  aria-label="Kéo đổi thời lượng"
-                                  className={`absolute bottom-0 inset-x-0 h-2 cursor-ns-resize transition-opacity bg-black/20 flex items-center justify-center z-30 ${
-                                    isResizingThis ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'
-                                  }`}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    e.preventDefault()
-                                  }}
-                                  onPointerDown={(e) => handleResizeStart(e, event, segmentId, height)}
-                                  title="Kéo cạnh dưới để tăng hoặc giảm thời lượng"
-                                >
-                                  {isResizingThis ? (
-                                    <span className="pointer-events-none -translate-y-3 rounded bg-slate-900/90 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
-                                      → {resizePreviewLabel}
-                                    </span>
-                                  ) : (
-                                    <div className="h-0.5 w-4 rounded-full bg-white/80 pointer-events-none" />
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
                       </div>
                     )
                   })}
                 </div>
               </div>
-              </div>
-            </div>
-          ) : vm.viewMode === 'month' ? (
-            <div className="mt-3">
-              <div className="grid grid-cols-7 border-b border-slate-200 pb-2 text-center text-[11px] font-bold text-slate-600 sm:text-xs dark:border-white/10 dark:text-slate-400">
-                {weekdays.map((wd, idx) => (
-                  <div key={wd}>
-                    <span className="sm:hidden">{shortWeekdays[idx]}</span>
-                    <span className="hidden sm:inline">{wd}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100 border-b border-slate-100 dark:divide-white/5 dark:border-white/5">
-                {Array.from({ length: totalGridCells }).map((_, idx) => {
-                  let cellDate: Date
-                  let isCurrentMonth = true
-
-                  if (idx < startOffset) {
-                    const prevD = prevMonthLastDay - startOffset + idx + 1
-                    cellDate = new Date(currentYear, currentMonth - 1, prevD)
-                    isCurrentMonth = false
-                  } else if (idx >= startOffset + daysInCurrentMonth) {
-                    const nextD = idx - (startOffset + daysInCurrentMonth) + 1
-                    cellDate = new Date(currentYear, currentMonth + 1, nextD)
-                    isCurrentMonth = false
-                  } else {
-                    const dNum = idx - startOffset + 1
-                    cellDate = new Date(currentYear, currentMonth, dNum)
-                  }
-
-                  const y = cellDate.getFullYear()
-                  const m = cellDate.getMonth() + 1
-                  const d = cellDate.getDate()
-                  const dateKey = `${y}-${m < 10 ? `0${m}` : m}-${d < 10 ? `0${d}` : d}`
-
-                  const isCurrentDay =
-                    today.getDate() === d &&
-                    today.getMonth() === cellDate.getMonth() &&
-                    today.getFullYear() === cellDate.getFullYear()
-
-                  const dayEvents = eventsByDate[dateKey] ?? []
-                  const isHovered = hoveredDateCell === dateKey
-
-                  const isDragTarget = dragOverTarget === dateKey
-                  return (
-                    <div
-                      className={`group relative flex min-h-[76px] min-w-0 flex-col p-1 transition-colors sm:min-h-[115px] sm:p-2 ${
-                        isDragTarget
-                          ? 'bg-blue-50/80 ring-2 ring-inset ring-blue-500 dark:bg-blue-950/40'
-                          : isCurrentMonth
-                            ? 'bg-white hover:bg-slate-50/70 dark:bg-transparent dark:hover:bg-white/5'
-                            : 'bg-slate-50/40 text-slate-300 dark:bg-white/2 dark:text-slate-600'
-                      }`}
-                      key={dateKey}
-                      onDragLeave={() => {
-                        if (dragOverTarget === dateKey) setDragOverTarget(null)
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault()
-                        e.dataTransfer.dropEffect = 'move'
-                        setDragOverTarget(dateKey)
-                      }}
-                      onDrop={(e) => handleDropOnMonthDay(e, cellDate)}
-                      onMouseEnter={() => setHoveredDateCell(dateKey)}
-                      onMouseLeave={() => setHoveredDateCell(null)}
-                    >
-                      <div className="relative flex items-center justify-center pb-1">
-                        <CalendarDateLabel
-                          isMuted={!isCurrentMonth}
-                          isToday={isCurrentDay}
-                          lunarDate={vm.lunarDatesBySolarDate[dateKey]}
-                          showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
-                          showLunarMonth={isCurrentMonth && isFirstOrLastDayOfSolarMonth(cellDate)}
-                          solarDay={d}
-                          variant="month"
-                        />
-
-                        {isDragTarget && draggedEvent && (
-                          <span className="rounded bg-blue-100 px-1 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 truncate max-w-full">
-                            {`${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')} • ${formatEventTime(draggedEvent.startDate, draggedEvent.endDate, draggedEvent.isAllDay)}`}
-                          </span>
-                        )}
-
-                        {isHovered && isCurrentMonth && !isDragTarget && (
-                          <button
-                            aria-label={`Thêm sự kiện ngày ${d}`}
-                            className="absolute top-0 right-0 grid size-5 place-items-center rounded-full bg-slate-200/80 text-slate-700 hover:bg-blue-600 hover:text-white dark:bg-white/10 dark:text-white dark:hover:bg-blue-600"
-                            onClick={() => vm.handleOpenCreateEvent(cellDate)}
-                            title="Thêm sự kiện vào ngày này"
-                            type="button"
-                          >
-                            <Icon className="size-3" name="plus" />
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="flex-1 space-y-1 overflow-hidden">
-                        {(vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[dateKey] ?? [])).slice(0, 2).map((holiday) => (
-                          <button
-                            className={`flex w-full cursor-pointer items-center gap-1 rounded-md border px-1 py-0.5 text-left text-[10px] font-semibold transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-green-600 sm:gap-1.5 sm:px-1.5 sm:text-[11px] ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
-                            key={holiday.id}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              setSelectedHoliday(holiday)
-                            }}
-                            title={formatHolidayTooltip(holiday, vm.calendarPreferences.showLunarCalendar)}
-                            type="button"
-                          >
-                            <span className={`size-1.5 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
-                            <span className="min-w-0 flex-1 truncate">{holiday.name}</span>
-                          </button>
-                        ))}
-                        {dayEvents.slice(0, 3).map((event) => {
-                          const eventColor = event.color || event.calendar?.color || '#2563EB'
-                          const isTask = event.entryType === 'task'
-                          const isBeingDragged = draggedEvent?.id === event.id
-
-                          return (
-                            <div
-                              className={`group/chip flex w-full items-center gap-1 rounded-md px-1 py-0.5 text-left text-[10px] font-semibold text-white shadow-2xs transition-all hover:scale-[1.02] sm:gap-1.5 sm:px-1.5 sm:text-[11px] ${
-                                event.isCompleted ? 'opacity-55' : ''
-                              } ${
-                                isBeingDragged
-                                  ? 'opacity-40 ring-2 ring-blue-500 scale-[0.98]'
-                                  : 'cursor-grab active:cursor-grabbing'
-                              }`}
-                              draggable={true}
-                              key={event.id}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (isSuppressClickRef.current || resizingEvent || draggedEvent || pendingRecurringAction) return
-                                vm.handleOpenEditEvent(event)
-                              }}
-                              onDragEnd={handleDragEnd}
-                              onDragStart={(e) => handleDragStart(e, event)}
-                              style={{ backgroundColor: eventColor }}
-                            >
-                              {isTask ? (
-                                <TaskTickButton
-                                  isCompleted={event.isCompleted}
-                                  onToggle={() => handleRequestToggleTask(event)}
-                                  size="sm"
-                                />
-                              ) : (
-                                <span className="size-1.5 shrink-0 rounded-full bg-white/90" />
-                              )}
-                              <span className={`min-w-0 flex-1 truncate text-left ${event.isCompleted ? 'line-through' : ''}`}>
-                                {!event.isAllDay && (
-                                  <span className="mr-1 opacity-80">
-                                    {new Date(event.startDate).toLocaleTimeString('vi-VN', {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      hour12: false,
-                                    })}
-                                  </span>
-                                )}
-                                {event.title}
-                              </span>
-                            </div>
-                          )
-                        })}
-
-                        {dayEvents.length > 3 && (
-                          <div className="px-1 text-[10px] font-bold text-slate-500 hover:text-blue-600 dark:text-slate-400">
-                            + {dayEvents.length - 3} mục nữa
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
             </div>
           ) : vm.viewMode === 'year' ? (
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <div className="gcal-scrollbar mt-2.5 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {Array.from({ length: 12 }).map((_, mIdx) => {
                 const monthDate = new Date(currentYear, mIdx, 1)
-                const monthName = monthDate.toLocaleDateString('vi-VN', { month: 'long' })
+                const monthName = monthDate.toLocaleDateString(locale, { month: 'long' })
                 const mDays = new Date(currentYear, mIdx + 1, 0).getDate()
                 const mOffset = (monthDate.getDay() - weekStartsOn + 7) % 7
 
@@ -1727,8 +1889,8 @@ export function CalendarPage() {
                     </span>
 
                     <div className="mt-2 grid grid-cols-7 gap-0.5 text-center text-[10px] text-slate-400">
-                      {shortWeekdays.map((wd) => (
-                        <div key={wd}>{wd}</div>
+                      {shortWeekdays.map((wd, wIdx) => (
+                        <div key={`${wd}-${wIdx}`}>{wd}</div>
                       ))}
                     </div>
 
@@ -1752,20 +1914,20 @@ export function CalendarPage() {
                             .join(' • ') || undefined
 
                         return (
-                        <div
-                          className="relative mx-auto inline-flex min-h-5 items-center justify-center font-medium"
-                          key={dNum}
-                          title={yearCellTooltip}
-                        >
-                          <CalendarDateLabel
-                            isToday={isCurrentDay}
-                            lunarDate={vm.lunarDatesBySolarDate[key]}
-                            showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
-                            solarDay={dNum}
-                            variant="year"
-                          />
-                        </div>
-                      )
+                          <div
+                            className="relative mx-auto inline-flex min-h-5 items-center justify-center font-medium"
+                            key={dNum}
+                            title={yearCellTooltip}
+                          >
+                            <CalendarDateLabel
+                              isToday={isCurrentDay}
+                              lunarDate={vm.lunarDatesBySolarDate[key]}
+                              showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+                              solarDay={dNum}
+                              variant="year"
+                            />
+                          </div>
+                        )
                       })}
                     </div>
                   </div>
@@ -1774,7 +1936,7 @@ export function CalendarPage() {
             </div>
           ) : (
             <div
-              className="relative max-h-[620px] divide-y divide-slate-100 overflow-y-auto pt-2 pr-1 dark:divide-white/5"
+              className="gcal-scrollbar relative mt-2 max-h-[560px] flex-1 divide-y divide-slate-100 overflow-y-auto pt-1 pr-1 lg:max-h-none lg:min-h-0 dark:divide-white/5"
               onScroll={() => {
                 if (!isProgrammaticListScrollRef.current) {
                   shouldAutoScrollListRef.current = false
@@ -1787,7 +1949,7 @@ export function CalendarPage() {
                   <div className="grid size-12 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-white/10">
                     <Icon className="size-6" name="calendar" />
                   </div>
-                  <p className="mt-2 text-xs font-semibold text-slate-500">Chưa có sự kiện nào.</p>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">{t(CALENDAR_KEYS.EMPTY_EVENTS)}</p>
                 </div>
               ) : (
                 sortedListDates.map((dateKey) => {
@@ -1795,9 +1957,9 @@ export function CalendarPage() {
                   const listLunarDate = vm.lunarDatesBySolarDate[dateKey]
                   const listLunarTooltip = listLunarDate
                     ? getLunarDateTooltip(listLunarDate, {
-                        prefix: t('calendar.lunar.tooltipPrefix'),
-                        leapSuffix: t('calendar.lunar.leapSuffix'),
-                      })
+                      prefix: t('calendar.lunar.tooltipPrefix'),
+                      leapSuffix: t('calendar.lunar.leapSuffix'),
+                    })
                     : ''
                   const dayHolidays = vm.activeFilterTab === 'task' ? [] : (vm.holidaysBySolarDate[dateKey] ?? [])
                   const isTodayRow = dateKey === todayKey
@@ -1812,11 +1974,11 @@ export function CalendarPage() {
                     >
                       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         <span className={isTodayRow ? 'text-blue-600 dark:text-blue-400' : undefined}>
-                          {formatDayHeader(dateKey)}
+                          {formatDayHeader(dateKey, locale)}
                         </span>
                         {isTodayRow && (
                           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold normal-case tracking-normal text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                            Hôm nay
+                            {t(CALENDAR_KEYS.TODAY)}
                           </span>
                         )}
                         {vm.calendarPreferences.showLunarCalendar && listLunarDate && (
@@ -1838,192 +2000,189 @@ export function CalendarPage() {
                           {t('calendar.holiday.emptyToday')}
                         </p>
                       ) : (
-                      <div className="space-y-2">
-                        {dayHolidays.map((holiday) => {
-                          const lunarSubtitle = formatHolidayLunarSubtitle(
-                            holiday,
-                            vm.calendarPreferences.showLunarCalendar,
-                          )
-                          const noteText = getHolidayNote(holiday, {
-                            typePublic: t('calendar.holiday.typePublic'),
-                            typeCompensatory: t('calendar.holiday.typeCompensatory'),
-                            typeObservance: t('calendar.holiday.typeObservance'),
-                          })
-                          return (
-                            <button
-                              className={`group flex w-full cursor-pointer items-center justify-between rounded-xl border p-3 text-left transition-all hover:opacity-90 sm:px-4 ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
-                              key={holiday.id}
-                              onClick={() => setSelectedHoliday(holiday)}
-                              type="button"
-                            >
-                              <div className="flex items-center gap-3.5">
-                                <span className={`size-3 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
-                                <div>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-sm font-semibold">
-                                      {holiday.name}
-                                    </span>
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-current/25 bg-white/70 px-2 py-0.5 text-[11px] font-semibold dark:bg-black/20">
-                                      {t('calendar.holiday.calendarName')}
-                                    </span>
-                                    <span className="rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-bold dark:bg-black/20">
-                                      {noteText}
-                                    </span>
-                                  </div>
-                                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs opacity-85">
-                                    <span>{t('calendar.holiday.allDay')}</span>
-                                    {lunarSubtitle && <span>• {lunarSubtitle}</span>}
+                        <div className="space-y-2">
+                          {dayHolidays.map((holiday) => {
+                            const lunarSubtitle = formatHolidayLunarSubtitle(
+                              holiday,
+                              vm.calendarPreferences.showLunarCalendar,
+                            )
+                            const noteText = getHolidayNote(holiday, {
+                              typePublic: t('calendar.holiday.typePublic'),
+                              typeCompensatory: t('calendar.holiday.typeCompensatory'),
+                              typeObservance: t('calendar.holiday.typeObservance'),
+                            })
+                            return (
+                              <button
+                                className={`group flex w-full min-w-0 cursor-pointer items-center justify-between rounded-xl border p-3 text-left transition-all hover:opacity-90 sm:px-4 ${VIETNAM_HOLIDAY_BADGE_CLASSES}`}
+                                key={holiday.id}
+                                onClick={() => setSelectedHoliday(holiday)}
+                                type="button"
+                              >
+                                <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                                  <span className={`size-3 shrink-0 rounded-full ${VIETNAM_HOLIDAY_DOT_CLASS}`} />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="break-words text-sm font-semibold">
+                                        {holiday.name}
+                                      </span>
+                                      <span className="inline-flex items-center gap-1 rounded-full border border-current/25 bg-white/70 px-2 py-0.5 text-[11px] font-semibold dark:bg-black/20">
+                                        {t('calendar.holiday.calendarName')}
+                                      </span>
+                                      <span className="rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-bold dark:bg-black/20">
+                                        {noteText}
+                                      </span>
+                                    </div>
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs opacity-85">
+                                      <span>{t('calendar.holiday.allDay')}</span>
+                                      {lunarSubtitle && <span>• {lunarSubtitle}</span>}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </button>
-                          )
-                        })}
-                        {dayEvents.map((event) => {
-                          const isTask = event.entryType === 'task'
-                          const eventColor = event.color || event.calendar?.color || '#2563EB'
+                              </button>
+                            )
+                          })}
+                          {dayEvents.map((event) => {
+                            const isTask = event.entryType === 'task'
+                            const eventColor = event.color || event.calendar?.color || '#2563EB'
 
-                          return (
-                            <div
-                              className={`group flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 p-3 transition-all hover:border-slate-300 hover:bg-white sm:px-4 dark:border-white/5 dark:bg-white/5 dark:hover:border-white/15 dark:hover:bg-white/10 ${
-                                event.isCompleted ? 'opacity-50' : ''
-                              }`}
-                              key={event.id}
-                            >
-                              <div className="flex items-center gap-3.5">
-                                {isTask ? (
-                                  <button
-                                    aria-label={event.isCompleted ? 'Mở lại nhiệm vụ' : 'Đánh dấu hoàn thành'}
-                                    className={`grid size-5 shrink-0 place-items-center rounded-md border transition-all ${
-                                      event.isCompleted
+                            return (
+                              <div
+                                className={`group flex min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/60 p-3 transition-all hover:border-slate-300 hover:bg-white sm:px-4 dark:border-white/5 dark:bg-white/5 dark:hover:border-white/15 dark:hover:bg-white/10 ${event.isCompleted ? 'opacity-50' : ''
+                                  }`}
+                                key={event.id}
+                              >
+                                <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                                  {isTask ? (
+                                    <button
+                                      aria-label={event.isCompleted ? 'Mở lại nhiệm vụ' : 'Đánh dấu hoàn thành'}
+                                      className={`grid size-5 shrink-0 place-items-center rounded-md border transition-all ${event.isCompleted
                                         ? 'border-emerald-600 bg-emerald-600 text-white'
                                         : 'border-slate-300 hover:border-emerald-500 dark:border-white/20'
-                                    }`}
-                                    onClick={() => vm.handleToggleComplete(event.id, event.isCompleted)}
-                                    type="button"
-                                  >
-                                    {event.isCompleted && <Icon className="size-3.5" name="check" />}
-                                  </button>
-                                ) : (
-                                  <span
-                                    className="size-3 shrink-0 rounded-full"
-                                    style={{ backgroundColor: eventColor }}
-                                  />
-                                )}
-
-                                <div>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span
-                                      className={`text-sm font-semibold text-slate-900 dark:text-white ${
-                                        event.isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''
-                                      }`}
+                                        }`}
+                                      onClick={() => vm.handleToggleComplete(event.id, event.isCompleted)}
+                                      type="button"
                                     >
-                                      {event.title}
-                                    </span>
+                                      {event.isCompleted && <Icon className="size-3.5" name="check" />}
+                                    </button>
+                                  ) : (
+                                    <span
+                                      className="size-3 shrink-0 rounded-full"
+                                      style={{ backgroundColor: eventColor }}
+                                    />
+                                  )}
 
-                                    {event.calendar ? (
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <span
-                                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white"
-                                        style={{ backgroundColor: event.calendar.color }}
+                                        className={`break-words text-sm font-semibold text-slate-900 dark:text-white ${event.isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : ''
+                                          }`}
                                       >
-                                        {event.calendar.name}
+                                        {event.title}
                                       </span>
-                                    ) : isTask ? (
-                                      <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-white/10 dark:text-slate-300">
-                                        Nhiệm vụ độc lập
-                                      </span>
-                                    ) : null}
 
-                                    {event.priority && (
-                                      <span
-                                        className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
-                                        style={{
-                                          backgroundColor:
-                                            event.priority === 'urgent'
-                                              ? '#EF4444'
-                                              : event.priority === 'high'
-                                              ? '#F59E0B'
+                                      {event.calendar ? (
+                                        <span
+                                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white"
+                                          style={{ backgroundColor: event.calendar.color }}
+                                        >
+                                          {event.calendar.name}
+                                        </span>
+                                      ) : isTask ? (
+                                        <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-white/10 dark:text-slate-300">
+                                          Nhiệm vụ độc lập
+                                        </span>
+                                      ) : null}
+
+                                      {event.priority && (
+                                        <span
+                                          className="rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
+                                          style={{
+                                            backgroundColor:
+                                              event.priority === 'urgent'
+                                                ? '#EF4444'
+                                                : event.priority === 'high'
+                                                  ? '#F59E0B'
+                                                  : event.priority === 'medium'
+                                                    ? '#3B82F6'
+                                                    : '#64748B',
+                                          }}
+                                        >
+                                          {event.priority === 'urgent'
+                                            ? 'Khẩn cấp'
+                                            : event.priority === 'high'
+                                              ? 'Ưu tiên cao'
                                               : event.priority === 'medium'
-                                              ? '#3B82F6'
-                                              : '#64748B',
-                                        }}
-                                      >
-                                        {event.priority === 'urgent'
-                                          ? 'Khẩn cấp'
-                                          : event.priority === 'high'
-                                          ? 'Ưu tiên cao'
-                                          : event.priority === 'medium'
-                                          ? 'Trung bình'
-                                          : 'Thấp'}
-                                      </span>
-                                    )}
+                                                ? 'Trung bình'
+                                                : 'Thấp'}
+                                        </span>
+                                      )}
 
-                                    {event.deadline && (
-                                      <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                                        ⏳ Hạn chót: {new Date(event.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}{!event.isAllDay ? ` ${new Date(event.deadline).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
-                                      </span>
-                                    )}
+                                      {event.deadline && (
+                                        <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                                          ⏳ Hạn chót: {new Date(event.deadline).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}{!event.isAllDay ? ` ${new Date(event.deadline).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
+                                        </span>
+                                      )}
 
-                                    {event.availability === 'free' && (
-                                      <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                                        🟢 Rảnh
-                                      </span>
-                                    )}
+                                      {event.availability === 'free' && (
+                                        <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                          🟢 Rảnh
+                                        </span>
+                                      )}
 
-                                    {event.recurrence && event.recurrence.frequency !== 'none' && (
-                                      <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                                        🔄 Lặp lại
-                                      </span>
-                                    )}
-                                  </div>
+                                      {event.recurrence && event.recurrence.frequency !== 'none' && (
+                                        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                                          🔄 Lặp lại
+                                        </span>
+                                      )}
+                                    </div>
 
-                                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                    <span>{formatEventTime(event.startDate, event.endDate, event.isAllDay)}</span>
-                                    {event.location && (
-                                      <span className="flex items-center gap-1">
-                                        <Icon className="size-3 text-slate-400" name="mapPin" />
-                                        {event.location}
-                                      </span>
-                                    )}
-                                    {event.onlineMeetingUrl && (
-                                      <a
-                                        className="flex items-center gap-1 text-blue-600 underline hover:text-blue-700 dark:text-blue-400"
-                                        href={event.onlineMeetingUrl}
-                                        rel="noreferrer"
-                                        target="_blank"
-                                      >
-                                        <Icon className="size-3" name="link" />
-                                        Họp online
-                                      </a>
-                                    )}
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                                      <span>{formatEventTime(event.startDate, event.endDate, event.isAllDay, allDayLabel)}</span>
+                                      {event.location && (
+                                        <span className="flex min-w-0 items-center gap-1 break-words">
+                                          <Icon className="size-3 shrink-0 text-slate-400" name="mapPin" />
+                                          <span className="break-words">{event.location}</span>
+                                        </span>
+                                      )}
+                                      {event.onlineMeetingUrl && (
+                                        <a
+                                          className="flex items-center gap-1 text-blue-600 underline hover:text-blue-700 dark:text-blue-400"
+                                          href={event.onlineMeetingUrl}
+                                          rel="noreferrer"
+                                          target="_blank"
+                                        >
+                                          <Icon className="size-3" name="link" />
+                                          Họp online
+                                        </a>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
 
-                              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                <button
-                                  aria-label="Sửa"
-                                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
-                                  onClick={() => vm.handleOpenEditEvent(event)}
-                                  type="button"
-                                >
-                                  <Icon className="size-4" name="edit" />
-                                </button>
-                                <button
-                                  aria-label="Xóa"
-                                  className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
-                                  onClick={() => {
-                                    setEventToDelete(event)
-                                  }}
-                                  type="button"
-                                >
-                                  <Icon className="size-4" name="trash" />
-                                </button>
+                                <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+                                  <button
+                                    aria-label="Sửa"
+                                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+                                    onClick={() => vm.handleOpenEditEvent(event)}
+                                    type="button"
+                                  >
+                                    <Icon className="size-4" name="edit" />
+                                  </button>
+                                  <button
+                                    aria-label="Xóa"
+                                    className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                                    onClick={() => {
+                                      setEventToDelete(event)
+                                    }}
+                                    type="button"
+                                  >
+                                    <Icon className="size-4" name="trash" />
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
                   )
@@ -2123,6 +2282,43 @@ export function CalendarPage() {
           (eventToDelete.recurrence && eventToDelete.recurrence.frequency !== 'none') ||
           (eventToDelete as unknown as { _isOccurrence?: boolean })?._isOccurrence,
         )
+        const isGoogleLinked = Boolean(
+          eventToDelete.syncOrigin === 'google' ||
+          eventToDelete.hasGoogleMappings ||
+          eventToDelete.googleSource,
+        )
+
+        if (isGoogleLinked && !pendingListGoogleDeleteScope) {
+          return (
+            <ConfirmDeleteGoogleEventModal
+              isDeleting={isDeletingEvent}
+              isOpen={true}
+              isReadOnly={Boolean(eventToDelete.isGoogleReadOnly)}
+              onClose={() => {
+                setPendingListGoogleDeleteScope(null)
+                setEventToDelete(null)
+              }}
+              onConfirm={async (scope) => {
+                if (!isEventToDeleteRecurring) {
+                  setIsDeletingEvent(true)
+                  await vm.handleDeleteEvent(
+                    eventToDelete.id,
+                    undefined,
+                    eventToDelete.startDate,
+                    scope,
+                  )
+                  setIsDeletingEvent(false)
+                  setPendingListGoogleDeleteScope(null)
+                  setEventToDelete(null)
+                  return
+                }
+                setPendingListGoogleDeleteScope(scope)
+              }}
+              title={eventToDelete.title}
+            />
+          )
+        }
+
         if (isEventToDeleteRecurring) {
           return (
             <RecurrenceScopeModal
@@ -2131,11 +2327,20 @@ export function CalendarPage() {
               isFirstOccurrence={isFirstOccurrenceInSeries(vm.allExpandedEvents, eventToDelete)}
               isOpen={true}
               isSubmitting={isDeletingEvent}
-              onCancel={() => setEventToDelete(null)}
+              onCancel={() => {
+                setPendingListGoogleDeleteScope(null)
+                setEventToDelete(null)
+              }}
               onConfirm={async (mode) => {
                 setIsDeletingEvent(true)
-                await vm.handleDeleteEvent(eventToDelete.id, mode, eventToDelete.startDate)
+                await vm.handleDeleteEvent(
+                  eventToDelete.id,
+                  mode,
+                  eventToDelete.startDate,
+                  pendingListGoogleDeleteScope ?? undefined,
+                )
                 setIsDeletingEvent(false)
+                setPendingListGoogleDeleteScope(null)
                 setEventToDelete(null)
               }}
               targetDate={new Date(eventToDelete.startDate)}
@@ -2234,11 +2439,54 @@ export function CalendarPage() {
         />
       )}
       <CalendarSettingsModal
+        googleIntegrations={vm.googleIntegrations}
+        isGoogleConfigured={vm.isGoogleConfigured}
         isOpen={isCalendarSettingsOpen}
         isSaving={vm.isSavingPreferences}
+        isUpdatingGoogleIntegrationId={vm.isUpdatingGoogleIntegrationId}
         onClose={() => setIsCalendarSettingsOpen(false)}
+        onOpenSelectGoogleCalendars={(integration) => {
+          setIsReturnToSettingsOnSelectClose(true)
+          vm.setSelectingCalendarsIntegrationId(integration.id)
+        }}
+        onSetPrimaryGoogleAccount={vm.handleSetPrimaryGoogleAccount}
+        onStartAddGoogleAccount={() => vm.handleStartGoogleSyncLink({ mode: 'add' })}
+        onToggleSyncFromGoogle={vm.handleToggleSyncFromGoogle}
+        onToggleSyncToGoogle={vm.handleToggleSyncToGoogle}
         onUpdatePreferences={vm.handleUpdateCalendarPreferences}
         preferences={vm.calendarPreferences}
+      />
+
+      <GoogleCalendarSelectModal
+        integration={vm.selectingCalendarsIntegration}
+        isOpen={Boolean(vm.selectingCalendarsIntegration)}
+        isRefreshing={vm.isRefreshingGoogleCalendars}
+        isSaving={vm.isSavingGoogleCalendarSelection}
+        onBack={
+          isReturnToSettingsOnSelectClose
+            ? () => {
+                setIsReturnToSettingsOnSelectClose(false)
+                vm.setSelectingCalendarsIntegrationId(null)
+                setIsCalendarSettingsOpen(true)
+              }
+            : undefined
+        }
+        onClose={() => {
+          setIsReturnToSettingsOnSelectClose(false)
+          vm.setSelectingCalendarsIntegrationId(null)
+        }}
+        onRefreshList={(integrationId) => void vm.handleRefreshGoogleCalendars(integrationId)}
+        onSaveSelection={async (integrationId, selectedIds, removedActions) => {
+          const saved = await vm.handleSaveGoogleCalendarSelection(
+            integrationId,
+            selectedIds,
+            removedActions,
+          )
+          if (saved && isReturnToSettingsOnSelectClose) {
+            setIsReturnToSettingsOnSelectClose(false)
+            setIsCalendarSettingsOpen(true)
+          }
+        }}
       />
 
       {vm.undoAction && (
@@ -2270,6 +2518,24 @@ export function CalendarPage() {
         holiday={selectedHoliday}
         onClose={() => setSelectedHoliday(null)}
         showLunarCalendar={vm.calendarPreferences.showLunarCalendar}
+      />
+
+      <GoogleSyncConflictModal
+        conflicts={vm.googleConflicts}
+        isOpen={vm.isConflictModalOpen}
+        onClose={() => vm.setIsConflictModalOpen(false)}
+        onResolve={(conflictId, payload) =>
+          void vm.handleResolveGoogleConflict(conflictId, payload)
+        }
+        resolvingConflictId={vm.resolvingConflictId}
+      />
+
+      <ConfirmUnlinkGoogleCalendarModal
+        googleEmail={vm.unlinkingIntegration?.googleEmail ?? ''}
+        isOpen={Boolean(vm.unlinkingIntegration)}
+        isUnlinking={vm.isUnlinkingGoogle}
+        onClose={() => vm.setUnlinkingIntegration(null)}
+        onConfirm={() => void vm.handleConfirmUnlinkGoogle()}
       />
 
     </div>
