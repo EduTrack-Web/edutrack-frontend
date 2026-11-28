@@ -285,6 +285,8 @@ export const calendarApi = {
     >(`/calendar/google/conflicts/${conflictId}/resolution`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+  leaveCategory: (categoryId: string) =>
   leaveCategory: (categoryId: string) =>
     request<ApiSuccess<null>>(`/calendar/categories/${categoryId}/members/me`, {
       method: 'DELETE',
