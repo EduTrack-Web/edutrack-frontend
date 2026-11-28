@@ -444,28 +444,27 @@ export function CalendarSidebar({
               </div>
 
               {archivedCategories.length > 0 && (
-<details className="mt-3 border-t border-slate-100 pt-2 dark:border-white/10">
-  <summary className="cursor-pointer px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-    {t(CALENDAR_KEYS.SIDEBAR_ARCHIVED)} ({archivedCategories.length})
-  </summary>
-  <div className="mt-1 space-y-1">
-    {archivedCategories.map((category) => (
-      <button
-        className="flex min-h-9 w-full items-center gap-2.5 rounded-xl px-2 py-1 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
-        key={category.id}
-        onClick={() => onOpenEditCategory(category)}
-        title={category.name}
-        type="button"
-      >
-        <span
-          className="size-3 shrink-0 rounded-full opacity-75"
-          style={{ backgroundColor: category.color }}
-        />
-        <span className="truncate">{category.name}</span>
-      </button>
-    ))}
-  </div>
-</details>
+                <details className="mt-3 border-t border-slate-100 pt-2 dark:border-white/10">
+                  <summary className="cursor-pointer px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                    {t(CALENDAR_KEYS.SIDEBAR_ARCHIVED)} ({archivedCategories.length})
+                  </summary>
+                  <div className="mt-1 space-y-1">
+                    {archivedCategories.map((category) => (
+                      <button
+                        className="flex min-h-9 w-full items-center gap-2.5 rounded-xl px-2 py-1 text-left text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+                        key={category.id}
+                        onClick={() => onOpenEditCategory(category)}
+                        title={category.name}
+                        type="button"
+                      >
+                        <span
+                          className="size-3 shrink-0 rounded-full opacity-75"
+                          style={{ backgroundColor: category.color }}
+                        />
+                        <span className="truncate">{category.name}</span>
+                      </button>
+                    ))}
+                  </div>
                 </details>
               )}
             </>
