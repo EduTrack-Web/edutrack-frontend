@@ -29,6 +29,21 @@ export function formatDateKey(date: Date): string {
   return `${date.getFullYear()}-${m < 10 ? `0${m}` : m}-${d < 10 ? `0${d}` : d}`
 }
 
+export function isFirstOccurrenceInSeries(
+  allEvents: CalendarEvent[],
+  targetEvent: CalendarEvent,
+  targetDate?: Date | null,
+): boolean {
+  const baseId =
+    (targetEvent as CalendarEvent & { _baseEventId?: string })._baseEventId || targetEvent.id
+  const targetMs = targetDate ? targetDate.getTime() : new Date(targetEvent.startDate).getTime()
+  return !allEvents.some((item) => {
+    const itemBaseId = (item as CalendarEvent & { _baseEventId?: string })._baseEventId || item.id
+    if (itemBaseId !== baseId) return false
+    return new Date(item.startDate).getTime() < targetMs - 1000
+  })
+}
+
 export function buildEventsByDateMap(
   events: CalendarEvent[],
 ): Record<string, CalendarEvent[]> {

@@ -226,6 +226,14 @@ export function useEventModalViewModel({
 
   const isOwner = !initialEvent || !initialEvent.userId || (initialEvent.userId === user?.id)
   const creatorEmail = initialEvent?.creatorEmail || initialEvent?.creator?.email || ''
+  const initialCategoryObj = initialEvent?.calendarId
+    ? categories.find((c) => c.id === initialEvent.calendarId)
+    : undefined
+  const initialCategoryRole = initialCategoryObj?.myRole ?? (initialCategoryObj?.isShared ? 'viewer' : 'owner')
+  const isCategoryEditor = Boolean(
+    initialCategoryObj &&
+    (initialCategoryRole === 'owner' || initialCategoryRole === 'admin' || initialCategoryRole === 'editor'),
+  )
   const currentGuest = initialEvent?.guests?.find(
     (g) => Boolean(user?.email && g.email.toLowerCase() === user.email.toLowerCase()),
   )
@@ -236,9 +244,16 @@ export function useEventModalViewModel({
       initialEvent?.hasGoogleMappings ||
       initialEvent?.googleSource,
   )
-  const canModify = (isOwner || Boolean(currentGuest?.canModify)) && !isGoogleReadOnly
-  const canInviteOthers = (isOwner || Boolean(currentGuest?.canInviteOthers ?? true)) && !isGoogleReadOnly
-  const canSeeGuestList = isOwner || Boolean(currentGuest?.canSeeGuestList ?? true)
+  const canModify = (isOwner || isCategoryEditor || Boolean(currentGuest?.canModify)) && !isGoogleReadOnly
+  const canInviteOthers =
+    (isOwner || isCategoryEditor || canModify || Boolean(currentGuest && currentGuest.canInviteOthers !== false)) &&
+    !isGoogleReadOnly
+  const canSeeGuestList = isOwner || isCategoryEditor || Boolean(currentGuest && currentGuest.canSeeGuestList !== false)
+  const canManageGuests = isOwner || isCategoryEditor
+
+  const editableCategories = categories.filter(
+    (c) => !c.isShared || c.myRole === 'admin' || c.myRole === 'editor' || c.id === initialEvent?.calendarId,
+  )
 
   const [guestStatus, setGuestStatus] = useState<'pending' | 'accepted' | 'declined'>('pending')
 
@@ -291,6 +306,7 @@ export function useEventModalViewModel({
   const [guests, setGuests] = useState<EventGuest[]>([])
   const [newGuestEmail, setNewGuestEmail] = useState('')
   const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
+  const [isResolvingGuest, setIsResolvingGuest] = useState(false)
   const [customRecurrenceError, setCustomRecurrenceError] = useState<string | null>(null)
   const [guestCanModify, setGuestCanModify] = useState(false)
   const [guestCanInviteOthers, setGuestCanInviteOthers] = useState(true)
@@ -473,7 +489,8 @@ export function useEventModalViewModel({
 
         setEntryType('event')
         setTitle('')
-        const defaultCalendar = categories[0]
+        const defaultCalendar =
+          categories.find((c) => !c.isShared || c.myRole === 'admin' || c.myRole === 'editor') ?? categories[0]
         setCalendarId(defaultCalendar?.id ?? '')
         setPriority('medium')
         setStartDate(def.startDate)
@@ -563,8 +580,8 @@ export function useEventModalViewModel({
         )
       }
     } else {
-      if (!calendarId && categories.length > 0) {
-        const firstCat = categories[0]
+      if (!calendarId && editableCategories.length > 0) {
+        const firstCat = editableCategories[0]
         if (firstCat) {
           setCalendarId(firstCat.id)
           setColor('')
@@ -585,6 +602,9 @@ export function useEventModalViewModel({
     }
     const newCategory = categories.find((category) => category.id === id)
     const settings = newCategory?.settings
+    if (settings?.privacy !== 'public' && visibility === 'public') {
+      setVisibility('default')
+    }
     if (settings?.timeZone && !initialEvent) {
       setTimeZone(settings.timeZone)
     }
@@ -641,9 +661,9 @@ export function useEventModalViewModel({
     }
   }
 
-  const handleAddGuest = () => {
+  const resolveGuestCandidate = async (rawInput: string): Promise<EventGuest | null> => {
     const error = validateGuestInput(
-      newGuestEmail,
+      rawInput,
       guests,
       user?.email,
       creatorEmail || initialEvent?.creator?.email,
@@ -651,17 +671,49 @@ export function useEventModalViewModel({
     )
     if (error) {
       setGuestEmailError(error)
-      return
+      return null
     }
-    const trimmed = newGuestEmail.trim().toLowerCase()
-    const newGuest: EventGuest = {
-      email: trimmed,
-      role: isOwner && guestCanModify ? 'editor' : 'viewer',
-      canModify: isOwner ? guestCanModify : false,
-      canInviteOthers: guestCanInviteOthers,
-      canSeeGuestList: guestCanSeeGuestList,
-      status: 'pending',
+
+    try {
+      setIsResolvingGuest(true)
+      const res = await calendarApi.resolveGuest(rawInput.trim())
+      const resolvedEmail = res.data?.email?.trim().toLowerCase()
+      if (!resolvedEmail) {
+        setGuestEmailError('Không tìm thấy người dùng')
+        return null
+      }
+
+      const effectiveCreator = (creatorEmail || initialEvent?.creator?.email || '').trim().toLowerCase()
+      if (effectiveCreator && resolvedEmail === effectiveCreator) {
+        setGuestEmailError('Không thể mời lại người tạo sự kiện')
+        return null
+      }
+      if (guests.some((g) => g.email.trim().toLowerCase() === resolvedEmail)) {
+        setGuestEmailError('Người dùng đã được thêm vào sự kiện')
+        return null
+      }
+
+      return {
+        email: resolvedEmail,
+        role: canManageGuests && guestCanModify ? 'editor' : 'viewer',
+        canModify: canManageGuests ? guestCanModify : false,
+        canInviteOthers: canManageGuests && guestCanModify ? true : guestCanInviteOthers,
+        canSeeGuestList: guestCanSeeGuestList,
+        status: 'pending',
+      }
+    } catch (err: unknown) {
+      const maybeErr = err as { message?: string }
+      setGuestEmailError(maybeErr.message || 'Không tìm thấy người dùng')
+      return null
+    } finally {
+      setIsResolvingGuest(false)
     }
+  }
+
+  const handleAddGuest = async () => {
+    if (isResolvingGuest) return
+    const newGuest = await resolveGuestCandidate(newGuestEmail)
+    if (!newGuest) return
     setGuests((prev) => [...prev, newGuest])
     setNewGuestEmail('')
     setGuestEmailError(null)
@@ -669,10 +721,14 @@ export function useEventModalViewModel({
 
   const handleToggleAllGuestCanModify = (checked: boolean) => {
     setGuestCanModify(checked)
+    if (checked) {
+      setGuestCanInviteOthers(true)
+    }
     setGuests((prev) =>
       prev.map((g) => ({
         ...g,
         canModify: checked,
+        canInviteOthers: checked ? true : g.canInviteOthers,
         role: checked ? 'editor' : 'viewer',
       })),
     )
@@ -680,10 +736,15 @@ export function useEventModalViewModel({
 
   const handleToggleAllGuestCanInviteOthers = (checked: boolean) => {
     setGuestCanInviteOthers(checked)
+    if (!checked) {
+      setGuestCanModify(false)
+    }
     setGuests((prev) =>
       prev.map((g) => ({
         ...g,
         canInviteOthers: checked,
+        canModify: checked ? g.canModify : false,
+        role: checked && g.canModify ? 'editor' : 'viewer',
       })),
     )
   }
@@ -698,18 +759,21 @@ export function useEventModalViewModel({
     )
   }
 
-  const handleToggleGuestCanModify = (email: string) => {
+  const handleChangeGuestPermissionLevel = (
+    email: string,
+    level: 'viewer' | 'inviter' | 'editor',
+  ) => {
+    const cleanTarget = email.trim().toLowerCase()
     setGuests((prev) =>
       prev.map((g) => {
-        if (g.email.trim().toLowerCase() === email.trim().toLowerCase()) {
-          const nextCanModify = !g.canModify
-          return {
-            ...g,
-            canModify: nextCanModify,
-            role: nextCanModify ? 'editor' : 'viewer',
-          }
+        if (g.email.trim().toLowerCase() !== cleanTarget) return g
+        if (level === 'editor') {
+          return { ...g, role: 'editor', canModify: true, canInviteOthers: true }
         }
-        return g
+        if (level === 'inviter') {
+          return { ...g, role: 'viewer', canModify: false, canInviteOthers: true }
+        }
+        return { ...g, role: 'viewer', canModify: false, canInviteOthers: false }
       }),
     )
   }
@@ -781,6 +845,9 @@ export function useEventModalViewModel({
   }
 
   const selectedCategory = categories.find((c) => c.id === calendarId)
+  const isSelectedCategoryPublic = Boolean(
+    entryType === 'event' && selectedCategory?.settings?.privacy === 'public',
+  )
   const activeColor =
     color ||
     (entryType === 'task'
@@ -1064,25 +1131,9 @@ export function useEventModalViewModel({
 
     const submissionGuests = [...guests]
     if (newGuestEmail.trim()) {
-      const guestErr = validateGuestInput(
-        newGuestEmail,
-        guests,
-        user?.email,
-        creatorEmail || initialEvent?.creator?.email,
-        true,
-      )
-      if (guestErr) {
-        setGuestEmailError(guestErr)
-        return
-      }
-      submissionGuests.push({
-        email: newGuestEmail.trim().toLowerCase(),
-        role: isOwner && guestCanModify ? 'editor' : 'viewer',
-        canModify: isOwner ? guestCanModify : false,
-        canInviteOthers: guestCanInviteOthers,
-        canSeeGuestList: guestCanSeeGuestList,
-        status: 'pending',
-      })
+      const newGuest = await resolveGuestCandidate(newGuestEmail)
+      if (!newGuest) return
+      submissionGuests.push(newGuest)
       setGuests(submissionGuests)
       setNewGuestEmail('')
       setGuestEmailError(null)
@@ -1122,7 +1173,12 @@ export function useEventModalViewModel({
       description,
       color: color || (entryType === 'task' ? (PRIORITY_CONFIG[priority]?.color || '#3B82F6') : ''),
       availability,
-      visibility: entryType === 'task' && visibility === 'default' ? 'private' : visibility,
+      visibility:
+        entryType === 'task' && visibility === 'default'
+          ? 'private'
+          : !isSelectedCategoryPublic && visibility === 'public'
+            ? 'default'
+            : visibility,
       timeZone: initialEvent && !initialEvent.timeZone && activeTimeZone === (selectedCategory?.settings?.timeZone || 'Asia/Ho_Chi_Minh')
         ? initialEvent.timeZone
         : activeTimeZone,
@@ -1141,6 +1197,72 @@ export function useEventModalViewModel({
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
       return
+    }
+
+    if (initialEvent) {
+      const origStartMs = new Date(initialDate ? initialDate.toISOString() : initialEvent.startDate).getTime()
+      const origDurationMs = Math.max(0, new Date(initialEvent.endDate).getTime() - new Date(initialEvent.startDate).getTime())
+      const origEndMs = initialDate
+        ? origStartMs + origDurationMs
+        : new Date(initialEvent.endDate).getTime()
+      const origDeadlineMs = initialEvent.deadline ? new Date(initialEvent.deadline).getTime() : null
+      const nextDeadlineMs = payload.deadline ? new Date(payload.deadline).getTime() : null
+
+      const origColor = initialEvent.inheritsCalendarColor ? '' : (initialEvent.color ?? '')
+      const origRecurrence = initialEvent.recurrence ?? { frequency: 'none', interval: 1 }
+      const nextRecurrence = payload.recurrence ?? { frequency: 'none', interval: 1 }
+
+      const isSameGuests =
+        JSON.stringify((initialEvent.guests ?? []).map((g) => ({
+          email: g.email.trim().toLowerCase(),
+          canModify: Boolean(g.canModify),
+          canInviteOthers: g.canInviteOthers !== false,
+          canSeeGuestList: g.canSeeGuestList !== false,
+        }))) ===
+        JSON.stringify((payload.guests ?? []).map((g) => ({
+          email: g.email.trim().toLowerCase(),
+          canModify: Boolean(g.canModify),
+          canInviteOthers: g.canInviteOthers !== false,
+          canSeeGuestList: g.canSeeGuestList !== false,
+        })))
+
+      const isSameReminders =
+        JSON.stringify(initialEvent.reminders ?? []) === JSON.stringify(payload.reminders ?? [])
+      const isSameChecklist =
+        JSON.stringify(initialEvent.checklist ?? []) === JSON.stringify(payload.checklist ?? [])
+      const isSameRecurrence =
+        origRecurrence.frequency === nextRecurrence.frequency &&
+        (origRecurrence.interval ?? 1) === (nextRecurrence.interval ?? 1) &&
+        JSON.stringify(origRecurrence.daysOfWeek ?? []) === JSON.stringify(nextRecurrence.daysOfWeek ?? []) &&
+        (origRecurrence.until ? new Date(origRecurrence.until).toISOString().slice(0, 10) : null) ===
+          (nextRecurrence.until ? new Date(nextRecurrence.until).toISOString().slice(0, 10) : null) &&
+        (origRecurrence.count ?? null) === (nextRecurrence.count ?? null)
+
+      const hasChanges =
+        payload.title !== (initialEvent.title || 'Không có tiêu đề') ||
+        (payload.description ?? '') !== (initialEvent.description ?? '') ||
+        payload.priority !== initialEvent.priority ||
+        Boolean(payload.isAllDay) !== Boolean(initialEvent.isAllDay) ||
+        (payload.calendarId ?? null) !== (initialEvent.calendarId ?? null) ||
+        (payload.location ?? '') !== (initialEvent.location ?? '') ||
+        (payload.onlineMeetingUrl ?? '') !== (initialEvent.onlineMeetingUrl ?? '') ||
+        (payload.submissionUrl ?? '') !== (initialEvent.submissionUrl ?? '') ||
+        (payload.color ?? '') !== origColor ||
+        payload.availability !== (initialEvent.availability ?? 'busy') ||
+        payload.visibility !== (initialEvent.visibility ?? 'default') ||
+        (entryType === 'task' && isCompleted !== Boolean(initialEvent.isCompleted)) ||
+        Math.abs(new Date(payload.startDate).getTime() - origStartMs) > 59_000 ||
+        Math.abs(new Date(payload.endDate).getTime() - origEndMs) > 59_000 ||
+        origDeadlineMs !== nextDeadlineMs ||
+        !isSameGuests ||
+        !isSameReminders ||
+        !isSameChecklist ||
+        !isSameRecurrence
+
+      if (!hasChanges) {
+        onClose()
+        return
+      }
     }
 
     if (initialEvent && isRecurring) {
@@ -1277,6 +1399,8 @@ export function useEventModalViewModel({
     },
     creatorEmail,
     guestEmailError,
+    isResolvingGuest,
+    selectedCategorySharedCount: (selectedCategory?.sharedWith ?? selectedCategory?.settings?.sharedWith ?? []).length,
     guestCanModify,
     setGuestCanModify,
     guestCanInviteOthers,
@@ -1286,7 +1410,7 @@ export function useEventModalViewModel({
     handleToggleAllGuestCanModify,
     handleToggleAllGuestCanInviteOthers,
     handleToggleAllGuestCanSeeGuestList,
-    handleToggleGuestCanModify,
+    handleChangeGuestPermissionLevel,
     handleAddGuest,
     handleRemoveGuest,
     inputTimeZone: timeZone,
@@ -1296,6 +1420,7 @@ export function useEventModalViewModel({
     setAvailability,
     visibility,
     setVisibility,
+    isSelectedCategoryPublic,
     reminders,
     handleAddReminder,
     handleRemoveReminder,
@@ -1380,6 +1505,8 @@ export function useEventModalViewModel({
     canModify,
     canInviteOthers,
     canSeeGuestList,
+    canManageGuests,
+    editableCategories,
     handleRespondInvite,
   }
 }

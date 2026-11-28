@@ -11,12 +11,15 @@ import { COMMON_TIMEZONES, PRIORITY_CONFIG } from '../../models/calendarConstant
 import { RecurringConfirmationDialog } from './RecurringConfirmationDialog'
 import { RecurrenceScopeModal } from './RecurrenceScopeModal'
 import { ConfirmDeleteGoogleEventModal } from './ConfirmDeleteGoogleEventModal'
+import { EventShareModal } from './EventShareModal'
 import { ReadOnlyEventDetailCard } from './ReadOnlyEventDetailCard'
+import { calendarApi } from '../../services/calendarApi'
 
 interface EventModalProps {
   isOpen: boolean
   initialEvent?: CalendarEvent | null
   initialDate?: Date | null
+  isFirstOccurrence?: boolean
   categories: CalendarCategory[]
   onClose: () => void
   onSaved: () => void
@@ -48,7 +51,22 @@ export function EventModal(props: EventModalProps) {
   const [pendingGoogleDeleteScope, setPendingGoogleDeleteScope] = useState<
     'local_only' | 'both' | null
   >(null)
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
+  const [isCalendarDropdownOpen, setIsCalendarDropdownOpen] = useState(false)
+  const [handlingRequestId, setHandlingRequestId] = useState<string | null>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const calendarDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isCalendarDropdownOpen) return
+    const handleOutside = (e: MouseEvent) => {
+      if (calendarDropdownRef.current && !calendarDropdownRef.current.contains(e.target as Node)) {
+        setIsCalendarDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [isCalendarDropdownOpen])
 
   useEffect(() => {
     if (isOpen && vm.canModify) {
@@ -533,32 +551,58 @@ export function EventModal(props: EventModalProps) {
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="grid size-8 shrink-0 place-items-center text-slate-400">
-                  <Icon className="size-4.5" name="link" />
-                </span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
-                  disabled={!vm.canModify}
-                  onChange={(e) => vm.setOnlineMeetingUrl(e.target.value)}
-                  placeholder="Thêm hội nghị truyền hình trên Google Meet, Zoom..."
-                  type="url"
-                  value={vm.onlineMeetingUrl}
-                />
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-8 shrink-0 place-items-center text-slate-400">
+                    <Icon className="size-4.5" name="link" />
+                  </span>
+                  <input
+                    aria-describedby={vm.errors.onlineMeetingUrl ? 'online-meeting-url-error' : undefined}
+                    aria-invalid={Boolean(vm.errors.onlineMeetingUrl)}
+                    className={`w-full rounded-xl border bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:bg-white dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed ${
+                      vm.errors.onlineMeetingUrl
+                        ? 'border-rose-500 focus:border-rose-500'
+                        : 'border-slate-200 focus:border-blue-600 dark:border-white/10'
+                    }`}
+                    disabled={!vm.canModify}
+                    onChange={(e) => vm.setOnlineMeetingUrl(e.target.value)}
+                    placeholder="Thêm hội nghị truyền hình trên Google Meet, Zoom..."
+                    type="url"
+                    value={vm.onlineMeetingUrl}
+                  />
+                </div>
+                {vm.errors.onlineMeetingUrl && (
+                  <p className="pl-11 text-xs font-semibold text-rose-500" id="online-meeting-url-error">
+                    {vm.errors.onlineMeetingUrl}
+                  </p>
+                )}
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="grid size-8 shrink-0 place-items-center text-slate-400">
-                  <Icon className="size-4.5" name="mapPin" />
-                </span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
-                  disabled={!vm.canModify}
-                  onChange={(e) => vm.setLocation(e.target.value)}
-                  placeholder="Thêm vị trí, phòng học..."
-                  type="text"
-                  value={vm.location}
-                />
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-8 shrink-0 place-items-center text-slate-400">
+                    <Icon className="size-4.5" name="mapPin" />
+                  </span>
+                  <input
+                    aria-describedby={vm.errors.location ? 'location-error' : undefined}
+                    aria-invalid={Boolean(vm.errors.location)}
+                    className={`w-full rounded-xl border bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:bg-white dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed ${
+                      vm.errors.location
+                        ? 'border-rose-500 focus:border-rose-500'
+                        : 'border-slate-200 focus:border-blue-600 dark:border-white/10'
+                    }`}
+                    disabled={!vm.canModify}
+                    onChange={(e) => vm.setLocation(e.target.value)}
+                    placeholder="Thêm vị trí, phòng học..."
+                    type="text"
+                    value={vm.location}
+                  />
+                </div>
+                {vm.errors.location && (
+                  <p className="pl-11 text-xs font-semibold text-rose-500" id="location-error">
+                    {vm.errors.location}
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -916,18 +960,31 @@ export function EventModal(props: EventModalProps) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="grid size-8 shrink-0 place-items-center text-slate-400">
-                  <Icon className="size-4.5" name="link" />
-                </span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
-                  disabled={!vm.canModify}
-                  onChange={(e) => vm.setSubmissionUrl(e.target.value)}
-                  placeholder="Link nộp bài LMS, Google Drive, GitHub repo..."
-                  type="url"
-                  value={vm.submissionUrl}
-                />
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-8 shrink-0 place-items-center text-slate-400">
+                    <Icon className="size-4.5" name="link" />
+                  </span>
+                  <input
+                    aria-describedby={vm.errors.submissionUrl ? 'submission-url-error' : undefined}
+                    aria-invalid={Boolean(vm.errors.submissionUrl)}
+                    className={`w-full rounded-xl border bg-slate-50/70 px-3 py-2 text-xs text-slate-800 outline-hidden transition-all focus:bg-white dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed ${
+                      vm.errors.submissionUrl
+                        ? 'border-rose-500 focus:border-rose-500'
+                        : 'border-slate-200 focus:border-blue-600 dark:border-white/10'
+                    }`}
+                    disabled={!vm.canModify}
+                    onChange={(e) => vm.setSubmissionUrl(e.target.value)}
+                    placeholder="Link nộp bài LMS, Google Drive, GitHub repo..."
+                    type="url"
+                    value={vm.submissionUrl}
+                  />
+                </div>
+                {vm.errors.submissionUrl && (
+                  <p className="pl-11 text-xs font-semibold text-rose-500" id="submission-url-error">
+                    {vm.errors.submissionUrl}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -940,7 +997,8 @@ export function EventModal(props: EventModalProps) {
               {vm.reminders.map((rem) => (
                 <div className="flex flex-wrap items-center gap-2" key={rem.id}>
                   <select
-                    className="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden disabled:opacity-75 disabled:cursor-not-allowed dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    disabled={!vm.canModify}
                     onChange={(e) => vm.handleUpdateReminder(rem.id, 'method', e.target.value as ReminderMethod)}
                     value={rem.method}
                   >
@@ -949,7 +1007,8 @@ export function EventModal(props: EventModalProps) {
                   </select>
 
                   <input
-                    className="w-16 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="w-16 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden disabled:opacity-75 disabled:cursor-not-allowed dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    disabled={!vm.canModify}
                     max={999}
                     min={1}
                     onChange={(e) => vm.handleUpdateReminder(rem.id, 'quantity', Math.max(1, Number(e.target.value) || 1))}
@@ -958,7 +1017,8 @@ export function EventModal(props: EventModalProps) {
                   />
 
                   <select
-                    className="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-hidden disabled:opacity-75 disabled:cursor-not-allowed dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    disabled={!vm.canModify}
                     onChange={(e) => vm.handleUpdateReminder(rem.id, 'unit', e.target.value as ReminderUnit)}
                     value={rem.unit}
                   >
@@ -968,24 +1028,28 @@ export function EventModal(props: EventModalProps) {
                     <option value="weeks">tuần</option>
                   </select>
 
-                  <button
-                    aria-label="Xóa thông báo"
-                    className="grid size-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
-                    onClick={() => vm.handleRemoveReminder(rem.id)}
-                    type="button"
-                  >
-                    <Icon className="size-3.5" name="close" />
-                  </button>
+                  {vm.canModify && (
+                    <button
+                      aria-label="Xóa thông báo"
+                      className="grid size-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+                      onClick={() => vm.handleRemoveReminder(rem.id)}
+                      type="button"
+                    >
+                      <Icon className="size-3.5" name="close" />
+                    </button>
+                  )}
                 </div>
               ))}
 
-              <button
-                className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400"
-                onClick={vm.handleAddReminder}
-                type="button"
-              >
-                + Thêm thông báo
-              </button>
+              {vm.canModify && (
+                <button
+                  className="text-xs font-bold text-blue-600 hover:underline dark:text-blue-400"
+                  onClick={vm.handleAddReminder}
+                  type="button"
+                >
+                  + Thêm thông báo
+                </button>
+              )}
               {vm.errors.reminders && (
                 <p className="text-xs font-semibold text-rose-500">{vm.errors.reminders}</p>
               )}
@@ -1012,20 +1076,140 @@ export function EventModal(props: EventModalProps) {
                     />
                   </div>
                 )}
-                {!isTask && !googleSource && (
-                <select
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-xs font-semibold text-slate-800 outline-hidden transition-all focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
-                  disabled={!vm.canModify}
-                  onChange={(e) => vm.handleCalendarSelect(e.target.value)}
-                  value={vm.calendarId}
-                >
-                  {props.categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      ● {cat.name} {cat.settings?.timeZone ? `(${cat.settings.timeZone.split('/')[1] || cat.settings.timeZone})` : ''}
-                    </option>
-                  ))}
-                </select>
-                )}
+                {!isTask && !googleSource && (() => {
+                  const selectedCat =
+                    vm.editableCategories.find((cat) => cat.id === vm.calendarId) ??
+                    (initialEvent?.calendar && initialEvent.calendar.id === vm.calendarId
+                      ? initialEvent.calendar
+                      : undefined)
+                  const tzShort = selectedCat?.settings?.timeZone
+                    ? selectedCat.settings.timeZone.split('/')[1] || selectedCat.settings.timeZone
+                    : ''
+                  const isCreatorCalOnly =
+                    Boolean(initialEvent?.calendar) &&
+                    !vm.editableCategories.some((cat) => cat.id === initialEvent?.calendar?.id)
+
+                  return (
+                    <div className="relative flex-1 min-w-0" ref={calendarDropdownRef}>
+                      <button
+                        aria-expanded={isCalendarDropdownOpen}
+                        aria-haspopup="listbox"
+                        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 text-left text-xs transition-all hover:bg-white focus:border-blue-600 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 disabled:opacity-75 disabled:cursor-not-allowed"
+                        disabled={!vm.canModify}
+                        onClick={() => setIsCalendarDropdownOpen((prev) => !prev)}
+                        type="button"
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className="h-4 w-1 shrink-0 rounded-full"
+                            style={{ backgroundColor: selectedCat?.color || '#2563EB' }}
+                          />
+                          <span className="truncate font-semibold text-slate-800 dark:text-white">
+                            {selectedCat?.name || 'Chọn lịch'}
+                          </span>
+                          {tzShort && (
+                            <span className="hidden sm:inline-block shrink-0 rounded-md bg-slate-200/70 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                              {tzShort}
+                            </span>
+                          )}
+                          {selectedCat?.isShared && (
+                            <span className="shrink-0 rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+                              Chia sẻ
+                            </span>
+                          )}
+                        </span>
+                        <Icon
+                          className={`size-3.5 shrink-0 text-slate-400 transition-transform ${
+                            isCalendarDropdownOpen ? 'rotate-180' : ''
+                          }`}
+                          name="chevronDown"
+                        />
+                      </button>
+
+                      {isCalendarDropdownOpen && vm.canModify && (
+                        <div
+                          className="absolute left-0 right-0 bottom-full z-30 mb-1.5 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-white/10 dark:bg-[#021024]"
+                          role="listbox"
+                        >
+                          {isCreatorCalOnly && initialEvent?.calendar && (
+                            <button
+                              className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                                vm.calendarId === initialEvent.calendar.id
+                                  ? 'bg-blue-50/80 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
+                                  : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/10'
+                              }`}
+                              onClick={() => {
+                                vm.handleCalendarSelect(initialEvent.calendar!.id)
+                                setIsCalendarDropdownOpen(false)
+                              }}
+                              role="option"
+                              aria-selected={vm.calendarId === initialEvent.calendar.id}
+                              type="button"
+                            >
+                              <span className="flex min-w-0 items-center gap-2.5">
+                                <span
+                                  className="h-4 w-1 shrink-0 rounded-full"
+                                  style={{ backgroundColor: initialEvent.calendar.color || '#2563EB' }}
+                                />
+                                <span className="truncate font-semibold">
+                                  {initialEvent.calendar.name} (Lịch người tạo)
+                                </span>
+                              </span>
+                              {vm.calendarId === initialEvent.calendar.id && (
+                                <Icon className="size-3.5 shrink-0 text-blue-600 dark:text-blue-400" name="check" />
+                              )}
+                            </button>
+                          )}
+
+                          {vm.editableCategories.map((cat) => {
+                            const isSelected = vm.calendarId === cat.id
+                            const catTz = cat.settings?.timeZone
+                              ? cat.settings.timeZone.split('/')[1] || cat.settings.timeZone
+                              : ''
+                            return (
+                              <button
+                                aria-selected={isSelected}
+                                className={`flex w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left text-xs transition ${
+                                  isSelected
+                                    ? 'bg-blue-50/80 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
+                                    : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/10'
+                                }`}
+                                key={cat.id}
+                                onClick={() => {
+                                  vm.handleCalendarSelect(cat.id)
+                                  setIsCalendarDropdownOpen(false)
+                                }}
+                                role="option"
+                                type="button"
+                              >
+                                <span className="flex min-w-0 items-center gap-2.5">
+                                  <span
+                                    className="h-4 w-1 shrink-0 rounded-full"
+                                    style={{ backgroundColor: cat.color || '#2563EB' }}
+                                  />
+                                  <span className="truncate font-semibold">{cat.name}</span>
+                                  {catTz && (
+                                    <span className="shrink-0 text-[10px] text-slate-400">
+                                      {catTz}
+                                    </span>
+                                  )}
+                                  {cat.isShared && (
+                                    <span className="shrink-0 rounded bg-blue-100/80 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+                                      Chia sẻ
+                                    </span>
+                                  )}
+                                </span>
+                                {isSelected && (
+                                  <Icon className="size-3.5 shrink-0 text-blue-600 dark:text-blue-400" name="check" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
                 {isTask && (
                   <span className="flex-1 text-xs font-semibold text-slate-600 dark:text-slate-300">Màu thẻ nhiệm vụ</span>
                 )}
@@ -1163,7 +1347,7 @@ export function EventModal(props: EventModalProps) {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
-                          vm.handleAddGuest()
+                          void vm.handleAddGuest()
                         }
                       }}
                       placeholder="Thêm khách mời (nhập email hoặc username)..."
@@ -1171,11 +1355,12 @@ export function EventModal(props: EventModalProps) {
                       value={vm.newGuestEmail}
                     />
                     <button
-                      className="shrink-0 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700 active:scale-95"
-                      onClick={vm.handleAddGuest}
+                      className="shrink-0 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-blue-700 active:scale-95 disabled:opacity-60"
+                      disabled={vm.isResolvingGuest}
+                      onClick={() => void vm.handleAddGuest()}
                       type="button"
                     >
-                      + Mời
+                      {vm.isResolvingGuest ? 'Đang kiểm tra...' : '+ Mời'}
                     </button>
                   </div>
                 ) : (
@@ -1183,12 +1368,21 @@ export function EventModal(props: EventModalProps) {
                     Người tạo sự kiện không cho phép khách mời mời thêm người khác.
                   </p>
                 )}
+                {!isTask && vm.selectedCategorySharedCount > 0 && (
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Lịch cha đang chia sẻ với {vm.selectedCategorySharedCount} thành viên (tách biệt với danh sách khách mời riêng của sự kiện).
+                  </p>
+                )}
                 {vm.guestEmailError && (
                   <p className="text-xs font-semibold text-rose-500" id="guest-email-error">{vm.guestEmailError}</p>
                 )}
 
-                {vm.isOwner && (
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                {vm.canManageGuests && (
+                  <div className="space-y-1">
+                    <span className="block text-[11px] font-semibold text-slate-400">
+                      Quyền khách mời (chỉ áp dụng riêng cho sự kiện này):
+                    </span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-400">
                     <label className="flex cursor-pointer items-center gap-1.5 select-none">
                       <input
                         checked={vm.guestCanModify}
@@ -1216,6 +1410,79 @@ export function EventModal(props: EventModalProps) {
                       />
                       <span>Xem danh sách khách</span>
                     </label>
+                    </div>
+                  </div>
+                )}
+
+                {vm.isOwner && !isTask && (initialEvent?.joinRequests ?? []).filter((r) => r.status === 'pending').length > 0 && (
+                  <div className="space-y-1.5 rounded-xl border border-amber-200/80 bg-amber-50/50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                      Yêu cầu xin tham gia ({(initialEvent?.joinRequests ?? []).filter((r) => r.status === 'pending').length})
+                    </span>
+                    <div className="space-y-1.5">
+                      {(initialEvent?.joinRequests ?? [])
+                        .filter((r) => r.status === 'pending')
+                        .map((req) => (
+                          <div
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/60 bg-white px-2.5 py-1.5 text-xs dark:border-white/10 dark:bg-white/5"
+                            key={req.id}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-slate-800 dark:text-white">
+                                {req.fullName || req.email}{' '}
+                                <span className="font-normal text-slate-400">({req.email})</span>
+                              </p>
+                              {req.message && (
+                                <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                  &ldquo;{req.message}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                                disabled={handlingRequestId === req.id}
+                                onClick={async () => {
+                                  if (!initialEvent) return
+                                  const realId =
+                                    (initialEvent as unknown as { _baseEventId?: string })._baseEventId ||
+                                    initialEvent.id
+                                  try {
+                                    setHandlingRequestId(req.id)
+                                    await calendarApi.respondJoinRequest(realId, req.id, 'approved')
+                                    props.onSaved()
+                                  } finally {
+                                    setHandlingRequestId(null)
+                                  }
+                                }}
+                                type="button"
+                              >
+                                Đồng ý
+                              </button>
+                              <button
+                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+                                disabled={handlingRequestId === req.id}
+                                onClick={async () => {
+                                  if (!initialEvent) return
+                                  const realId =
+                                    (initialEvent as unknown as { _baseEventId?: string })._baseEventId ||
+                                    initialEvent.id
+                                  try {
+                                    setHandlingRequestId(req.id)
+                                    await calendarApi.respondJoinRequest(realId, req.id, 'rejected')
+                                    props.onSaved()
+                                  } finally {
+                                    setHandlingRequestId(null)
+                                  }
+                                }}
+                                type="button"
+                              >
+                                Từ chối
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
                   </div>
                 )}
 
@@ -1241,27 +1508,47 @@ export function EventModal(props: EventModalProps) {
                               (Chờ phản hồi)
                             </span>
                           )}
-                          {vm.isOwner ? (
-                            <button
-                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold transition ${
+                          {vm.canManageGuests ? (
+                            <select
+                              aria-label={`Quyền của ${g.email}`}
+                              className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700 outline-hidden focus:border-blue-600 dark:border-white/10 dark:bg-white/10 dark:text-slate-200"
+                              onChange={(e) =>
+                                vm.handleChangeGuestPermissionLevel(
+                                  g.email,
+                                  e.target.value as 'viewer' | 'inviter' | 'editor',
+                                )
+                              }
+                              value={
                                 g.canModify
-                                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300'
-                                  : 'bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-white/10 dark:text-slate-300'
-                              }`}
-                              onClick={() => vm.handleToggleGuestCanModify(g.email)}
-                              title={g.canModify ? 'Click để chuyển sang quyền chỉ xem' : 'Click để cấp quyền chỉnh sửa'}
-                              type="button"
+                                  ? 'editor'
+                                  : g.canInviteOthers !== false
+                                    ? 'inviter'
+                                    : 'viewer'
+                              }
                             >
-                              {g.canModify ? 'Có thể sửa' : 'Chỉ xem'}
-                            </button>
+                              <option value="viewer">Chỉ xem</option>
+                              <option value="inviter">Có thể mời khách</option>
+                              <option value="editor">Chỉnh sửa sự kiện</option>
+                            </select>
                           ) : (
-                            g.canModify && (
-                              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                                • Sửa
-                              </span>
-                            )
+                            <span
+                              className={`text-[10px] font-bold ${
+                                g.canModify
+                                  ? 'text-blue-600 dark:text-blue-400'
+                                  : g.canInviteOthers !== false
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              •{' '}
+                              {g.canModify
+                                ? 'Chỉnh sửa sự kiện'
+                                : g.canInviteOthers !== false
+                                  ? 'Có thể mời khách'
+                                  : 'Chỉ xem'}
+                            </span>
                           )}
-                          {vm.isOwner && (
+                          {vm.canManageGuests && (
                             <button
                               aria-label={`Xóa khách ${g.email}`}
                               className="ml-0.5 text-slate-400 hover:text-rose-600"
@@ -1301,11 +1588,25 @@ export function EventModal(props: EventModalProps) {
                 className="min-w-0 max-w-full flex-1 sm:flex-initial rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 outline-hidden dark:border-white/10 dark:bg-white/5 dark:text-white disabled:opacity-75 disabled:cursor-not-allowed"
                 disabled={!vm.canModify}
                 onChange={(e) => vm.setVisibility(e.target.value as 'default' | 'public' | 'private')}
-                value={isTask && vm.visibility === 'default' ? 'private' : vm.visibility}
+                value={
+                  isTask && vm.visibility === 'default'
+                    ? 'private'
+                    : !vm.isSelectedCategoryPublic && vm.visibility === 'public'
+                      ? 'default'
+                      : vm.visibility
+                }
               >
-                {!isTask && <option value="default">Mặc định (Theo quyền riêng tư của lịch)</option>}
+                {!isTask && (
+                  <option value="default">
+                    {vm.isSelectedCategoryPublic
+                      ? 'Mặc định (Công khai theo lịch cha)'
+                      : 'Mặc định (Riêng tư theo lịch cha)'}
+                  </option>
+                )}
                 <option value="private">Riêng tư (Chỉ mình tôi & khách mời)</option>
-                <option value="public">Công khai (Mọi người có thể xem)</option>
+                {vm.isSelectedCategoryPublic && (
+                  <option value="public">Công khai (Mọi người có thể xem)</option>
+                )}
               </select>
 
               <div className="relative">
@@ -1344,14 +1645,26 @@ export function EventModal(props: EventModalProps) {
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/50 px-4 py-3 sm:px-6 dark:border-white/10 dark:bg-white/2">
           {isEditing && vm.isOwner ? (
-            <button
-              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 transition-colors"
-              onClick={() => vm.setShowDeleteConfirm(true)}
-              type="button"
-            >
-              <Icon className="size-3.5" name="trash" />
-              <span>Xóa {isTask ? 'nhiệm vụ' : 'sự kiện'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30 transition-colors"
+                onClick={() => vm.setShowDeleteConfirm(true)}
+                type="button"
+              >
+                <Icon className="size-3.5" name="trash" />
+                <span>Xóa {isTask ? 'nhiệm vụ' : 'sự kiện'}</span>
+              </button>
+              {!isTask && (
+                <button
+                  className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50/70 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 transition-colors"
+                  onClick={() => setIsShareModalOpen(true)}
+                  type="button"
+                >
+                  <Icon className="size-3.5" name="calendar" />
+                  <span>Chia sẻ sự kiện</span>
+                </button>
+              )}
+            </div>
           ) : isEditing && vm.isGuest && vm.guestStatus === 'accepted' ? (
             <button
               className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/70 px-3.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100 transition-colors dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-400"
@@ -1551,9 +1864,25 @@ export function EventModal(props: EventModalProps) {
 
         {sharedActionModals}
 
+        <EventShareModal
+          event={initialEvent ?? null}
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          onUpdated={() => {
+            props.onSaved()
+          }}
+        />
+
         <RecurrenceScopeModal
           action="update"
           entryType={vm.entryType}
+          isFirstOccurrence={
+            props.isFirstOccurrence ??
+            (!initialEvent ||
+              !props.initialDate ||
+              props.initialDate.toDateString() === new Date(initialEvent.startDate).toDateString() ||
+              props.initialDate.getTime() <= new Date(initialEvent.startDate).getTime())
+          }
           isOpen={vm.showEditScopeModal}
           isSubmitting={vm.isSubmitting}
           onCancel={vm.handleCancelEditScope}

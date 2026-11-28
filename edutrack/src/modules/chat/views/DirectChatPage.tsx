@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef } from 'react'
 
 import { ChatActionIcon } from '@/modules/chat/components/ChatActionIcon'
 import { ChatComposerGuide } from '@/modules/chat/components/ChatComposerGuide'
+import { ChatMessageContent } from '@/modules/chat/components/ChatMessageContent'
 import { ChatPresenceAvatar, ChatPresenceLabel } from '@/modules/chat/components/ChatPresence'
 import type { DirectChatMessage, DirectConversationSummary } from '@/modules/chat/models/chat.types'
 import {
@@ -142,7 +143,7 @@ function DirectMessageBubble({ message, isOwnMessage, showAvatar, showTime, high
     {!isOwnMessage && (showAvatar
       ? (avatarUrl ? <img alt="" className="size-9 shrink-0 rounded-full object-cover" src={avatarUrl} /> : <span className="grid size-9 shrink-0 place-items-center rounded-full bg-palette-200 text-xs font-black text-palette-950 dark:bg-white/12 dark:text-white">{message.sender.fullName.charAt(0).toUpperCase()}</span>)
       : <span aria-hidden="true" className="size-9 shrink-0" />)}
-    <div className={`max-w-[82%] rounded-2xl px-3 py-2 sm:max-w-[72%] ${isOwnMessage ? 'rounded-br-md bg-gradient-to-br from-palette-900 to-palette-700 text-white shadow-sm' : 'rounded-bl-md border border-palette-200/50 bg-white/92 text-palette-900 shadow-sm dark:border-white/8 dark:bg-white/10 dark:text-white'}`}><p className="whitespace-pre-wrap break-words text-sm leading-6">{message.content}</p>{showTime && <time className={`mt-0.5 block text-right text-[10px] ${isOwnMessage ? 'text-white/75' : 'text-slate-500 dark:text-slate-300'}`} dateTime={message.createdAt}>{formatMessageTime(message.createdAt, language)}</time>}</div>
+    <div className={`max-w-[82%] rounded-2xl px-3 py-2 sm:max-w-[72%] ${isOwnMessage ? 'rounded-br-md bg-gradient-to-br from-palette-900 to-palette-700 text-white shadow-sm' : 'rounded-bl-md border border-palette-200/50 bg-white/92 text-palette-900 shadow-sm dark:border-white/8 dark:bg-white/10 dark:text-white'}`}><ChatMessageContent content={message.content} isOwnMessage={isOwnMessage} />{showTime && <time className={`mt-0.5 block text-right text-[10px] ${isOwnMessage ? 'text-white/75' : 'text-slate-500 dark:text-slate-300'}`} dateTime={message.createdAt}>{formatMessageTime(message.createdAt, language)}</time>}</div>
   </article>
 }
 
